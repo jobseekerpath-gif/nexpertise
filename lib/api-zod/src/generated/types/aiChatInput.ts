@@ -5,9 +5,6 @@
  * EduBharat API specification
  * OpenAPI spec version: 0.1.0
  */
-export interface HealthStatus {
-  status: string;
-}
 
 export interface AiChatInput {
   prompt: string;
@@ -16,12 +13,3 @@ export interface AiChatInput {
   /** @nullable */
   system?: string | null;
 }
-
-export interface AiChatResult {
-  text: string;
-}
-
-export interface ErrorResponse {
-  error: string;
-}
-

@@ -6,7 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export * from './aiChatInput';
-export * from './aiChatResult';
-export * from './errorResponse';
-export * from './healthStatus';
+export interface AiChatResult {
+  text: string;
+}

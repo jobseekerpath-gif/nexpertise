@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "4cAig0CCh-LHfVVqznGK8"
+uri = "file://artifacts/edubharat/public/images/hero-illustration.png"
+type = "image"
+title = "Indian students studying with AI"
