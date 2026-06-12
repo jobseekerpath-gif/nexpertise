@@ -1,0 +1,312 @@
+BUILD A COMPLETE PRODUCTION-READY PLATFORM CALLED "EDUBHARAT – INDIA'S AI CAREER ECOSYSTEM"
+
+MISSION:
+Create a scalable platform helping Indian students, freshers, job seekers, and professionals (ages 15–42) improve English, crack interviews, discover opportunities, and grow careers.
+
+CRITICAL INSTRUCTION:
+
+DO NOT CREATE MOCKUPS.
+
+DO NOT CREATE PLACEHOLDERS.
+
+DO NOT SIMULATE FEATURES.
+
+DO NOT REPLACE REQUESTED FEATURES WITH CHAT INTERFACES.
+
+DO NOT CLAIM FEATURES ARE IMPLEMENTED IF THEY ARE NOT FULLY FUNCTIONAL.
+
+IF ANY FEATURE REQUIRES A THIRD-PARTY API, PAID SERVICE, MODEL, DATASET, INFRASTRUCTURE, OR CREDENTIAL:
+
+1. STOP.
+2. LIST THE EXACT REQUIREMENT.
+3. PROVIDE ESTIMATED MONTHLY COST.
+4. EXPLAIN WHY IT IS REQUIRED.
+5. WAIT FOR THE REQUIRED API OR SERVICE.
+6. NEVER REPLACE THE FEATURE WITH A FAKE OR TEXT-ONLY VERSION.
+
+==================================================
+PRODUCT 1: ENGLISH GURU
+=======================
+
+PURPOSE:
+Help Indians learn spoken English using their regional language.
+
+MANDATORY FEATURES:
+
+* AI video teacher visible on screen.
+* Real-time voice conversation.
+* Student speaks through microphone.
+* AI responds using voice and text.
+* AI automatically detects user language.
+* AI teaches English through user's regional language.
+* Supports:
+
+  * Hindi
+  * Bengali
+  * Tamil
+  * Telugu
+  * Marathi
+  * Gujarati
+  * Kannada
+  * Malayalam
+  * Punjabi
+  * Odia
+  * Assamese
+  * Urdu
+
+LEARNING FEATURES:
+
+* Beginner to advanced roadmap.
+* Grammar correction.
+* Vocabulary building.
+* Pronunciation coaching.
+* Accent improvement.
+* Conversation practice.
+* Daily lessons.
+* Speaking challenges.
+* Interview English.
+* Workplace English.
+* Group discussion practice.
+* Real-life roleplay.
+
+ANALYTICS:
+
+* Speaking score.
+* Pronunciation score.
+* Grammar score.
+* Vocabulary score.
+* Fluency score.
+* Weekly progress reports.
+* Learning streaks.
+* Achievement system.
+
+CRITICAL:
+
+The AI teacher must be a talking video avatar.
+
+Text-only chat is NOT acceptable.
+
+==================================================
+PRODUCT 2: INTERVIEW ACE
+========================
+
+PURPOSE:
+Provide realistic AI interview practice.
+
+MANDATORY FEATURES:
+
+* AI interviewer appears as a talking video avatar.
+* Webcam integration.
+* Microphone integration.
+* Real-time voice interview.
+* Dynamic follow-up questions.
+* Multiple interview rounds.
+
+INTERVIEW TYPES:
+
+* HR
+* Sales
+* Marketing
+* Customer Service
+* Banking
+* Insurance
+* Operations
+* Data Analytics
+* Finance
+* Freshers
+* Experienced Professionals
+* Government Jobs
+
+AI ANALYSIS:
+
+* Facial expressions.
+* Eye contact.
+* Confidence level.
+* Fluency.
+* Grammar.
+* Communication.
+* Technical answers.
+* Behavioral answers.
+
+REPORTING:
+
+* Interview recording.
+* Downloadable report.
+* Strength analysis.
+* Weakness analysis.
+* Improvement roadmap.
+* AI-generated feedback.
+
+CRITICAL:
+
+Video interview simulation is mandatory.
+
+Text-only interview is NOT acceptable.
+
+==================================================
+PRODUCT 3: ROZGAR SAMACHAR
+==========================
+
+PURPOSE:
+Deliver India's most useful AI-powered career newspaper.
+
+TARGET USERS:
+
+* Students
+* Freshers
+* Job seekers
+* Working professionals
+* Career switchers
+* Government exam aspirants
+* Private sector employees
+* Ages 15–42
+
+CONTENT SOURCES:
+
+* Government jobs
+* Private jobs
+* Internships
+* Apprenticeships
+* Walk-ins
+* Campus placements
+* Scholarships
+* Government schemes
+* Skill programs
+* Certifications
+* Startup opportunities
+* Business news
+* Technology news
+* AI updates
+* Salary trends
+* Career trends
+* Industry trends
+
+PERSONALIZATION:
+
+Generate a unique newspaper based on:
+
+* Age
+* Education
+* Skills
+* Career goals
+* Language
+* Location
+* Industry preference
+
+DAILY SECTIONS:
+
+* Top Jobs Today
+* Government Jobs
+* Private Jobs
+* Internships
+* Scholarships
+* Skill Trends
+* Career Growth
+* AI News
+* Technology News
+* Business News
+* Government Schemes
+* Salary Insights
+* Interview Questions
+* English Learning Corner
+* Daily Vocabulary
+* Daily Quiz
+* Daily Jokes
+* Success Stories
+* Motivation Corner
+
+CRITICAL:
+
+Never show generic news.
+
+Every article must improve employability, income potential, skills, interview readiness, or career growth.
+
+==================================================
+AI SYSTEM
+=========
+
+* Gemini integration.
+* Claude integration.
+* Streaming responses.
+* Voice-to-text.
+* Text-to-speech.
+* Multilingual support.
+* Recommendation engine.
+* Personalization engine.
+* Analytics engine.
+
+==================================================
+AUTHENTICATION
+==============
+
+* Email OTP.
+* Google Login.
+* User profiles.
+* Progress tracking.
+
+==================================================
+DATABASE
+========
+
+* PostgreSQL.
+
+Store:
+
+* User profiles.
+* Learning progress.
+* Interview history.
+* Scores.
+* Career interests.
+* Newspaper preferences.
+
+==================================================
+TECH STACK
+==========
+
+Frontend:
+
+* React
+* TypeScript
+* Tailwind CSS
+
+Backend:
+
+* Node.js
+* Express
+
+Database:
+
+* PostgreSQL
+
+Deployment:
+
+* Docker
+* Environment variables
+* Mobile responsive
+* SEO optimized
+
+==================================================
+DEVELOPER EXECUTION RULE
+========================
+
+Before generating code:
+
+1. Audit all requested features.
+2. Identify every required API/service.
+3. Identify every required credential.
+4. Identify every paid dependency.
+5. Identify every infrastructure dependency.
+6. Provide exact setup requirements.
+7. Build only real implementations.
+
+FINAL RULE:
+
+If a requested feature cannot be fully implemented because an API, service, credential, model, dataset, or infrastructure component is missing, explicitly stop and report the dependency.
+
+Never replace video avatars with chat.
+
+Never replace voice systems with text.
+
+Never replace AI features with static pages.
+
+Never mark incomplete functionality as complete.

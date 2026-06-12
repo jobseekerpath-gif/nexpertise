@@ -5,11 +5,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { INDIAN_LANGUAGES } from "@/lib/constants";
-import { Loader2, PlayCircle, Send, Lightbulb } from "lucide-react";
+import { useHistory } from "@/lib/use-history";
+import { Loader2, PlayCircle, Send, Lightbulb, Bookmark, BookmarkCheck } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
 const JOB_ROLES = [
-  "Software Developer", "Data Analyst", "Marketing Manager", "Sales Executive", 
+  "Software Developer", "Data Analyst", "Marketing Manager", "Sales Executive",
   "HR Manager", "Teacher", "Bank PO", "IAS/IPS Officer", "Nurse", "CA/Accountant"
 ];
 
@@ -19,20 +20,42 @@ type Question = {
   text: string;
   answer?: string;
   feedback?: string;
+  savedFeedback?: boolean;
 };
+
+function SaveButton({ onSave, saved }: { onSave: () => void; saved: boolean }) {
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={onSave}
+      disabled={saved}
+      className="text-xs font-semibold"
+      data-testid="button-save-feedback"
+    >
+      {saved ? (
+        <><BookmarkCheck className="w-3.5 h-3.5 mr-1.5 text-primary" />Saved</>
+      ) : (
+        <><Bookmark className="w-3.5 h-3.5 mr-1.5" />Save Feedback</>
+      )}
+    </Button>
+  );
+}
 
 export default function InterviewAce() {
   const chat = useAiChat();
-  
+  const { save } = useHistory();
+
   const [role, setRole] = useState(JOB_ROLES[0]);
   const [experience, setExperience] = useState(EXPERIENCES[0]);
-  
+
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
-  
+
   const [tipsLang, setTipsLang] = useState("Hindi");
   const [tips, setTips] = useState("");
+  const [tipsSaved, setTipsSaved] = useState(false);
 
   const handleStartSession = () => {
     chat.mutate({
@@ -42,9 +65,7 @@ export default function InterviewAce() {
       }
     }, {
       onSuccess: (res) => {
-        // Parse the list into an array
         const lines = res.text.split("\n").filter(l => l.trim().length > 0);
-        // Strip numbers from beginning
         const parsed = lines.map(l => ({ text: l.replace(/^\d+\.\s*/, '').trim() }));
         setQuestions(parsed.slice(0, 5));
         setCurrentQIndex(0);
@@ -55,9 +76,7 @@ export default function InterviewAce() {
 
   const handleSubmitAnswer = () => {
     if (!currentAnswer.trim()) return;
-    
     const question = questions[currentQIndex].text;
-    
     chat.mutate({
       data: {
         prompt: `Question: "${question}"\nCandidate Answer: "${currentAnswer}"\n\nEvaluate this answer. Provide a rating out of 10, strengths, and areas for improvement. Be constructive but honest.`,
@@ -68,10 +87,24 @@ export default function InterviewAce() {
         const newQs = [...questions];
         newQs[currentQIndex].answer = currentAnswer;
         newQs[currentQIndex].feedback = res.text;
+        newQs[currentQIndex].savedFeedback = false;
         setQuestions(newQs);
         setCurrentAnswer("");
       }
     });
+  };
+
+  const handleSaveFeedback = (index: number) => {
+    const q = questions[index];
+    if (!q.feedback) return;
+    save({
+      tool: "Interview Ace",
+      title: `${role} Interview — Q${index + 1}: "${q.text.slice(0, 60)}${q.text.length > 60 ? "…" : ""}"`,
+      content: `Question: ${q.text}\n\nYour Answer: ${q.answer}\n\nAI Feedback:\n${q.feedback}`,
+    });
+    const newQs = [...questions];
+    newQs[index].savedFeedback = true;
+    setQuestions(newQs);
   };
 
   const handleNextQuestion = () => {
@@ -81,14 +114,14 @@ export default function InterviewAce() {
   };
 
   const handleGetTips = () => {
+    setTips("");
+    setTipsSaved(false);
     chat.mutate({
       data: {
         prompt: `Give 5 essential interview tips for a ${role} candidate in India. Write the response in ${tipsLang}.`,
         system: "You are an encouraging career mentor.",
       }
-    }, {
-      onSuccess: (res) => setTips(res.text)
-    });
+    }, { onSuccess: (res) => setTips(res.text) });
   };
 
   return (
@@ -134,9 +167,9 @@ export default function InterviewAce() {
             </div>
           </CardContent>
           <CardFooter>
-            <Button 
-              size="lg" 
-              className="w-full font-bold text-base h-12 shadow-md shadow-primary/20" 
+            <Button
+              size="lg"
+              className="w-full font-bold text-base h-12 shadow-md shadow-primary/20"
               onClick={handleStartSession}
               disabled={chat.isPending}
               data-testid="button-start-interview"
@@ -162,10 +195,10 @@ export default function InterviewAce() {
               <h2 className="text-2xl font-display font-bold text-secondary mb-6 leading-relaxed">
                 {questions[currentQIndex].text}
               </h2>
-              
+
               {!questions[currentQIndex].feedback ? (
                 <div className="space-y-4">
-                  <Textarea 
+                  <Textarea
                     placeholder="Type your answer here as if you are speaking in an interview..."
                     className="min-h-[200px] text-base p-4 bg-muted/50 border-muted-foreground/20 focus-visible:bg-background"
                     value={currentAnswer}
@@ -173,8 +206,8 @@ export default function InterviewAce() {
                     data-testid="input-answer"
                   />
                   <div className="flex justify-end">
-                    <Button 
-                      onClick={handleSubmitAnswer} 
+                    <Button
+                      onClick={handleSubmitAnswer}
                       disabled={!currentAnswer.trim() || chat.isPending}
                       className="font-bold px-6"
                       data-testid="button-submit-answer"
@@ -190,9 +223,15 @@ export default function InterviewAce() {
                     <span className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2 block">Your Answer:</span>
                     <p className="text-secondary">{questions[currentQIndex].answer}</p>
                   </div>
-                  
+
                   <div className="p-6 bg-green-50 border border-green-200 rounded-xl">
-                    <span className="text-sm font-bold text-green-700 uppercase tracking-wider mb-3 block">AI Feedback:</span>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-bold text-green-700 uppercase tracking-wider">AI Feedback:</span>
+                      <SaveButton
+                        onSave={() => handleSaveFeedback(currentQIndex)}
+                        saved={!!questions[currentQIndex].savedFeedback}
+                      />
+                    </div>
                     <div className="prose prose-sm max-w-none text-green-950 whitespace-pre-wrap">
                       {questions[currentQIndex].feedback}
                     </div>
@@ -244,6 +283,27 @@ export default function InterviewAce() {
 
           {tips && (
             <div className="p-6 bg-secondary-foreground/5 rounded-xl border border-secondary-foreground/10 animate-in fade-in">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-bold text-secondary-foreground/60 uppercase tracking-wider">Tips in {tipsLang}:</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (tipsSaved) return;
+                    save({ tool: "Interview Ace", title: `Interview Tips for ${role} in ${tipsLang}`, content: tips });
+                    setTipsSaved(true);
+                  }}
+                  disabled={tipsSaved}
+                  className="text-xs font-semibold border-secondary-foreground/20 text-secondary-foreground hover:bg-secondary-foreground/10"
+                  data-testid="button-save-tips"
+                >
+                  {tipsSaved ? (
+                    <><BookmarkCheck className="w-3.5 h-3.5 mr-1.5" />Saved</>
+                  ) : (
+                    <><Bookmark className="w-3.5 h-3.5 mr-1.5" />Save Tips</>
+                  )}
+                </Button>
+              </div>
               <div className="prose prose-invert max-w-none whitespace-pre-wrap">
                 {tips}
               </div>
@@ -251,7 +311,6 @@ export default function InterviewAce() {
           )}
         </CardContent>
       </Card>
-
     </div>
   );
 }

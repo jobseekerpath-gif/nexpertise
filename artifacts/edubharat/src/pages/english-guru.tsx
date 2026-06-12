@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { INDIAN_LANGUAGES } from "@/lib/constants";
-import { Loader2, BookOpen, PenLine, Languages, SpellCheck } from "lucide-react";
+import { useHistory } from "@/lib/use-history";
+import { Loader2, BookOpen, PenLine, Languages, SpellCheck, Bookmark, BookmarkCheck } from "lucide-react";
 
 const MODES = [
   { value: "grammar", label: "Grammar Fix", icon: SpellCheck },
@@ -17,75 +18,93 @@ const MODES = [
 
 type Mode = typeof MODES[number]["value"];
 
+function SaveButton({ title, content, onSave }: { title: string; content: string; onSave: () => void }) {
+  const [saved, setSaved] = useState(false);
+  const handleClick = () => {
+    if (saved) return;
+    onSave();
+    setSaved(true);
+  };
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={handleClick}
+      disabled={saved}
+      className="text-xs font-semibold"
+      data-testid="button-save-response"
+    >
+      {saved ? (
+        <><BookmarkCheck className="w-3.5 h-3.5 mr-1.5 text-primary" />Saved</>
+      ) : (
+        <><Bookmark className="w-3.5 h-3.5 mr-1.5" />Save</>
+      )}
+    </Button>
+  );
+}
+
 export default function EnglishGuru() {
   const chat = useAiChat();
+  const { save } = useHistory();
 
   const [mode, setMode] = useState<Mode>("grammar");
 
-  // Grammar Fix State
   const [grammarText, setGrammarText] = useState("");
   const [grammarResult, setGrammarResult] = useState("");
 
-  // Write Better State
   const [writeText, setWriteText] = useState("");
   const [writeResult, setWriteResult] = useState("");
 
-  // Vocabulary State
   const [vocabTopic, setVocabTopic] = useState("");
   const [vocabLanguage, setVocabLanguage] = useState("Hindi");
   const [vocabResult, setVocabResult] = useState("");
 
-  // Translation State
   const [translateText, setTranslateText] = useState("");
   const [translateLang, setTranslateLang] = useState("Hindi");
   const [translateResult, setTranslateResult] = useState("");
 
   const handleGrammarFix = () => {
     if (!grammarText.trim()) return;
+    setGrammarResult("");
     chat.mutate({
       data: {
         prompt: `Fix the grammar in the following text and explain the corrections clearly and simply: "${grammarText}"`,
         system: "You are an encouraging English teacher helping an Indian student. Explain grammar rules simply.",
       }
-    }, {
-      onSuccess: (res) => setGrammarResult(res.text)
-    });
+    }, { onSuccess: (res) => setGrammarResult(res.text) });
   };
 
   const handleWriteBetter = () => {
     if (!writeText.trim()) return;
+    setWriteResult("");
     chat.mutate({
       data: {
         prompt: `Improve the following text to make it sound more professional and natural: "${writeText}"`,
         system: "You are a professional writing coach. Provide the improved version and briefly explain why it's better.",
       }
-    }, {
-      onSuccess: (res) => setWriteResult(res.text)
-    });
+    }, { onSuccess: (res) => setWriteResult(res.text) });
   };
 
   const handleVocabulary = () => {
     if (!vocabTopic.trim()) return;
+    setVocabResult("");
     chat.mutate({
       data: {
         prompt: `Generate 5 useful English vocabulary words related to "${vocabTopic}". For each word, provide the meaning in English, the meaning in ${vocabLanguage}, and an example sentence.`,
         system: `You are an English teacher for Indian students. Provide clear, everyday vocabulary. Format clearly.`,
       }
-    }, {
-      onSuccess: (res) => setVocabResult(res.text)
-    });
+    }, { onSuccess: (res) => setVocabResult(res.text) });
   };
 
   const handleTranslation = () => {
     if (!translateText.trim()) return;
+    setTranslateResult("");
     chat.mutate({
       data: {
         prompt: `Translate the following text into ${translateLang}. Provide the translation, and if the original text was not English, also provide the English translation: "${translateText}"`,
         system: "You are an expert translator specializing in Indian languages.",
       }
-    }, {
-      onSuccess: (res) => setTranslateResult(res.text)
-    });
+    }, { onSuccess: (res) => setTranslateResult(res.text) });
   };
 
   const currentMode = MODES.find(m => m.value === mode)!;
@@ -100,7 +119,6 @@ export default function EnglishGuru() {
         </p>
       </div>
 
-      {/* Mode selector dropdown */}
       <div className="mb-8 flex items-center gap-3 max-w-xs">
         <Icon className="w-5 h-5 text-primary shrink-0" />
         <Select value={mode} onValueChange={(v) => setMode(v as Mode)}>
@@ -109,15 +127,12 @@ export default function EnglishGuru() {
           </SelectTrigger>
           <SelectContent>
             {MODES.map(m => (
-              <SelectItem key={m.value} value={m.value}>
-                {m.label}
-              </SelectItem>
+              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      {/* Grammar Fix */}
       {mode === "grammar" && (
         <Card className="animate-in fade-in duration-300">
           <CardHeader>
@@ -138,17 +153,21 @@ export default function EnglishGuru() {
             </Button>
             {grammarResult && (
               <div className="mt-8 p-6 bg-primary/5 rounded-xl border border-primary/20">
-                <h3 className="font-bold text-primary mb-3">Teacher's Feedback:</h3>
-                <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap">
-                  {grammarResult}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-primary">Teacher's Feedback:</h3>
+                  <SaveButton
+                    title={`Grammar Fix: "${grammarText.slice(0, 50)}${grammarText.length > 50 ? "…" : ""}"`}
+                    content={grammarResult}
+                    onSave={() => save({ tool: "English Guru", title: `Grammar Fix: "${grammarText.slice(0, 50)}${grammarText.length > 50 ? "…" : ""}"`, content: grammarResult })}
+                  />
                 </div>
+                <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap">{grammarResult}</div>
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* Write Better */}
       {mode === "write" && (
         <Card className="animate-in fade-in duration-300">
           <CardHeader>
@@ -169,17 +188,21 @@ export default function EnglishGuru() {
             </Button>
             {writeResult && (
               <div className="mt-8 p-6 bg-primary/5 rounded-xl border border-primary/20">
-                <h3 className="font-bold text-primary mb-3">Improved Version:</h3>
-                <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap">
-                  {writeResult}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-primary">Improved Version:</h3>
+                  <SaveButton
+                    title={`Write Better: "${writeText.slice(0, 50)}${writeText.length > 50 ? "…" : ""}"`}
+                    content={writeResult}
+                    onSave={() => save({ tool: "English Guru", title: `Write Better: "${writeText.slice(0, 50)}${writeText.length > 50 ? "…" : ""}"`, content: writeResult })}
+                  />
                 </div>
+                <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap">{writeResult}</div>
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* Vocabulary */}
       {mode === "vocab" && (
         <Card className="animate-in fade-in duration-300">
           <CardHeader>
@@ -214,17 +237,21 @@ export default function EnglishGuru() {
             </Button>
             {vocabResult && (
               <div className="mt-8 p-6 bg-primary/5 rounded-xl border border-primary/20">
-                <h3 className="font-bold text-primary mb-3">Vocabulary List:</h3>
-                <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap">
-                  {vocabResult}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-primary">Vocabulary List:</h3>
+                  <SaveButton
+                    title={`Vocabulary: ${vocabTopic} (${vocabLanguage})`}
+                    content={vocabResult}
+                    onSave={() => save({ tool: "English Guru", title: `Vocabulary: ${vocabTopic} (${vocabLanguage})`, content: vocabResult })}
+                  />
                 </div>
+                <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap">{vocabResult}</div>
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* Translation */}
       {mode === "translate" && (
         <Card className="animate-in fade-in duration-300">
           <CardHeader>
@@ -257,10 +284,15 @@ export default function EnglishGuru() {
             </Button>
             {translateResult && (
               <div className="mt-8 p-6 bg-primary/5 rounded-xl border border-primary/20">
-                <h3 className="font-bold text-primary mb-3">Translation:</h3>
-                <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap text-lg">
-                  {translateResult}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-primary">Translation:</h3>
+                  <SaveButton
+                    title={`Translation to ${translateLang}: "${translateText.slice(0, 40)}${translateText.length > 40 ? "…" : ""}"`}
+                    content={translateResult}
+                    onSave={() => save({ tool: "English Guru", title: `Translation to ${translateLang}: "${translateText.slice(0, 40)}${translateText.length > 40 ? "…" : ""}"`, content: translateResult })}
+                  />
                 </div>
+                <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap text-lg">{translateResult}</div>
               </div>
             )}
           </CardContent>

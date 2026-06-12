@@ -7,6 +7,7 @@ import Home from "@/pages/home";
 import EnglishGuru from "@/pages/english-guru";
 import InterviewAce from "@/pages/interview-ace";
 import RozgarSamachar from "@/pages/rozgar-samachar";
+import History from "@/pages/history";
 import { Layout } from "@/components/layout";
 
 const queryClient = new QueryClient();
@@ -19,6 +20,7 @@ function Router() {
         <Route path="/english-guru" component={EnglishGuru} />
         <Route path="/interview-ace" component={InterviewAce} />
         <Route path="/rozgar-samachar" component={RozgarSamachar} />
+        <Route path="/history" component={History} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
