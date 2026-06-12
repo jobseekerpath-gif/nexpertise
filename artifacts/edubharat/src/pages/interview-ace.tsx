@@ -1,250 +1,340 @@
-import { useState } from "react";
-import { useAiChat } from "@workspace/api-client-react";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { INDIAN_LANGUAGES } from "@/lib/constants";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { useHistory } from "@/lib/use-history";
-import { Loader2, PlayCircle, Send, Lightbulb, Bookmark, BookmarkCheck } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
+import { useGeminiStream } from "@/lib/use-gemini-stream";
+import { useSpeechRecognition } from "@/lib/use-speech-recognition";
+import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
+import { AnimatedAvatar } from "@/components/avatar";
+import { Loader2, Mic, MicOff, PlayCircle, ChevronRight, Download, Volume2 } from "lucide-react";
 
-const JOB_ROLES = [
-  "Software Developer", "Data Analyst", "Marketing Manager", "Sales Executive",
-  "HR Manager", "Teacher", "Bank PO", "IAS/IPS Officer", "Nurse", "CA/Accountant"
+const INTERVIEW_TYPES = [
+  { value: "hr", label: "HR Interview", icon: "🤝" },
+  { value: "software", label: "Software Developer", icon: "💻" },
+  { value: "sales", label: "Sales Executive", icon: "📈" },
+  { value: "marketing", label: "Marketing Manager", icon: "📣" },
+  { value: "customer_service", label: "Customer Service", icon: "🎧" },
+  { value: "banking", label: "Banking / BFSI", icon: "🏦" },
+  { value: "insurance", label: "Insurance", icon: "🛡️" },
+  { value: "operations", label: "Operations", icon: "⚙️" },
+  { value: "data_analytics", label: "Data Analytics", icon: "📊" },
+  { value: "finance", label: "Finance / CA", icon: "💰" },
+  { value: "freshers", label: "Freshers / Campus", icon: "🎓" },
+  { value: "government", label: "Government / SSC / UPSC", icon: "🏛️" },
 ];
 
-const EXPERIENCES = ["Fresher", "1-3 years", "3-5 years", "5+ years"];
+const EXPERIENCE_LEVELS = ["Fresher", "1-2 years", "3-5 years", "5+ years"];
 
-type Question = {
-  text: string;
+type QA = {
+  question: string;
   answer?: string;
   feedback?: string;
-  savedFeedback?: boolean;
+  score?: number;
+  saved?: boolean;
 };
 
-function SaveButton({ onSave, saved }: { onSave: () => void; saved: boolean }) {
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={onSave}
-      disabled={saved}
-      className="text-xs font-semibold"
-      data-testid="button-save-feedback"
-    >
-      {saved ? (
-        <><BookmarkCheck className="w-3.5 h-3.5 mr-1.5 text-primary" />Saved</>
-      ) : (
-        <><Bookmark className="w-3.5 h-3.5 mr-1.5" />Save Feedback</>
-      )}
-    </Button>
-  );
+function ScoreBadge({ score }: { score: number }) {
+  const color = score >= 8 ? "bg-green-100 text-green-700" : score >= 6 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700";
+  return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold ${color}`}>{score}/10</span>;
 }
 
 export default function InterviewAce() {
-  const chat = useAiChat();
   const { save } = useHistory();
+  const { text: streamText, isStreaming, stream, reset: resetStream } = useGeminiStream();
+  const synth = useSpeechSynthesis();
+  const speech = useSpeechRecognition("English");
 
-  const [role, setRole] = useState(JOB_ROLES[0]);
-  const [experience, setExperience] = useState(EXPERIENCES[0]);
+  const [type, setType] = useState(INTERVIEW_TYPES[0].value);
+  const [experience, setExperience] = useState(EXPERIENCE_LEVELS[0]);
+  const [phase, setPhase] = useState<"setup" | "interview" | "report">("setup");
+  const [questions, setQuestions] = useState<QA[]>([]);
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [answer, setAnswer] = useState("");
 
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [currentQIndex, setCurrentQIndex] = useState(0);
-  const [currentAnswer, setCurrentAnswer] = useState("");
+  const typeMeta = INTERVIEW_TYPES.find(t => t.value === type)!;
+  const currentQ = questions[currentIdx];
+  const allAnswered = questions.length > 0 && questions.every(q => q.feedback !== undefined);
+  const avgScore = questions.filter(q => q.score !== undefined).reduce((a, b) => a + (b.score ?? 0), 0) / Math.max(1, questions.filter(q => q.score !== undefined).length);
 
-  const [tipsLang, setTipsLang] = useState("Hindi");
-  const [tips, setTips] = useState("");
-  const [tipsSaved, setTipsSaved] = useState(false);
+  const startSession = useCallback(async () => {
+    resetStream();
+    const label = INTERVIEW_TYPES.find(t => t.value === type)?.label ?? type;
+    const full = await stream(
+      `Generate exactly 5 realistic interview questions for a ${label} role with ${experience} experience. Number them 1-5. Return ONLY the numbered list of questions.`,
+      `You are an expert ${label} interviewer in India. Make questions specific and challenging.`
+    );
+    const lines = full.split("\n").filter(l => /^\d/.test(l.trim()));
+    const parsed: QA[] = lines.slice(0, 5).map(l => ({ question: l.replace(/^\d+\.\s*/, "").trim() }));
+    if (parsed.length === 0) return;
+    setQuestions(parsed);
+    setCurrentIdx(0);
+    setAnswer("");
+    setPhase("interview");
+    synth.speak(parsed[0].question, "English");
+  }, [type, experience, stream, resetStream, synth]);
 
-  const handleStartSession = () => {
-    chat.mutate({
-      data: {
-        prompt: `Generate 5 realistic and specific interview questions for a ${role} with ${experience} of experience. Return ONLY a numbered list of questions.`,
-        system: "You are an expert HR interviewer in India. Give exactly 5 direct questions.",
-      }
-    }, {
-      onSuccess: (res) => {
-        const lines = res.text.split("\n").filter(l => l.trim().length > 0);
-        const parsed = lines.map(l => ({ text: l.replace(/^\d+\.\s*/, '').trim() }));
-        setQuestions(parsed.slice(0, 5));
-        setCurrentQIndex(0);
-        setCurrentAnswer("");
-      }
-    });
-  };
+  const submitAnswer = useCallback(async () => {
+    if (!answer.trim() || !currentQ) return;
+    const userAnswer = answer.trim();
+    setAnswer("");
+    const label = INTERVIEW_TYPES.find(t => t.value === type)?.label ?? type;
+    resetStream();
+    const feedback = await stream(
+      `Interview question: "${currentQ.question}"\nCandidate's answer: "${userAnswer}"\n\nAnalyze this answer for a ${label} role (${experience}). Provide:\n1. Score: X/10\n2. Strengths\n3. Improvements\n4. Ideal answer snippet`,
+      `You are a strict but fair ${label} interviewer. Be specific and actionable.`
+    );
 
-  const handleSubmitAnswer = () => {
-    if (!currentAnswer.trim()) return;
-    const question = questions[currentQIndex].text;
-    chat.mutate({
-      data: {
-        prompt: `Question: "${question}"\nCandidate Answer: "${currentAnswer}"\n\nEvaluate this answer. Provide a rating out of 10, strengths, and areas for improvement. Be constructive but honest.`,
-        system: `You are an expert technical and HR interviewer for the role of ${role}.`,
-      }
-    }, {
-      onSuccess: (res) => {
-        const newQs = [...questions];
-        newQs[currentQIndex].answer = currentAnswer;
-        newQs[currentQIndex].feedback = res.text;
-        newQs[currentQIndex].savedFeedback = false;
-        setQuestions(newQs);
-        setCurrentAnswer("");
-      }
-    });
-  };
+    const scoreMatch = feedback.match(/score[:\s]+(\d+)/i) ?? feedback.match(/(\d+)\s*\/\s*10/i);
+    const score = scoreMatch ? Math.min(10, Math.max(0, parseInt(scoreMatch[1]))) : 6;
 
-  const handleSaveFeedback = (index: number) => {
-    const q = questions[index];
-    if (!q.feedback) return;
-    save({
-      tool: "Interview Ace",
-      title: `${role} Interview — Q${index + 1}: "${q.text.slice(0, 60)}${q.text.length > 60 ? "…" : ""}"`,
-      content: `Question: ${q.text}\n\nYour Answer: ${q.answer}\n\nAI Feedback:\n${q.feedback}`,
-    });
-    const newQs = [...questions];
-    newQs[index].savedFeedback = true;
-    setQuestions(newQs);
-  };
+    setQuestions(prev => prev.map((q, i) =>
+      i === currentIdx ? { ...q, answer: userAnswer, feedback, score } : q
+    ));
+    synth.speak(`Score: ${score} out of 10. ${feedback.slice(0, 200)}`, "English");
+  }, [answer, currentQ, currentIdx, type, experience, stream, resetStream, synth]);
 
-  const handleNextQuestion = () => {
-    if (currentQIndex < questions.length - 1) {
-      setCurrentQIndex(currentQIndex + 1);
+  const nextQuestion = useCallback(() => {
+    const nextIdx = currentIdx + 1;
+    if (nextIdx >= questions.length) {
+      setPhase("report");
+      return;
     }
-  };
+    setCurrentIdx(nextIdx);
+    setAnswer("");
+    resetStream();
+    synth.speak(questions[nextIdx].question, "English");
+  }, [currentIdx, questions, resetStream, synth]);
 
-  const handleGetTips = () => {
-    setTips("");
-    setTipsSaved(false);
-    chat.mutate({
-      data: {
-        prompt: `Give 5 essential interview tips for a ${role} candidate in India. Write the response in ${tipsLang}.`,
-        system: "You are an encouraging career mentor.",
-      }
-    }, { onSuccess: (res) => setTips(res.text) });
-  };
+  const downloadReport = useCallback(() => {
+    const label = INTERVIEW_TYPES.find(t => t.value === type)?.label ?? type;
+    const lines = [
+      `EDUBHARAT — INTERVIEW ACE REPORT`,
+      `Role: ${label} | Experience: ${experience}`,
+      `Date: ${new Date().toLocaleDateString("en-IN")}`,
+      `Overall Score: ${avgScore.toFixed(1)}/10`,
+      ``,
+      ...questions.map((q, i) => [
+        `Q${i + 1}: ${q.question}`,
+        `Your Answer: ${q.answer ?? ""}`,
+        `Score: ${q.score ?? "N/A"}/10`,
+        `Feedback: ${q.feedback ?? ""}`,
+        ``,
+      ].join("\n")),
+    ].join("\n");
 
-  return (
-    <div className="container mx-auto px-4 py-12 max-w-4xl">
-      <div className="mb-10 text-center">
-        <div className="w-16 h-16 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <PlayCircle className="w-8 h-8" />
+    const blob = new Blob([lines], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `interview-report-${label.toLowerCase().replace(/ /g, "-")}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [questions, type, experience, avgScore]);
+
+  if (phase === "setup") {
+    return (
+      <div className="container mx-auto px-4 py-12 max-w-4xl">
+        <div className="text-center mb-10">
+          <div className="flex justify-center mb-4">
+            <AnimatedAvatar name="Raj Sir" role="Interview Coach" isSpeaking={false} gender="male" size="lg" />
+          </div>
+          <h1 className="text-4xl font-display font-bold text-secondary mb-3">Interview Ace</h1>
+          <p className="text-muted-foreground text-lg">AI-powered mock interviews with instant feedback and voice practice.</p>
         </div>
-        <h1 className="text-4xl font-display font-bold text-secondary mb-4">Interview Ace</h1>
-        <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-          Practice mock interviews for your dream job. Get instant feedback, ratings, and expert tips to ace the real thing.
-        </p>
-      </div>
 
-      {questions.length === 0 ? (
-        <Card className="max-w-xl mx-auto border-none shadow-xl">
-          <CardHeader className="text-center pb-2">
-            <CardTitle className="text-2xl">Start a Practice Session</CardTitle>
-            <CardDescription>Tell us about the role you're aiming for.</CardDescription>
+        <Card className="max-w-lg mx-auto shadow-xl border-none">
+          <CardHeader>
+            <CardTitle>Start Interview Session</CardTitle>
+            <CardDescription>Choose your interview type and experience level.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6 pt-6">
+          <CardContent className="space-y-5">
             <div className="space-y-2">
-              <label className="text-sm font-semibold">Job Role</label>
-              <Select value={role} onValueChange={setRole}>
-                <SelectTrigger className="h-12" data-testid="select-role">
+              <label className="text-sm font-semibold">Interview Type</label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="h-12" data-testid="select-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {JOB_ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  {INTERVIEW_TYPES.map(t => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.icon} {t.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold">Experience Level</label>
               <Select value={experience} onValueChange={setExperience}>
-                <SelectTrigger className="h-12" data-testid="select-experience">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="h-12" data-testid="select-experience"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {EXPERIENCES.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                  {EXPERIENCE_LEVELS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
           </CardContent>
           <CardFooter>
-            <Button
-              size="lg"
-              className="w-full font-bold text-base h-12 shadow-md shadow-primary/20"
-              onClick={handleStartSession}
-              disabled={chat.isPending}
-              data-testid="button-start-interview"
-            >
-              {chat.isPending ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <PlayCircle className="w-5 h-5 mr-2" />}
-              Generate Interview Questions
+            <Button className="w-full h-12 font-bold text-base shadow-md shadow-primary/20"
+              onClick={startSession} disabled={isStreaming} data-testid="button-start">
+              {isStreaming ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <PlayCircle className="w-5 h-5 mr-2" />}
+              Begin Mock Interview
             </Button>
           </CardFooter>
         </Card>
-      ) : (
-        <div className="space-y-8">
-          <div className="flex justify-between items-center mb-2">
-            <div className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-              {role} • {experience}
+      </div>
+    );
+  }
+
+  if (phase === "report") {
+    return (
+      <div className="container mx-auto px-4 py-12 max-w-4xl">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-display font-bold text-secondary mb-2">Interview Complete!</h1>
+          <div className="flex items-center justify-center gap-3 mt-4">
+            <span className="text-5xl font-extrabold text-primary">{avgScore.toFixed(1)}</span>
+            <span className="text-2xl text-muted-foreground">/10</span>
+          </div>
+          <p className="text-muted-foreground mt-2">{typeMeta.icon} {typeMeta.label} • {experience}</p>
+        </div>
+
+        <div className="space-y-4 mb-8">
+          {questions.map((q, i) => (
+            <Card key={i} className="border">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-secondary mb-2">Q{i + 1}: {q.question}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{q.answer}</p>
+                  </div>
+                  {q.score !== undefined && <ScoreBadge score={q.score} />}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="flex gap-3 justify-center">
+          <Button variant="outline" onClick={downloadReport} className="font-bold">
+            <Download className="w-4 h-4 mr-2" />Download Report
+          </Button>
+          <Button onClick={() => { setPhase("setup"); setQuestions([]); }} className="font-bold">
+            <PlayCircle className="w-4 h-4 mr-2" />New Session
+          </Button>
+          <Button variant="secondary" className="font-bold"
+            onClick={() => save({
+              tool: "Interview Ace",
+              title: `${typeMeta.label} Interview — Score: ${avgScore.toFixed(1)}/10`,
+              content: questions.map((q, i) => `Q${i + 1}: ${q.question}\nAnswer: ${q.answer}\nScore: ${q.score}/10\nFeedback: ${q.feedback}`).join("\n\n"),
+            })}>
+            <Download className="w-4 h-4 mr-2" />Save to History
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-10 max-w-5xl">
+      <div className="grid lg:grid-cols-[220px_1fr] gap-8">
+        {/* Avatar sidebar */}
+        <aside className="flex flex-col items-center gap-4">
+          <AnimatedAvatar
+            name="Raj Sir"
+            role={`${typeMeta.label}\nInterviewer`}
+            isSpeaking={synth.isSpeaking}
+            isThinking={isStreaming}
+            gender="male"
+            size="lg"
+          />
+          <div className="w-full space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Progress</span>
+              <span className="font-bold">{currentIdx + 1}/{questions.length}</span>
             </div>
-            <div className="text-sm font-bold bg-primary/10 text-primary px-3 py-1 rounded-full">
-              Question {currentQIndex + 1} of {questions.length}
+            <Progress value={((currentIdx + 1) / questions.length) * 100} className="h-2" />
+            <div className="space-y-1">
+              {questions.map((q, i) => (
+                <div key={i} className={`flex items-center justify-between text-xs p-1.5 rounded ${i === currentIdx ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"}`}>
+                  <span>Q{i + 1}</span>
+                  {q.score !== undefined && <ScoreBadge score={q.score} />}
+                  {i === currentIdx && !q.feedback && <span className="text-primary">●</span>}
+                </div>
+              ))}
             </div>
           </div>
+        </aside>
 
-          <Card className="border-none shadow-lg">
-            <CardContent className="p-8">
-              <h2 className="text-2xl font-display font-bold text-secondary mb-6 leading-relaxed">
-                {questions[currentQIndex].text}
-              </h2>
+        {/* Interview area */}
+        <main>
+          <div className="flex items-center justify-between mb-4">
+            <Badge variant="secondary">{typeMeta.icon} {typeMeta.label}</Badge>
+            <Badge variant="outline">{experience}</Badge>
+          </div>
 
-              {!questions[currentQIndex].feedback ? (
+          <Card className="shadow-lg border-none">
+            <CardContent className="p-6 md:p-8">
+              <div className="flex items-start gap-3 mb-6">
+                <Button variant="ghost" size="icon" className="shrink-0 mt-1 h-8 w-8"
+                  onClick={() => { if (currentQ) synth.speak(currentQ.question, "English"); }}>
+                  <Volume2 className="w-4 h-4" />
+                </Button>
+                <h2 className="text-xl font-display font-bold text-secondary leading-snug">
+                  {currentQ?.question}
+                </h2>
+              </div>
+
+              {!currentQ?.feedback ? (
                 <div className="space-y-4">
                   <Textarea
-                    placeholder="Type your answer here as if you are speaking in an interview..."
-                    className="min-h-[200px] text-base p-4 bg-muted/50 border-muted-foreground/20 focus-visible:bg-background"
-                    value={currentAnswer}
-                    onChange={(e) => setCurrentAnswer(e.target.value)}
+                    placeholder="Type your answer, or click the mic to speak..."
+                    className="min-h-[180px] text-base bg-muted/40 border-muted-foreground/20"
+                    value={speech.isListening ? answer + " " + speech.interimTranscript : answer}
+                    onChange={e => setAnswer(e.target.value)}
                     data-testid="input-answer"
                   />
-                  <div className="flex justify-end">
+                  <div className="flex items-center gap-3">
                     <Button
-                      onClick={handleSubmitAnswer}
-                      disabled={!currentAnswer.trim() || chat.isPending}
-                      className="font-bold px-6"
-                      data-testid="button-submit-answer"
+                      variant={speech.isListening ? "destructive" : "outline"}
+                      size="icon"
+                      onClick={speech.isListening ? speech.stop : () => speech.start(t => setAnswer(p => p + " " + t))}
+                      disabled={!speech.isSupported}
+                      className="h-11 w-11"
+                      title="Speak your answer"
                     >
-                      {chat.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-                      Submit Answer for Feedback
+                      {speech.isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    </Button>
+                    {speech.isListening && <span className="text-xs text-muted-foreground animate-pulse">Listening...</span>}
+                    <Button className="ml-auto font-bold px-6 h-11" disabled={!answer.trim() || isStreaming} onClick={submitAnswer} data-testid="button-submit">
+                      {isStreaming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      Submit Answer
                     </Button>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
                   <div className="p-4 bg-muted rounded-xl">
-                    <span className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2 block">Your Answer:</span>
-                    <p className="text-secondary">{questions[currentQIndex].answer}</p>
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Your Answer:</span>
+                    <p className="text-sm text-secondary mt-1">{currentQ.answer}</p>
                   </div>
-
-                  <div className="p-6 bg-green-50 border border-green-200 rounded-xl">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm font-bold text-green-700 uppercase tracking-wider">AI Feedback:</span>
-                      <SaveButton
-                        onSave={() => handleSaveFeedback(currentQIndex)}
-                        saved={!!questions[currentQIndex].savedFeedback}
-                      />
+                  <div className="p-5 bg-green-50 border border-green-200 rounded-xl">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-xs font-bold text-green-700 uppercase tracking-wider">AI Feedback</span>
+                      {currentQ.score !== undefined && <ScoreBadge score={currentQ.score} />}
                     </div>
-                    <div className="prose prose-sm max-w-none text-green-950 whitespace-pre-wrap">
-                      {questions[currentQIndex].feedback}
-                    </div>
+                    <div className="text-sm text-green-950 whitespace-pre-wrap leading-relaxed">{currentQ.feedback}</div>
                   </div>
-
-                  <div className="flex justify-end pt-4">
-                    {currentQIndex < questions.length - 1 ? (
-                      <Button onClick={handleNextQuestion} size="lg" className="font-bold">
-                        Next Question <PlayCircle className="w-4 h-4 ml-2" />
+                  <div className="flex justify-end pt-2">
+                    {currentIdx < questions.length - 1 ? (
+                      <Button onClick={nextQuestion} className="font-bold">
+                        Next Question <ChevronRight className="w-4 h-4 ml-1" />
                       </Button>
                     ) : (
-                      <Button onClick={() => setQuestions([])} variant="outline" size="lg" className="font-bold">
-                        Start New Session
+                      <Button onClick={() => setPhase("report")} className="font-bold bg-green-600 hover:bg-green-700">
+                        View Full Report
                       </Button>
                     )}
                   </div>
@@ -252,65 +342,8 @@ export default function InterviewAce() {
               )}
             </CardContent>
           </Card>
-        </div>
-      )}
-
-      <Separator className="my-16" />
-
-      <Card className="bg-secondary text-secondary-foreground border-none shadow-xl overflow-hidden relative">
-        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-          <Lightbulb className="w-32 h-32" />
-        </div>
-        <CardHeader className="relative z-10">
-          <CardTitle className="text-2xl text-white">Interview Tips in Your Language</CardTitle>
-          <CardDescription className="text-secondary-foreground/70">Get expert advice tailored to your role, explained clearly.</CardDescription>
-        </CardHeader>
-        <CardContent className="relative z-10 space-y-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Select value={tipsLang} onValueChange={setTipsLang}>
-              <SelectTrigger className="w-full sm:w-[200px] bg-secondary-foreground/10 border-secondary-foreground/20 text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {INDIAN_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Button onClick={handleGetTips} disabled={chat.isPending} className="bg-primary hover:bg-primary/90 text-white font-bold" data-testid="button-get-tips">
-              {chat.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lightbulb className="w-4 h-4 mr-2" />}
-              Get Tips
-            </Button>
-          </div>
-
-          {tips && (
-            <div className="p-6 bg-secondary-foreground/5 rounded-xl border border-secondary-foreground/10 animate-in fade-in">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-secondary-foreground/60 uppercase tracking-wider">Tips in {tipsLang}:</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    if (tipsSaved) return;
-                    save({ tool: "Interview Ace", title: `Interview Tips for ${role} in ${tipsLang}`, content: tips });
-                    setTipsSaved(true);
-                  }}
-                  disabled={tipsSaved}
-                  className="text-xs font-semibold border-secondary-foreground/20 text-secondary-foreground hover:bg-secondary-foreground/10"
-                  data-testid="button-save-tips"
-                >
-                  {tipsSaved ? (
-                    <><BookmarkCheck className="w-3.5 h-3.5 mr-1.5" />Saved</>
-                  ) : (
-                    <><Bookmark className="w-3.5 h-3.5 mr-1.5" />Save Tips</>
-                  )}
-                </Button>
-              </div>
-              <div className="prose prose-invert max-w-none whitespace-pre-wrap">
-                {tips}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </main>
+      </div>
     </div>
   );
 }

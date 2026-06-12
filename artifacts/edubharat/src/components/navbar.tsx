@@ -1,10 +1,13 @@
 import { Link, useLocation } from "wouter";
-import { Bookmark } from "lucide-react";
+import { Bookmark, LogIn, LogOut, User } from "lucide-react";
 import { useHistory } from "@/lib/use-history";
+import { useAuth } from "@/lib/use-auth";
+import { Button } from "@/components/ui/button";
 
 export function Navbar() {
   const [location] = useLocation();
   const { items } = useHistory();
+  const { user, logout } = useAuth();
 
   const links = [
     { href: "/english-guru", label: "English Guru" },
@@ -19,7 +22,7 @@ export function Navbar() {
           EduBharat
         </Link>
 
-        <div className="hidden md:flex items-center gap-8">
+        <div className="hidden md:flex items-center gap-6">
           {links.map((link) => (
             <Link
               key={link.href}
@@ -47,6 +50,28 @@ export function Navbar() {
               </span>
             )}
           </Link>
+
+          {user ? (
+            <div className="flex items-center gap-2">
+              {user.picture ? (
+                <img src={user.picture} alt={user.name ?? user.email} className="w-8 h-8 rounded-full border-2 border-primary/20" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <User className="w-4 h-4 text-primary" />
+                </div>
+              )}
+              <span className="text-sm font-medium text-secondary max-w-[120px] truncate">{user.name ?? user.email}</span>
+              <Button variant="ghost" size="icon" className="w-8 h-8" onClick={logout} title="Sign out" data-testid="button-logout">
+                <LogOut className="w-4 h-4 text-muted-foreground" />
+              </Button>
+            </div>
+          ) : (
+            <Link href="/login">
+              <Button variant="outline" size="sm" className="font-semibold" data-testid="button-login">
+                <LogIn className="w-4 h-4 mr-1.5" />Sign In
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
     </nav>
