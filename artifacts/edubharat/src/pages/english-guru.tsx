@@ -3,15 +3,25 @@ import { useAiChat } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { INDIAN_LANGUAGES } from "@/lib/constants";
 import { Loader2, BookOpen, PenLine, Languages, SpellCheck } from "lucide-react";
 
+const MODES = [
+  { value: "grammar", label: "Grammar Fix", icon: SpellCheck },
+  { value: "write", label: "Write Better", icon: PenLine },
+  { value: "vocab", label: "Vocabulary", icon: BookOpen },
+  { value: "translate", label: "Translation", icon: Languages },
+] as const;
+
+type Mode = typeof MODES[number]["value"];
+
 export default function EnglishGuru() {
   const chat = useAiChat();
-  
+
+  const [mode, setMode] = useState<Mode>("grammar");
+
   // Grammar Fix State
   const [grammarText, setGrammarText] = useState("");
   const [grammarResult, setGrammarResult] = useState("");
@@ -78,6 +88,9 @@ export default function EnglishGuru() {
     });
   };
 
+  const currentMode = MODES.find(m => m.value === mode)!;
+  const Icon = currentMode.icon;
+
   return (
     <div className="container mx-auto px-4 py-12 max-w-5xl">
       <div className="mb-10 text-center">
@@ -87,182 +100,172 @@ export default function EnglishGuru() {
         </p>
       </div>
 
-      <Tabs defaultValue="grammar" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto p-1 mb-8">
-          <TabsTrigger value="grammar" className="py-3 text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <SpellCheck className="w-4 h-4 mr-2" />
-            Grammar Fix
-          </TabsTrigger>
-          <TabsTrigger value="write" className="py-3 text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <PenLine className="w-4 h-4 mr-2" />
-            Write Better
-          </TabsTrigger>
-          <TabsTrigger value="vocab" className="py-3 text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <BookOpen className="w-4 h-4 mr-2" />
-            Vocabulary
-          </TabsTrigger>
-          <TabsTrigger value="translate" className="py-3 text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Languages className="w-4 h-4 mr-2" />
-            Translation
-          </TabsTrigger>
-        </TabsList>
+      {/* Mode selector dropdown */}
+      <div className="mb-8 flex items-center gap-3 max-w-xs">
+        <Icon className="w-5 h-5 text-primary shrink-0" />
+        <Select value={mode} onValueChange={(v) => setMode(v as Mode)}>
+          <SelectTrigger className="h-11 font-semibold" data-testid="select-mode">
+            <SelectValue placeholder="Select a feature" />
+          </SelectTrigger>
+          <SelectContent>
+            {MODES.map(m => (
+              <SelectItem key={m.value} value={m.value}>
+                {m.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-        {/* Grammar Fix */}
-        <TabsContent value="grammar" className="space-y-6 animate-in fade-in duration-500">
-          <Card>
-            <CardHeader>
-              <CardTitle>Fix Grammar Mistakes</CardTitle>
-              <CardDescription>Paste your English text here, and the AI will correct it and explain why.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Textarea 
-                placeholder="Type or paste your text here..." 
-                className="min-h-[150px] resize-y text-base"
-                value={grammarText}
-                onChange={(e) => setGrammarText(e.target.value)}
-                data-testid="input-grammar"
-              />
-              <Button onClick={handleGrammarFix} disabled={chat.isPending || !grammarText.trim()} className="w-full md:w-auto font-bold" data-testid="button-grammar-fix">
-                {chat.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <SpellCheck className="w-4 h-4 mr-2" />}
-                Correct My Grammar
-              </Button>
-
-              {grammarResult && (
-                <div className="mt-8 p-6 bg-primary/5 rounded-xl border border-primary/20">
-                  <h3 className="font-bold text-primary mb-3">Teacher's Feedback:</h3>
-                  <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap">
-                    {grammarResult}
-                  </div>
+      {/* Grammar Fix */}
+      {mode === "grammar" && (
+        <Card className="animate-in fade-in duration-300">
+          <CardHeader>
+            <CardTitle>Fix Grammar Mistakes</CardTitle>
+            <CardDescription>Paste your English text here, and the AI will correct it and explain why.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Textarea
+              placeholder="Type or paste your text here..."
+              className="min-h-[150px] resize-y text-base"
+              value={grammarText}
+              onChange={(e) => setGrammarText(e.target.value)}
+              data-testid="input-grammar"
+            />
+            <Button onClick={handleGrammarFix} disabled={chat.isPending || !grammarText.trim()} className="w-full md:w-auto font-bold" data-testid="button-grammar-fix">
+              {chat.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <SpellCheck className="w-4 h-4 mr-2" />}
+              Correct My Grammar
+            </Button>
+            {grammarResult && (
+              <div className="mt-8 p-6 bg-primary/5 rounded-xl border border-primary/20">
+                <h3 className="font-bold text-primary mb-3">Teacher's Feedback:</h3>
+                <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap">
+                  {grammarResult}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Write Better */}
-        <TabsContent value="write" className="space-y-6 animate-in fade-in duration-500">
-          <Card>
-            <CardHeader>
-              <CardTitle>Improve Your Writing</CardTitle>
-              <CardDescription>Make your emails, essays, or messages sound more professional and natural.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Textarea 
-                placeholder="Type your draft here..." 
-                className="min-h-[150px] resize-y text-base"
-                value={writeText}
-                onChange={(e) => setWriteText(e.target.value)}
-                data-testid="input-write"
-              />
-              <Button onClick={handleWriteBetter} disabled={chat.isPending || !writeText.trim()} className="w-full md:w-auto font-bold" data-testid="button-write-better">
-                {chat.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenLine className="w-4 h-4 mr-2" />}
-                Improve Writing
-              </Button>
-
-              {writeResult && (
-                <div className="mt-8 p-6 bg-primary/5 rounded-xl border border-primary/20">
-                  <h3 className="font-bold text-primary mb-3">Improved Version:</h3>
-                  <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap">
-                    {writeResult}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Vocabulary */}
-        <TabsContent value="vocab" className="space-y-6 animate-in fade-in duration-500">
-          <Card>
-            <CardHeader>
-              <CardTitle>Build Vocabulary</CardTitle>
-              <CardDescription>Get 5 new words related to any topic with meanings and examples in your language.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
-                  <Input 
-                    placeholder="Enter a topic (e.g., Job Interview, Business, Weather)" 
-                    value={vocabTopic}
-                    onChange={(e) => setVocabTopic(e.target.value)}
-                    className="text-base h-11"
-                    data-testid="input-vocab-topic"
-                  />
-                </div>
-                <Select value={vocabLanguage} onValueChange={setVocabLanguage}>
-                  <SelectTrigger className="w-full md:w-[200px] h-11">
-                    <SelectValue placeholder="Select Language" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {INDIAN_LANGUAGES.map(lang => (
-                      <SelectItem key={lang} value={lang}>{lang}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
-              
-              <Button onClick={handleVocabulary} disabled={chat.isPending || !vocabTopic.trim()} className="w-full md:w-auto font-bold" data-testid="button-vocab">
-                {chat.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <BookOpen className="w-4 h-4 mr-2" />}
-                Learn New Words
-              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-              {vocabResult && (
-                <div className="mt-8 p-6 bg-primary/5 rounded-xl border border-primary/20">
-                  <h3 className="font-bold text-primary mb-3">Vocabulary List:</h3>
-                  <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap">
-                    {vocabResult}
-                  </div>
+      {/* Write Better */}
+      {mode === "write" && (
+        <Card className="animate-in fade-in duration-300">
+          <CardHeader>
+            <CardTitle>Improve Your Writing</CardTitle>
+            <CardDescription>Make your emails, essays, or messages sound more professional and natural.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Textarea
+              placeholder="Type your draft here..."
+              className="min-h-[150px] resize-y text-base"
+              value={writeText}
+              onChange={(e) => setWriteText(e.target.value)}
+              data-testid="input-write"
+            />
+            <Button onClick={handleWriteBetter} disabled={chat.isPending || !writeText.trim()} className="w-full md:w-auto font-bold" data-testid="button-write-better">
+              {chat.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenLine className="w-4 h-4 mr-2" />}
+              Improve Writing
+            </Button>
+            {writeResult && (
+              <div className="mt-8 p-6 bg-primary/5 rounded-xl border border-primary/20">
+                <h3 className="font-bold text-primary mb-3">Improved Version:</h3>
+                <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap">
+                  {writeResult}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Translation */}
-        <TabsContent value="translate" className="space-y-6 animate-in fade-in duration-500">
-          <Card>
-            <CardHeader>
-              <CardTitle>Translate Text</CardTitle>
-              <CardDescription>Translate between English and 12 Indian languages.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="mb-2">
-                <Select value={translateLang} onValueChange={setTranslateLang}>
-                  <SelectTrigger className="w-full md:w-[250px] h-11">
-                    <SelectValue placeholder="Translate to..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {INDIAN_LANGUAGES.map(lang => (
-                      <SelectItem key={lang} value={lang}>{lang}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
-              <Textarea 
-                placeholder="Enter text to translate..." 
-                className="min-h-[120px] resize-y text-base"
-                value={translateText}
-                onChange={(e) => setTranslateText(e.target.value)}
-                data-testid="input-translate"
-              />
-              
-              <Button onClick={handleTranslation} disabled={chat.isPending || !translateText.trim()} className="w-full md:w-auto font-bold" data-testid="button-translate">
-                {chat.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Languages className="w-4 h-4 mr-2" />}
-                Translate Text
-              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-              {translateResult && (
-                <div className="mt-8 p-6 bg-primary/5 rounded-xl border border-primary/20">
-                  <h3 className="font-bold text-primary mb-3">Translation:</h3>
-                  <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap text-lg">
-                    {translateResult}
-                  </div>
+      {/* Vocabulary */}
+      {mode === "vocab" && (
+        <Card className="animate-in fade-in duration-300">
+          <CardHeader>
+            <CardTitle>Build Vocabulary</CardTitle>
+            <CardDescription>Get 5 new words related to any topic with meanings and examples in your language.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1">
+                <Input
+                  placeholder="Enter a topic (e.g., Job Interview, Business, Weather)"
+                  value={vocabTopic}
+                  onChange={(e) => setVocabTopic(e.target.value)}
+                  className="text-base h-11"
+                  data-testid="input-vocab-topic"
+                />
+              </div>
+              <Select value={vocabLanguage} onValueChange={setVocabLanguage}>
+                <SelectTrigger className="w-full md:w-[200px] h-11" data-testid="select-vocab-language">
+                  <SelectValue placeholder="Select Language" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INDIAN_LANGUAGES.map(lang => (
+                    <SelectItem key={lang} value={lang}>{lang}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleVocabulary} disabled={chat.isPending || !vocabTopic.trim()} className="w-full md:w-auto font-bold" data-testid="button-vocab">
+              {chat.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <BookOpen className="w-4 h-4 mr-2" />}
+              Learn New Words
+            </Button>
+            {vocabResult && (
+              <div className="mt-8 p-6 bg-primary/5 rounded-xl border border-primary/20">
+                <h3 className="font-bold text-primary mb-3">Vocabulary List:</h3>
+                <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap">
+                  {vocabResult}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Translation */}
+      {mode === "translate" && (
+        <Card className="animate-in fade-in duration-300">
+          <CardHeader>
+            <CardTitle>Translate Text</CardTitle>
+            <CardDescription>Translate between English and 12 Indian languages.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="mb-2">
+              <Select value={translateLang} onValueChange={setTranslateLang}>
+                <SelectTrigger className="w-full md:w-[250px] h-11" data-testid="select-translate-lang">
+                  <SelectValue placeholder="Translate to..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {INDIAN_LANGUAGES.map(lang => (
+                    <SelectItem key={lang} value={lang}>{lang}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Textarea
+              placeholder="Enter text to translate..."
+              className="min-h-[120px] resize-y text-base"
+              value={translateText}
+              onChange={(e) => setTranslateText(e.target.value)}
+              data-testid="input-translate"
+            />
+            <Button onClick={handleTranslation} disabled={chat.isPending || !translateText.trim()} className="w-full md:w-auto font-bold" data-testid="button-translate">
+              {chat.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Languages className="w-4 h-4 mr-2" />}
+              Translate Text
+            </Button>
+            {translateResult && (
+              <div className="mt-8 p-6 bg-primary/5 rounded-xl border border-primary/20">
+                <h3 className="font-bold text-primary mb-3">Translation:</h3>
+                <div className="prose prose-sm md:prose-base max-w-none text-secondary whitespace-pre-wrap text-lg">
+                  {translateResult}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
