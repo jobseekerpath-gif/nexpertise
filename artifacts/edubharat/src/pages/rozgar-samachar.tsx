@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { INDIAN_LANGUAGES } from "@/lib/constants";
 import { useHistory } from "@/lib/use-history";
+import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
 import {
@@ -78,6 +79,7 @@ function SectionCard({ section, profile, synth }: {
   synth: ReturnType<typeof useSpeechSynthesis>;
 }) {
   const { save } = useHistory();
+  const { track } = useProgress();
   const { text, isStreaming, stream } = useGeminiStream();
   const [expanded, setExpanded] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -87,6 +89,7 @@ function SectionCard({ section, profile, synth }: {
     if (loaded && !isStreaming) { setExpanded(e => !e); return; }
     setExpanded(true);
     setLoaded(true);
+    track("Rozgar Samachar", section.id);
 
     const profileCtx = `Reader profile: ${profile.name || "Indian professional"}, Age ${profile.age}, ${profile.education}, ${profile.status}, Goal: ${profile.careerGoal}, Location: ${profile.location}, Industry: ${profile.industry}`;
 

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { INDIAN_LANGUAGES } from "@/lib/constants";
 import { useHistory } from "@/lib/use-history";
+import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
 import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
@@ -83,6 +84,7 @@ function ResultPanel({ title, content, isSpeaking, onSpeak, onStop, onSave, save
 
 export default function EnglishGuru() {
   const { save } = useHistory();
+  const { track } = useProgress();
   const { text: aiText, isStreaming, stream, reset: resetAI } = useGeminiStream();
   const synth = useSpeechSynthesis();
 
@@ -112,9 +114,12 @@ export default function EnglishGuru() {
     synth.stop();
     const full = await stream(prompt, system);
     setResult(full);
-    speak(full);
+    if (full) {
+      track("English Guru", saveTitle);
+      void speak(full);
+    }
     return full;
-  }, [stream, resetAI, synth, speak]);
+  }, [stream, resetAI, synth, speak, track]);
 
   const saveResult = useCallback((key: string, title: string, content: string) => {
     save({ tool: "English Guru", title, content });

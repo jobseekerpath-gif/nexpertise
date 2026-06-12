@@ -1,0 +1,1 @@
+- [EduBharat project](edubharat.md) — India AI Career Ecosystem; Gemini 2.5 Flash, SSE streaming, Indian voice TTS, Google OAuth + Email OTP, PostgreSQL, 3 products + progress dashboard.

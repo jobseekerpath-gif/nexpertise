@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useHistory } from "@/lib/use-history";
+import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
 import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
@@ -44,6 +45,7 @@ function ScoreBadge({ score }: { score: number }) {
 
 export default function InterviewAce() {
   const { save } = useHistory();
+  const { track } = useProgress();
   const { text: streamText, isStreaming, stream, reset: resetStream } = useGeminiStream();
   const synth = useSpeechSynthesis();
   const speech = useSpeechRecognition("English");
@@ -94,7 +96,8 @@ export default function InterviewAce() {
     setQuestions(prev => prev.map((q, i) =>
       i === currentIdx ? { ...q, answer: userAnswer, feedback, score } : q
     ));
-    synth.speak(`Score: ${score} out of 10. ${feedback.slice(0, 200)}`, "English");
+    track("Interview Ace", `${typeMeta.label} — Q${currentIdx + 1}`, score * 10);
+    void synth.speak(`Score: ${score} out of 10. ${feedback.slice(0, 200)}`, "English");
   }, [answer, currentQ, currentIdx, type, experience, stream, resetStream, synth]);
 
   const nextQuestion = useCallback(() => {

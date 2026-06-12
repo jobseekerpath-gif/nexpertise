@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Bookmark, LogIn, LogOut, User } from "lucide-react";
+import { Bookmark, LogIn, LogOut, User, BarChart2 } from "lucide-react";
 import { useHistory } from "@/lib/use-history";
 import { useAuth } from "@/lib/use-auth";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,17 @@ export function Navbar() {
               {link.label}
             </Link>
           ))}
+
+          <Link
+            href="/progress"
+            className={`flex items-center gap-1.5 text-sm font-semibold transition-colors hover:text-primary ${
+              location === "/progress" ? "text-primary" : "text-muted-foreground"
+            }`}
+            data-testid="link-progress"
+          >
+            <BarChart2 className="w-4 h-4" />
+            Progress
+          </Link>
 
           <Link
             href="/history"
