@@ -19,8 +19,8 @@ async function* parseSSE(response: Response): AsyncGenerator<string> {
         if (data.error) throw new Error(data.error);
         if (data.done) return;
         if (data.content) yield data.content;
-      } catch {
-        // skip malformed lines
+      } catch (e) {
+        if (e instanceof Error && e.message !== "Unexpected end of JSON input") throw e;
       }
     }
   }
@@ -42,7 +42,7 @@ export function useGeminiStream() {
       setError(null);
 
       try {
-        const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+        const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
         const response = await fetch(`${base}/api/ai/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -50,7 +50,7 @@ export function useGeminiStream() {
           credentials: "include",
         });
 
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) throw new Error(`Server error ${response.status}`);
 
         let fullText = "";
         for await (const chunk of parseSSE(response)) {
@@ -60,8 +60,12 @@ export function useGeminiStream() {
         }
         return fullText;
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "AI request failed";
-        setError(msg);
+        const raw = err instanceof Error ? err.message : "AI request failed";
+        // Surface friendly quota/rate messages directly
+        const friendly = raw.includes("quota") || raw.includes("wait") || raw.includes("busy")
+          ? raw
+          : "AI request failed — please try again.";
+        setError(friendly);
         return "";
       } finally {
         setIsStreaming(false);
