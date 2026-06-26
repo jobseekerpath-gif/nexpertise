@@ -85,6 +85,14 @@ const INDUSTRIES = [
   "Media / Entertainment", "Agriculture", "Construction",
 ];
 
+const VACANCY_SECTIONS = new Set<SectionId>([
+  "top_jobs",
+  "govt_jobs",
+  "private_jobs",
+  "internships",
+  "scholarships",
+]);
+
 function SectionCard({
   section,
   profile,
@@ -147,6 +155,11 @@ function SectionCard({
     };
 
     const live = await loadLive(section.id, profile);
+    if (VACANCY_SECTIONS.has(section.id)) {
+      setLoaded(true);
+      return;
+    }
+
     const liveContext = live?.items?.length
       ? [
           `Live sources fetched at ${new Date(live.fetchedAt).toLocaleString("en-IN")}.`,
@@ -184,7 +197,7 @@ function SectionCard({
         )}
       </button>
 
-      {expanded && (text || isStreaming || liveLoading || Boolean(liveData?.items?.length) || Boolean(liveError)) && (
+      {expanded && (VACANCY_SECTIONS.has(section.id) ? (liveLoading || Boolean(liveData?.items?.length) || Boolean(liveError)) : (text || isStreaming || liveLoading || Boolean(liveData?.items?.length) || Boolean(liveError))) && (
         <CardContent className="px-5 pb-5 pt-0 border-t bg-muted/20">
           {(liveLoading || liveData?.items?.length || liveError) && (
             <div className="mb-4 rounded-2xl border bg-background p-4">
@@ -206,11 +219,19 @@ function SectionCard({
                       <div className="min-w-0">
                         <p className="font-semibold text-secondary line-clamp-2">{item.title}</p>
                         <p className="text-xs text-muted-foreground mt-1">
+                          {item.company ? `${item.company} • ` : ""}
+                          {item.location ? `${item.location} • ` : ""}
                           {item.source}
                           {item.publishedAt ? ` • ${new Date(item.publishedAt).toLocaleDateString("en-IN")}` : ""}
                         </p>
                       </div>
-                      <Badge variant="outline" className="rounded-full shrink-0">Open</Badge>
+                      <Badge variant="outline" className="rounded-full shrink-0">
+                        {item.remote ? "Remote" : "Open"}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                      {item.jobType && <span className="rounded-full bg-background px-2 py-0.5 border">{item.jobType}</span>}
+                      {item.kind && <span className="rounded-full bg-background px-2 py-0.5 border">{item.kind}</span>}
                     </div>
                     {item.summary && <p className="mt-2 text-xs text-secondary line-clamp-2">{item.summary}</p>}
                   </a>
@@ -218,22 +239,26 @@ function SectionCard({
               </div>
             </div>
           )}
-          <div className="flex justify-end gap-2 py-2 flex-wrap">
-            <Button variant="ghost" size="sm" className="text-xs"
-              onClick={() => synth.speak(text, profile.language)}>
-              <Volume2 className="w-3.5 h-3.5 mr-1" />Listen
+          {!VACANCY_SECTIONS.has(section.id) && (
+            <div className="flex justify-end gap-2 py-2 flex-wrap">
+              <Button variant="ghost" size="sm" className="text-xs"
+                onClick={() => synth.speak(text, profile.language)}>
+                <Volume2 className="w-3.5 h-3.5 mr-1" />Listen
+              </Button>
+              <Button variant="ghost" size="sm" className="text-xs" disabled={saved}
+                onClick={() => {
+                  save({ tool: "Rozgar Samachar", title: `${section.title} — ${new Date().toLocaleDateString("en-IN")}`, content: text });
+                  setSaved(true);
+                }}>
+                {saved
+                  ? <><BookmarkCheck className="w-3.5 h-3.5 mr-1 text-primary" />Saved</>
+                  : <><Bookmark className="w-3.5 h-3.5 mr-1" />Save</>}
             </Button>
-            <Button variant="ghost" size="sm" className="text-xs" disabled={saved}
-              onClick={() => {
-                save({ tool: "Rozgar Samachar", title: `${section.title} — ${new Date().toLocaleDateString("en-IN")}`, content: text });
-                setSaved(true);
-              }}>
-              {saved
-                ? <><BookmarkCheck className="w-3.5 h-3.5 mr-1 text-primary" />Saved</>
-                : <><Bookmark className="w-3.5 h-3.5 mr-1" />Save</>}
-            </Button>
-          </div>
-          <div className="text-sm text-secondary leading-relaxed whitespace-pre-wrap">{text}</div>
+            </div>
+          )}
+          {!VACANCY_SECTIONS.has(section.id) && (
+            <div className="text-sm text-secondary leading-relaxed whitespace-pre-wrap">{text}</div>
+          )}
         </CardContent>
       )}
     </Card>
@@ -491,7 +516,11 @@ export default function RozgarSamachar() {
                       className="rounded-xl border bg-muted/30 p-3 hover:bg-muted/60 transition-colors"
                     >
                       <p className="text-sm font-semibold text-secondary line-clamp-2">{item.title}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{item.source}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {item.company ? `${item.company} • ` : ""}
+                        {item.location ? `${item.location} • ` : ""}
+                        {item.source}
+                      </p>
                     </a>
                   ))}
                 </div>

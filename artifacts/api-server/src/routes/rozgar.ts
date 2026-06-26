@@ -29,6 +29,12 @@ type LiveItem = {
   source: string;
   publishedAt: string | null;
   summary: string;
+  company?: string;
+  location?: string;
+  jobType?: string;
+  remote?: boolean;
+  salary?: string;
+  kind?: "vacancy" | "news" | "update";
 };
 
 type FeedSource = {
@@ -65,6 +71,7 @@ const VALID_SECTIONS = new Set<RozgarSection>([
 
 const CACHE_MS = 8 * 60 * 1000;
 const cache = new Map<string, CacheEntry>();
+const FETCH_TIMEOUT_MS = 12000;
 
 function stripTags(text: string) {
   return text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -130,6 +137,26 @@ function buildGoogleNewsFeed(query: string) {
     ceid: "IN:en",
   });
   return `https://news.google.com/rss/search?${params.toString()}`;
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; EduBharat/1.0)",
+        Accept: "application/json, text/plain, */*",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`);
+    }
+    return (await response.json()) as T;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function sectionContext(params: URLSearchParams) {
@@ -229,6 +256,58 @@ function feedSourcesForSection(section: RozgarSection, ctx: ReturnType<typeof se
   return map[section];
 }
 
+function normalizeJobicy(job: Record<string, unknown>): LiveItem | null {
+  const title = typeof job["jobTitle"] === "string" ? job["jobTitle"] : "";
+  const link = typeof job["url"] === "string" ? job["url"] : "";
+  if (!title || !link) return null;
+
+  const company = typeof job["companyName"] === "string" ? job["companyName"] : undefined;
+  const location = typeof job["jobGeo"] === "string" ? job["jobGeo"] : undefined;
+  const summaryRaw = typeof job["jobExcerpt"] === "string" ? job["jobExcerpt"] : "";
+  const publishedAt = typeof job["pubDate"] === "string" ? job["pubDate"] : null;
+  const jobType = Array.isArray(job["jobType"]) ? job["jobType"].filter((v): v is string => typeof v === "string").join(", ") : undefined;
+  const kind: LiveItem["kind"] = "vacancy";
+
+  return {
+    title,
+    link,
+    source: "Jobicy API",
+    publishedAt,
+    summary: cleanText(summaryRaw).slice(0, 220),
+    company,
+    location,
+    jobType,
+    remote: Boolean(String(location ?? "").toLowerCase().includes("remote")),
+    kind,
+  };
+}
+
+function normalizeArbeitnow(job: Record<string, unknown>): LiveItem | null {
+  const title = typeof job["title"] === "string" ? job["title"] : "";
+  const link = typeof job["url"] === "string" ? job["url"] : "";
+  if (!title || !link) return null;
+
+  const company = typeof job["company_name"] === "string" ? job["company_name"] : undefined;
+  const location = typeof job["location"] === "string" ? job["location"] : undefined;
+  const summaryRaw = typeof job["description"] === "string" ? job["description"] : "";
+  const createdAt = typeof job["created_at"] === "string" ? job["created_at"] : null;
+  const remote = typeof job["remote"] === "boolean" ? job["remote"] : undefined;
+  const jobType = Array.isArray(job["job_types"]) ? job["job_types"].filter((v): v is string => typeof v === "string").join(", ") : undefined;
+
+  return {
+    title,
+    link,
+    source: "Arbeitnow API",
+    publishedAt: createdAt,
+    summary: cleanText(summaryRaw).slice(0, 220),
+    company,
+    location,
+    jobType,
+    remote,
+    kind: "vacancy",
+  };
+}
+
 async function fetchFeedItems(source: FeedSource): Promise<LiveItem[]> {
   const url = buildGoogleNewsFeed(source.query);
   const response = await fetch(url, {
@@ -244,6 +323,20 @@ async function fetchFeedItems(source: FeedSource): Promise<LiveItem[]> {
 
   const xml = await response.text();
   return parseRss(xml).slice(0, 6);
+}
+
+async function fetchJobicyItems(): Promise<LiveItem[]> {
+  const json = await fetchJson<{ jobs?: Array<Record<string, unknown>> }>(
+    "https://jobicy.com/api/v2/remote-jobs?count=20",
+  );
+  return (json.jobs ?? []).map(normalizeJobicy).filter((item): item is LiveItem => Boolean(item));
+}
+
+async function fetchArbeitnowItems(): Promise<LiveItem[]> {
+  const json = await fetchJson<{ data?: Array<Record<string, unknown>> }>(
+    "https://www.arbeitnow.com/api/job-board-api",
+  );
+  return (json.data ?? []).map(normalizeArbeitnow).filter((item): item is LiveItem => Boolean(item));
 }
 
 function mergeItems(items: LiveItem[]) {
@@ -273,18 +366,41 @@ router.get("/rozgar/live", async (req: Request, res: Response) => {
   const sources = feedSourcesForSection(section, ctx);
 
   try {
-    const results = await Promise.allSettled(sources.map((source) => fetchFeedItems(source)));
+    const vacancySections = new Set<RozgarSection>([
+      "top_jobs",
+      "govt_jobs",
+      "private_jobs",
+      "internships",
+      "scholarships",
+    ]);
+
+    const itemGroups = await Promise.allSettled(
+      section === "top_jobs"
+        ? [fetchJobicyItems(), fetchArbeitnowItems(), Promise.all(sources.map((source) => fetchFeedItems(source))).then((groups) => groups.flat())]
+        : section === "private_jobs"
+          ? [fetchArbeitnowItems(), fetchJobicyItems()]
+          : section === "internships"
+            ? [fetchJobicyItems()]
+            : section === "govt_jobs" || section === "scholarships"
+              ? [Promise.all(sources.map((source) => fetchFeedItems(source))).then((groups) => groups.flat())]
+              : [Promise.all(sources.map((source) => fetchFeedItems(source))).then((groups) => groups.flat())],
+    );
+
+    const rawItems = itemGroups.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+
     const items = mergeItems(
-      results.flatMap((result, index) => {
-        if (result.status === "fulfilled") {
-          return result.value.map((item) => ({
-            ...item,
-            source: sources[index]?.name ?? item.source,
-          }));
-        }
-        return [];
+      rawItems.filter((item) => {
+        if (!vacancySections.has(section)) return true;
+
+        const haystack = `${item.title} ${item.company ?? ""} ${item.location ?? ""} ${item.summary ?? ""}`.toLowerCase();
+        if (section === "top_jobs") return true;
+        if (section === "private_jobs") return !haystack.includes("government") && !haystack.includes("govt");
+        if (section === "govt_jobs") return haystack.includes("recruit") || haystack.includes("vacanc") || haystack.includes("notification") || item.source.includes("Google");
+        if (section === "internships") return haystack.includes("intern") || haystack.includes("apprent") || haystack.includes("trainee");
+        if (section === "scholarships") return haystack.includes("scholarship") || haystack.includes("fellowship") || haystack.includes("grant");
+        return true;
       }),
-    ).slice(0, 8);
+    ).slice(0, 10);
 
     const payload = {
       section,

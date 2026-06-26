@@ -6,6 +6,12 @@ export type RozgarLiveItem = {
   source: string;
   publishedAt: string | null;
   summary: string;
+  company?: string;
+  location?: string;
+  jobType?: string;
+  remote?: boolean;
+  salary?: string;
+  kind?: "vacancy" | "news" | "update";
 };
 
 export type RozgarLiveResponse = {
