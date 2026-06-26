@@ -24,18 +24,29 @@ const LANG_CODES: Record<string, string[]> = {
   English: ["en-IN", "en-GB", "en-US"],
 };
 
-const INDIAN_ENGLISH_KEYWORDS = ["heera", "ravi", "india", "neerja", "priya", "veena"];
-const FEMALE_VOICE_KEYWORDS = ["heera", "neerja", "priya", "veena", "ananya", "aarti", "aarthi", "lakshmi", "sita", "swathi", "shreya", "radha"];
-const MALE_VOICE_KEYWORDS = ["ravi", "arjun", "rahul", "karan", "rohan", "mohan", "amit", "veer", "aditya", "sachin", "pranav"];
+const INDIAN_ENGLISH_KEYWORDS = [
+  "heera", "ravi", "india", "neerja", "priya", "veena",
+  "microsoft heera", "microsoft neerja", "microsoft ravi", "google indian",
+];
+const FEMALE_VOICE_KEYWORDS = [
+  "heera", "neerja", "priya", "veena", "ananya", "aarti", "aarthi",
+  "lakshmi", "sita", "swathi", "shreya", "radha", "female",
+];
+const MALE_VOICE_KEYWORDS = [
+  "ravi", "arjun", "rahul", "karan", "rohan", "mohan", "amit", "veer",
+  "aditya", "sachin", "pranav", "male",
+];
 
 function pickEnglishVoice(voices: SpeechSynthesisVoice[], gender: VoiceGender): SpeechSynthesisVoice | undefined {
   const indian = voices.filter(v => v.lang.startsWith("en-IN") || v.lang.startsWith("en-"));
+  const allEnglish = voices.filter(v => v.lang.startsWith("en-"));
 
   const matchByGender = (keywords: string[]) =>
     indian.find(v => keywords.some(k => v.name.toLowerCase().includes(k)));
 
   if (gender === "female") {
     return matchByGender(FEMALE_VOICE_KEYWORDS)
+      ?? allEnglish.find(v => v.name.toLowerCase().includes("female"))
       ?? indian.find(v => v.lang === "en-IN")
       ?? indian.find(v => v.lang.startsWith("en-IN"))
       ?? indian.find(v => v.lang === "en-GB")
@@ -44,6 +55,7 @@ function pickEnglishVoice(voices: SpeechSynthesisVoice[], gender: VoiceGender): 
 
   if (gender === "male") {
     return matchByGender(MALE_VOICE_KEYWORDS)
+      ?? allEnglish.find(v => v.name.toLowerCase().includes("male"))
       ?? indian.find(v => v.lang === "en-IN")
       ?? indian.find(v => v.lang.startsWith("en-IN"))
       ?? indian.find(v => v.lang === "en-GB")
@@ -51,7 +63,7 @@ function pickEnglishVoice(voices: SpeechSynthesisVoice[], gender: VoiceGender): 
   }
 
   // Auto mode: prefer known Indian English voices by name, then locale.
-  const namedIndian = indian.find(v =>
+  const namedIndian = voices.find(v =>
     INDIAN_ENGLISH_KEYWORDS.some(k => v.name.toLowerCase().includes(k))
   );
   if (namedIndian) return namedIndian;
@@ -137,8 +149,8 @@ export function useSpeechSynthesis() {
       }
 
       // Indian English speech profile
-      utterance.rate = options.rate ?? (language === "English" ? 0.9 : 0.92);
-      utterance.pitch = options.pitch ?? (options.voiceGender === "male" ? 0.98 : 1.06);
+      utterance.rate = options.rate ?? (language === "English" ? 0.86 : 0.9);
+      utterance.pitch = options.pitch ?? (options.voiceGender === "male" ? 0.93 : 1.14);
       utterance.volume = 1.0;
 
       utterance.onstart = () => setIsSpeaking(true);

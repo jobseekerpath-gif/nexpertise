@@ -9,6 +9,14 @@ const router: IRouter = Router();
 const GEMINI_MODEL_CHAIN = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"] as const;
 const ANTHROPIC_MODEL_CHAIN = ["claude-sonnet-4-6", "claude-sonnet-4-5", "claude-haiku-4-5"] as const;
 
+function getAnthropicModelChain(maxTokens: number) {
+  // Brief, low-cost replies should try the smallest model first.
+  if (maxTokens <= 160) {
+    return ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-sonnet-4-6"] as const;
+  }
+  return ANTHROPIC_MODEL_CHAIN;
+}
+
 function getAI() {
   const apiKey = process.env["GEMINI_API_KEY"];
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
@@ -113,9 +121,10 @@ async function streamAnthropic(
 
   const messages: Array<{ role: "user"; content: string }> = [{ role: "user", content: prompt }];
   const systemPrompt = system ?? undefined;
+  const modelChain = getAnthropicModelChain(maxTokens);
 
-  for (let i = 0; i < ANTHROPIC_MODEL_CHAIN.length; i++) {
-    const model = ANTHROPIC_MODEL_CHAIN[i]!;
+  for (let i = 0; i < modelChain.length; i++) {
+    const model = modelChain[i]!;
     try {
       const stream = anthropic.messages.stream({
         model,
@@ -134,7 +143,7 @@ async function streamAnthropic(
       res.end();
       return;
     } catch (err) {
-      const isLast = i === ANTHROPIC_MODEL_CHAIN.length - 1;
+      const isLast = i === modelChain.length - 1;
       if ((isRateLimit(err) || isAuthError(err)) && !isLast) {
         req.log.warn({ model, err }, "Claude issue — trying fallback model");
         continue;
@@ -186,9 +195,10 @@ router.post("/ai/chat", async (req, res) => {
     if (hasClaudeKey) {
       const anthropic = getAnthropic();
       if (!anthropic) throw new Error("ANTHROPIC_API_KEY is not configured");
+      const modelChain = getAnthropicModelChain(maxTokens ?? 8192);
 
-      for (let i = 0; i < ANTHROPIC_MODEL_CHAIN.length; i++) {
-        const model = ANTHROPIC_MODEL_CHAIN[i]!;
+      for (let i = 0; i < modelChain.length; i++) {
+        const model = modelChain[i]!;
         try {
           const response = await anthropic.messages.create({
             model,
@@ -200,7 +210,7 @@ router.post("/ai/chat", async (req, res) => {
           res.json({ text: block?.text ?? "" });
           return;
         } catch (err) {
-          const isLast = i === ANTHROPIC_MODEL_CHAIN.length - 1;
+          const isLast = i === modelChain.length - 1;
           if ((isRateLimit(err) || isAuthError(err)) && !isLast) {
             req.log.warn({ model, err }, "Claude issue — trying fallback model");
             continue;

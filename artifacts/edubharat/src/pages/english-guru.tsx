@@ -132,7 +132,11 @@ export default function EnglishGuru() {
   const synth = useSpeechSynthesis();
   const { profile, updateProfile } = useStudentProfile();
 
-  const [mode, setMode] = useState<Mode>("roadmap");
+  const [mode, setMode] = useState<Mode>(() => {
+    if (typeof window === "undefined") return "roadmap";
+    const requested = new URLSearchParams(window.location.search).get("mode");
+    return (MODES.some(m => m.value === requested) ? requested : "roadmap") as Mode;
+  });
   const [uiLang, setUiLang] = useState(profile.preferredLanguage);
   const [level, setLevel] = useState("Beginner");
 
@@ -149,6 +153,7 @@ export default function EnglishGuru() {
   const [result, setResult] = useState("");
   const [savedMap, setSavedMap] = useState<Record<string, boolean>>({});
   const speech = useSpeechRecognition(uiLang);
+  const convHistoryRef = useRef(convHistory);
 
   useEffect(() => {
     if (user?.name && !profile.name) {
@@ -166,6 +171,10 @@ export default function EnglishGuru() {
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   }, [convInput]);
+
+  useEffect(() => {
+    convHistoryRef.current = convHistory;
+  }, [convHistory]);
 
   const speak = useCallback((text: string, language = uiLang, onEnd?: () => void, voiceGender: VoiceGender = profile.voiceGender) => {
     synth.speak(stripMarkdownForSpeech(text), language, onEnd, { voiceGender });
@@ -224,15 +233,15 @@ export default function EnglishGuru() {
     const userMsg = phrase.trim();
     setConvHistory(h => [...h, { role: "user", text: userMsg }]);
 
-    const recentHistory = [...convHistory.slice(-6), { role: "user" as const, text: userMsg }]
+    const recentHistory = [...convHistoryRef.current.slice(-4), { role: "user" as const, text: userMsg }]
       .map(m => `${m.role === "user" ? "Student" : "Priya"}: ${m.text}`).join("\n");
 
     resetAI();
     const response = await stream(
       `${recentHistory}\nPriya:`,
-      `You are the best English teacher in the world for an Indian student named ${profile.name || "Student"}. Reply in the same language the student used. If the student used English, teach naturally and gently correct mistakes. If the student used a regional Indian language, respond in that language and explain the English meaning simply. Never use markdown, bullets, numbering, or symbols. Keep replies short, warm, and natural.`,
+      `You are Priya, a warm Indian English tutor for ${profile.name || "the student"}. Reply in the same language the student used. If English, respond with gentle corrections. If a regional language is used, answer naturally in that language and explain the English meaning simply. Never use markdown, bullets, numbering, or symbols. Keep replies to 1-2 short lines.`,
       undefined,
-      { maxTokens: 220 }
+      { maxTokens: 120 }
     );
     if (response) {
       const cleanResponse = stripMarkdownForSpeech(response);
@@ -244,7 +253,7 @@ export default function EnglishGuru() {
       }, profile.voiceGender);
     }
     })();
-  }, [convHistory, level, stream, resetAI, speak, track, isStreaming, speech, liveChat, profile.name, profile.voiceGender, uiLang]);
+  }, [level, stream, resetAI, speak, track, isStreaming, speech, liveChat, profile.name, profile.voiceGender, uiLang]);
 
   const toggleLiveChat = useCallback(() => {
     if (liveChat) {
@@ -269,11 +278,11 @@ export default function EnglishGuru() {
   const currentStage = LEVEL_TO_STAGE[level] ?? "A1";
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-5xl">
-      <div className="grid lg:grid-cols-[260px_1fr] gap-7">
+    <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 max-w-6xl">
+      <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
 
         {/* Sidebar */}
-        <aside className="space-y-4">
+        <aside className="order-2 lg:order-1 space-y-4 lg:sticky lg:top-20 self-start">
           {/* Avatar — compact strip on mobile, card on desktop */}
           <div className="hidden lg:flex flex-col items-center py-6 px-4 bg-card rounded-2xl border shadow-sm">
             <AnimatedAvatar name="Priya Ma'am" role="English Teacher"
@@ -355,7 +364,7 @@ export default function EnglishGuru() {
         </aside>
 
         {/* Main content */}
-        <main>
+        <main className="order-1 lg:order-2 min-w-0">
           <div className="mb-5">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center">
@@ -430,11 +439,11 @@ export default function EnglishGuru() {
 
           {/* ── LIVE CONVERSATION ── */}
           {mode === "conversation" && (
-            <Card>
-              <CardContent className="pt-5 space-y-4">
+            <Card className="flex min-h-[calc(100dvh-8.5rem)] flex-col overflow-hidden">
+              <CardContent className="pt-5 space-y-4 flex min-h-0 flex-1 flex-col">
                 {/* Live chat toggle */}
-                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-xl">
-                  <div>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-muted/50 rounded-xl">
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold text-secondary">Live Voice Chat</p>
                     <p className="text-xs text-muted-foreground">Press mic once — speak naturally — AI responds, mic restarts automatically</p>
                   </div>
@@ -442,7 +451,7 @@ export default function EnglishGuru() {
                     onClick={toggleLiveChat}
                     variant={liveChat ? "destructive" : "default"}
                     size="sm"
-                    className={`font-bold shrink-0 ml-3 ${liveChat ? "" : "bg-green-600 hover:bg-green-700"}`}
+                    className={`font-bold shrink-0 w-full sm:w-auto ${liveChat ? "" : "bg-green-600 hover:bg-green-700"}`}
                     disabled={!speech.isSupported}>
                     {liveChat ? <><StopCircle className="w-4 h-4 mr-1.5" />End Chat</> : <><Mic className="w-4 h-4 mr-1.5" />Start Live Chat</>}
                   </Button>
@@ -461,17 +470,17 @@ export default function EnglishGuru() {
 
                 {/* Conversation history */}
                 {convHistory.length > 0 && (
-                  <div className="space-y-3 h-[min(340px,40vh)] overflow-y-auto pr-1">
+                  <div className="space-y-3 flex-1 min-h-[240px] overflow-y-auto pr-1 pb-1">
                     {convHistory.map((msg, i) => (
                       <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-secondary"}`}>
+                        <div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-secondary"}`}>
                           {msg.text}
                         </div>
                       </div>
                     ))}
                     {isStreaming && aiText && (
                       <div className="flex gap-2 justify-start">
-                        <div className="max-w-[82%] rounded-2xl px-4 py-2.5 text-sm bg-muted text-secondary">{stripMarkdownForSpeech(aiText)}</div>
+                        <div className="max-w-[90%] rounded-2xl px-4 py-2.5 text-sm bg-muted text-secondary whitespace-pre-wrap break-words">{stripMarkdownForSpeech(aiText)}</div>
                       </div>
                     )}
                     {isStreaming && !aiText && (
@@ -486,7 +495,7 @@ export default function EnglishGuru() {
 
                 {/* Manual input (always available) */}
                 {!liveChat && (
-                  <div className="flex gap-2 items-end">
+                  <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
                     <Textarea
                       ref={convInputRef}
                       placeholder={`Type in ${uiLang}, or press mic to speak...`}
@@ -495,11 +504,13 @@ export default function EnglishGuru() {
                       onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (convInput.trim()) void handleConvSend(); } }}
                       className="flex-1 min-h-[52px] max-h-[180px] resize-none overflow-hidden text-sm"
                     />
-                    <MicButton isListening={speech.isListening} isSupported={speech.isSupported}
-                      onStart={() => speech.start(t => setConvInput(p => p + t))} onStop={speech.stop} />
-                    <Button className="font-bold px-4" disabled={isStreaming || !convInput.trim()} onClick={handleConvSend}>
+                    <div className="flex items-center gap-2">
+                      <MicButton isListening={speech.isListening} isSupported={speech.isSupported}
+                        onStart={() => speech.start(t => setConvInput(p => p + t))} onStop={speech.stop} />
+                      <Button className="font-bold px-4 w-full sm:w-auto" disabled={isStreaming || !convInput.trim()} onClick={handleConvSend}>
                       {isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-                    </Button>
+                      </Button>
+                    </div>
                   </div>
                 )}
 

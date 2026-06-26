@@ -1,0 +1,43 @@
+Claude API Cost Optimization Requirements
+
+The application must aggressively optimize Claude API usage to achieve the lowest practical cost while maintaining response quality.
+
+1. Use prompt caching for system prompts, instructions, and other static context.
+
+2. Send only the minimum required conversation history. Summarize older messages into a compact memory instead of resending the full conversation.
+
+3. Store long-term user memory separately in a database and retrieve only relevant information for the current request.
+
+4. Remove duplicate instructions and repeated context before every API call.
+
+5. Limit output tokens dynamically based on the user's request instead of using a large fixed maximum.
+
+6. Compress prompts by removing unnecessary whitespace, formatting, and redundant examples.
+
+7. Use the smallest Claude model capable of completing the task correctly, and switch to larger models only for complex reasoning.
+
+8. Cache identical requests and return cached responses whenever appropriate instead of calling the API again.
+
+9. Batch multiple background operations into a single API request when possible.
+
+10. Perform deterministic tasks (formatting, validation, calculations, regex processing, JSON manipulation, grammar fixes, etc.) locally instead of using Claude.
+
+11. Use Retrieval-Augmented Generation (RAG) so that only relevant documents or knowledge are sent to Claude rather than entire files or databases.
+
+12. Stream responses to users immediately without increasing token usage.
+
+13. Automatically truncate or summarize very long user inputs before sending them to Claude when the omitted content is not relevant.
+
+14. Reuse conversation summaries across sessions instead of reconstructing the full history.
+
+15. Maintain separate short-term and long-term memory to minimize context size.
+
+16. Use structured JSON responses whenever possible to reduce output tokens.
+
+17. Track token usage and estimated cost for every request, and automatically optimize prompts if usage exceeds predefined thresholds.
+
+18. Never resend static application instructions after they have been cached.
+
+19. Prefer local speech recognition, text preprocessing, translation, and UI logic over API calls whenever feasible.
+
+20. Target the minimum achievable Claude API cost through caching, summarization, local processing, and intelligent context management while preserving response accuracy. Do not attempt to enforce a fixed cost per response, because API cost is inherently determined by the number of input and output tokens processed.
