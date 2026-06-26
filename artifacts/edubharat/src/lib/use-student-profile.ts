@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 
 export type VoiceGender = "male" | "female";
+export type VoiceStyle = "priya" | "neerja" | "meera" | "ravi" | "arjun" | "rahul";
 
 export type StudentProfile = {
   name: string;
   preferredLanguage: string;
   voiceGender: VoiceGender;
+  voiceStyle: VoiceStyle;
 };
 
 const STORAGE_KEY = "edubharat_student_profile";
@@ -14,6 +16,7 @@ const DEFAULT_PROFILE: StudentProfile = {
   name: "",
   preferredLanguage: "English",
   voiceGender: "female",
+  voiceStyle: "priya",
 };
 
 function loadProfile(): StudentProfile {
@@ -26,6 +29,9 @@ function loadProfile(): StudentProfile {
       name: typeof parsed.name === "string" ? parsed.name : DEFAULT_PROFILE.name,
       preferredLanguage: typeof parsed.preferredLanguage === "string" ? parsed.preferredLanguage : DEFAULT_PROFILE.preferredLanguage,
       voiceGender: parsed.voiceGender === "male" ? "male" : "female",
+      voiceStyle: parsed.voiceStyle === "neerja" || parsed.voiceStyle === "meera" || parsed.voiceStyle === "ravi" || parsed.voiceStyle === "arjun" || parsed.voiceStyle === "rahul"
+        ? parsed.voiceStyle
+        : (parsed.voiceGender === "male" ? "ravi" : "priya"),
     };
   } catch {
     return DEFAULT_PROFILE;

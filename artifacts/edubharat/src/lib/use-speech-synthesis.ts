@@ -4,6 +4,7 @@ export type VoiceGender = "male" | "female" | "auto";
 
 export type SpeakOptions = {
   voiceGender?: VoiceGender;
+  voiceStyle?: string;
   rate?: number;
   pitch?: number;
 };
@@ -60,7 +61,7 @@ const LANG_PITCH: Record<string, { male: number; female: number }> = {
 
 const FEMALE_VOICE_KEYWORDS = [
   "heera", "neerja", "priya", "veena", "ananya", "aarti", "aarthi",
-  "lakshmi", "sita", "swathi", "shreya", "radha", "female", "woman",
+  "lakshmi", "meera", "sita", "swathi", "shreya", "radha", "female", "woman",
   "zira", "hazel", "susan", "karen", "samantha", "victoria", "moira",
 ];
 const MALE_VOICE_KEYWORDS = [
@@ -73,6 +74,15 @@ const INDIAN_ENGLISH_KEYWORDS = [
   "microsoft heera", "microsoft neerja", "microsoft ravi", "google indian",
 ];
 
+const STYLE_KEYWORDS: Record<string, string[]> = {
+  priya: ["priya", "heera", "neerja", "female", "woman"],
+  neerja: ["neerja", "heera", "priya", "female", "woman"],
+  meera: ["meera", "lakshmi", "aarti", "aarthi", "shreya", "sita"],
+  ravi: ["ravi", "arjun", "rahul", "karan", "male", "man"],
+  arjun: ["arjun", "ravi", "rahul", "karan", "male", "man"],
+  rahul: ["rahul", "ravi", "arjun", "karan", "male", "man"],
+};
+
 function genderMatch(v: SpeechSynthesisVoice, gender: VoiceGender): boolean {
   const n = v.name.toLowerCase();
   if (gender === "female") return FEMALE_VOICE_KEYWORDS.some(k => n.includes(k));
@@ -80,17 +90,31 @@ function genderMatch(v: SpeechSynthesisVoice, gender: VoiceGender): boolean {
   return true;
 }
 
-function pickEnglishVoice(voices: SpeechSynthesisVoice[], gender: VoiceGender): SpeechSynthesisVoice | undefined {
+function styleMatch(v: SpeechSynthesisVoice, style?: string): boolean {
+  if (!style) return true;
+  const keywords = STYLE_KEYWORDS[style];
+  if (!keywords) return true;
+  const n = v.name.toLowerCase();
+  return keywords.some(k => n.includes(k));
+}
+
+function pickEnglishVoice(voices: SpeechSynthesisVoice[], gender: VoiceGender, style?: string): SpeechSynthesisVoice | undefined {
   // Priority 1 — known Indian English voice matching gender
   const indian = voices.filter(v => v.lang.startsWith("en-IN"));
+  const withStyle = indian.filter(v => styleMatch(v, style) && genderMatch(v, gender));
+  if (withStyle.length > 0) return withStyle[0];
+
   const withGender = indian.filter(v => genderMatch(v, gender));
   if (withGender.length > 0) return withGender[0];
   if (indian.length > 0) return indian[0];
 
   // Priority 2 — any English voice matching gender keyword
   const allEnglish = voices.filter(v => v.lang.startsWith("en-"));
-  const genMatch = allEnglish.filter(v => genderMatch(v, gender));
+  const genMatch = allEnglish.filter(v => styleMatch(v, style) && genderMatch(v, gender));
   if (genMatch.length > 0) return genMatch[0];
+
+  const genFallback = allEnglish.filter(v => genderMatch(v, gender));
+  if (genFallback.length > 0) return genFallback[0];
 
   // Priority 3 — any Indian-keyword English voice
   const named = allEnglish.find(v =>
@@ -106,9 +130,10 @@ function pickVoice(
   voices: SpeechSynthesisVoice[],
   language: string,
   gender: VoiceGender = "auto",
+  style?: string,
 ): SpeechSynthesisVoice | undefined {
   if (language === "English") {
-    return pickEnglishVoice(voices, gender);
+    return pickEnglishVoice(voices, gender, style);
   }
 
   const codes = LANG_CODES[language] ?? LANG_CODES["English"]!;
@@ -117,6 +142,10 @@ function pickVoice(
   for (const code of codes) {
     const pool = voices.filter(v => v.lang === code);
     if (pool.length === 0) continue;
+    if (style) {
+      const styleMatchVoice = pool.find(v => styleMatch(v, style) && (gender === "auto" || genderMatch(v, gender)));
+      if (styleMatchVoice) return styleMatchVoice;
+    }
     if (gender !== "auto") {
       const genMatch = pool.find(v => genderMatch(v, gender));
       if (genMatch) return genMatch;
@@ -129,6 +158,10 @@ function pickVoice(
     const prefix = code.split("-")[0]!;
     const pool = voices.filter(v => v.lang.startsWith(prefix));
     if (pool.length === 0) continue;
+    if (style) {
+      const styleMatchVoice = pool.find(v => styleMatch(v, style) && (gender === "auto" || genderMatch(v, gender)));
+      if (styleMatchVoice) return styleMatchVoice;
+    }
     if (gender !== "auto") {
       const genMatch = pool.find(v => genderMatch(v, gender));
       if (genMatch) return genMatch;
@@ -137,7 +170,7 @@ function pickVoice(
   }
 
   // Step 3 — fallback to Indian English (voice still carries Indian cadence)
-  return pickEnglishVoice(voices, gender);
+  return pickEnglishVoice(voices, gender, style);
 }
 
 async function getVoices(): Promise<SpeechSynthesisVoice[]> {
@@ -170,7 +203,7 @@ export function useSpeechSynthesis() {
       const utterance = new SpeechSynthesisUtterance(text);
       const genderOpt = options.voiceGender ?? "auto";
 
-      const voice = pickVoice(voices, language, genderOpt);
+      const voice = pickVoice(voices, language, genderOpt, options.voiceStyle);
       if (voice) {
         utterance.voice = voice;
         // Use the voice's native lang when it's a native language voice,

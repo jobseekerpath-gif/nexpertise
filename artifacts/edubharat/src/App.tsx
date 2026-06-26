@@ -16,18 +16,26 @@ const queryClient = new QueryClient();
 
 function Router() {
   return (
-    <Layout>
-      <Switch>
-        <Route path="/" component={Home} />
-        <Route path="/english-guru" component={EnglishGuru} />
-        <Route path="/interview-ace" component={InterviewAce} />
-        <Route path="/rozgar-samachar" component={RozgarSamachar} />
-        <Route path="/history" component={History} />
-        <Route path="/login" component={Login} />
-        <Route path="/progress" component={Progress} />
-        <Route component={NotFound} />
-      </Switch>
-    </Layout>
+    <Switch>
+      <Route path="/english-guru">
+        <Layout compact showFooter={false}>
+          <EnglishGuru />
+        </Layout>
+      </Route>
+      <Route>
+        <Layout>
+          <Switch>
+            <Route path="/" component={Home} />
+            <Route path="/interview-ace" component={InterviewAce} />
+            <Route path="/rozgar-samachar" component={RozgarSamachar} />
+            <Route path="/history" component={History} />
+            <Route path="/login" component={Login} />
+            <Route path="/progress" component={Progress} />
+            <Route component={NotFound} />
+          </Switch>
+        </Layout>
+      </Route>
+    </Switch>
   );
 }
 

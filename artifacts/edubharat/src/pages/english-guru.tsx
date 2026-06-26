@@ -60,6 +60,23 @@ const ROADMAP_STAGES = [
 ];
 
 const LEVEL_TO_STAGE: Record<string, string> = { Beginner: "A1", Intermediate: "B1", Advanced: "C1" };
+const VOICE_PRESETS = [
+  { value: "priya", label: "Female — Priya" },
+  { value: "neerja", label: "Female — Neerja" },
+  { value: "meera", label: "Female — Meera" },
+  { value: "ravi", label: "Male — Ravi" },
+  { value: "arjun", label: "Male — Arjun" },
+  { value: "rahul", label: "Male — Rahul" },
+] as const;
+
+const VOICE_META: Record<(typeof VOICE_PRESETS)[number]["value"], { gender: "male" | "female"; teacherName: string }> = {
+  priya: { gender: "female", teacherName: "Priya Ma'am" },
+  neerja: { gender: "female", teacherName: "Neerja Ma'am" },
+  meera: { gender: "female", teacherName: "Meera Ma'am" },
+  ravi: { gender: "male", teacherName: "Ravi Sir" },
+  arjun: { gender: "male", teacherName: "Arjun Sir" },
+  rahul: { gender: "male", teacherName: "Rahul Sir" },
+};
 
 function MicButton({ isListening, isSupported, onStart, onStop }: {
   isListening: boolean; isSupported: boolean; onStart: () => void; onStop: () => void;
@@ -149,6 +166,7 @@ export default function EnglishGuru() {
   const [liveChat, setLiveChat] = useState(false);
   const [convFlowState, setConvFlowState] = useState<"idle" | "user-speaking" | "ai-thinking" | "ai-speaking">("idle");
   const convInputRef = useRef<HTMLTextAreaElement>(null);
+  const convScrollRef = useRef<HTMLDivElement>(null);
 
   const [result, setResult] = useState("");
   const [savedMap, setSavedMap] = useState<Record<string, boolean>>({});
@@ -176,9 +194,18 @@ export default function EnglishGuru() {
     convHistoryRef.current = convHistory;
   }, [convHistory]);
 
-  const speak = useCallback((text: string, language = uiLang, onEnd?: () => void, voiceGender: VoiceGender = profile.voiceGender) => {
-    synth.speak(stripMarkdownForSpeech(text), language, onEnd, { voiceGender });
-  }, [synth, uiLang, profile.voiceGender]);
+  useEffect(() => {
+    const el = convScrollRef.current;
+    if (!el || mode !== "conversation") return;
+    el.scrollTop = 0;
+  }, [mode, convHistory, aiText, isStreaming]);
+
+  const speak = useCallback((text: string, language = uiLang, onEnd?: () => void) => {
+    synth.speak(stripMarkdownForSpeech(text), language, onEnd, {
+      voiceGender: profile.voiceGender,
+      voiceStyle: profile.voiceStyle,
+    });
+  }, [synth, uiLang, profile.voiceGender, profile.voiceStyle]);
 
   // Live chat: restart mic after AI finishes speaking
   useEffect(() => {
@@ -224,9 +251,10 @@ export default function EnglishGuru() {
   const displayed = isStreaming ? aiText : result;
 
   // Teacher persona — changes with voice gender selection
-  const teacherName   = profile.voiceGender === "male" ? "Rohit Sir" : "Priya Ma'am";
-  const teacherShort  = profile.voiceGender === "male" ? "Rohit"     : "Priya";
-  const teacherGender = profile.voiceGender === "male" ? "male"      : "female";
+  const teacherVoice = VOICE_META[profile.voiceStyle] ?? VOICE_META.priya;
+  const teacherName = teacherVoice.teacherName;
+  const teacherShort = teacherName.replace(/\s+(Ma'am|Sir)$/i, "");
+  const teacherGender = teacherVoice.gender;
 
   // Live chat phrase handler
   const handleConvPhrase = useCallback((phrase: string) => {
@@ -255,10 +283,10 @@ export default function EnglishGuru() {
       const spokenLanguage = detectSpokenLanguage(cleanResponse, uiLang);
       speak(cleanResponse, spokenLanguage, () => {
         if (liveChat) setConvFlowState("ai-speaking");
-      }, profile.voiceGender);
+      });
     }
     })();
-  }, [level, stream, resetAI, speak, track, isStreaming, speech, liveChat, profile.name, profile.voiceGender, uiLang]);
+  }, [level, stream, resetAI, speak, track, isStreaming, speech, liveChat, profile.name, profile.voiceGender, profile.voiceStyle, uiLang]);
 
   const toggleLiveChat = useCallback(() => {
     if (liveChat) {
@@ -347,11 +375,19 @@ export default function EnglishGuru() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Voice</label>
-                <Select value={profile.voiceGender} onValueChange={(value) => updateProfile({ voiceGender: value as "male" | "female" })}>
+                <Select value={profile.voiceStyle} onValueChange={(value) => {
+                  const nextStyle = value as typeof profile.voiceStyle;
+                  synth.stop();
+                  updateProfile({
+                    voiceStyle: nextStyle,
+                    voiceGender: VOICE_META[nextStyle].gender,
+                  });
+                }}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="female">Female — Priya / Neerja style</SelectItem>
-                    <SelectItem value="male">Male — Ravi / Arjun style</SelectItem>
+                    {VOICE_PRESETS.map(v => (
+                      <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -444,7 +480,7 @@ export default function EnglishGuru() {
 
           {/* ── LIVE CONVERSATION ── */}
           {mode === "conversation" && (
-            <Card className="flex min-h-[calc(100dvh-8.5rem)] flex-col overflow-hidden">
+            <Card className="flex h-full min-h-0 flex-col overflow-hidden">
               <CardContent className="pt-5 space-y-4 flex min-h-0 flex-1 flex-col">
                 {/* Live chat toggle */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-muted/50 rounded-xl">
@@ -475,7 +511,7 @@ export default function EnglishGuru() {
 
                 {/* Conversation history — newest message at the top */}
                 {(convHistory.length > 0 || isStreaming) && (
-                  <div className="flex flex-col gap-3 flex-1 min-h-[240px] overflow-y-auto pr-1 pt-1">
+                  <div ref={convScrollRef} className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto pr-1 pt-1">
                     {/* Streaming reply at the top (newest) */}
                     {isStreaming && !aiText && (
                       <div className="flex gap-2 justify-start">
