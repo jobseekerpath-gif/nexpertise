@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,6 +8,7 @@ import { INDIAN_LANGUAGES } from "@/lib/constants";
 import { useHistory } from "@/lib/use-history";
 import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
+import { useRozgarLive, type RozgarLiveItem } from "@/lib/use-rozgar-live";
 import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
 import {
   Newspaper,
@@ -96,6 +97,7 @@ function SectionCard({
   const { save } = useHistory();
   const { track } = useProgress();
   const { text, isStreaming, stream } = useGeminiStream();
+  const { data: liveData, isLoading: liveLoading, error: liveError, load: loadLive } = useRozgarLive();
   const [expanded, setExpanded] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -144,11 +146,24 @@ function SectionCard({
       motivation: `Write a powerful motivational message in ${profile.language} for a ${profile.status} in ${profile.location} pursuing ${profile.careerGoal}. Include a daily action tip and one practical next step.`,
     };
 
+    const live = await loadLive(section.id, profile);
+    const liveContext = live?.items?.length
+      ? [
+          `Live sources fetched at ${new Date(live.fetchedAt).toLocaleString("en-IN")}.`,
+          ...live.items.slice(0, 5).map((item, index) => {
+            const published = item.publishedAt ? ` | ${new Date(item.publishedAt).toLocaleDateString("en-IN")}` : "";
+            return `${index + 1}. ${item.title} — ${item.source}${published}`;
+          }),
+        ].join("\n")
+      : "No live items were available. Write a concise fallback summary only.";
+
+    const prompt = `${prompts[section.id]}\n\nGround the summary in these live items:\n${liveContext}\n\nIf an item looks like a news report rather than a direct vacancy, say so clearly. Do not invent employers, dates, or openings that are not present in the live items.`;
+
     await stream(
-      prompts[section.id],
+      prompt,
       `You are India's best career journalist writing the "${section.title}" section. Be specific, practical, and actionable. Today's date: ${new Date().toLocaleDateString("en-IN")}.`
     );
-  }, [loaded, isStreaming, profile, section, stream, track]);
+  }, [loadLive, loaded, isStreaming, profile, section, stream, track]);
 
   return (
     <Card className="overflow-hidden border shadow-sm rounded-2xl">
@@ -169,8 +184,40 @@ function SectionCard({
         )}
       </button>
 
-      {expanded && (text || isStreaming) && (
+      {expanded && (text || isStreaming || liveLoading || Boolean(liveData?.items?.length) || Boolean(liveError)) && (
         <CardContent className="px-5 pb-5 pt-0 border-t bg-muted/20">
+          {(liveLoading || liveData?.items?.length || liveError) && (
+            <div className="mb-4 rounded-2xl border bg-background p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <p className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Live source</p>
+                {liveLoading && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+              </div>
+              {liveError && <p className="text-xs text-muted-foreground mb-3">{liveError}</p>}
+              <div className="space-y-3">
+                {(liveData?.items ?? []).slice(0, 4).map((item: RozgarLiveItem) => (
+                  <a
+                    key={`${item.title}-${item.link}`}
+                    href={item.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block rounded-xl border bg-muted/30 p-3 hover:bg-muted/60 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-secondary line-clamp-2">{item.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {item.source}
+                          {item.publishedAt ? ` • ${new Date(item.publishedAt).toLocaleDateString("en-IN")}` : ""}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="rounded-full shrink-0">Open</Badge>
+                    </div>
+                    {item.summary && <p className="mt-2 text-xs text-secondary line-clamp-2">{item.summary}</p>}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex justify-end gap-2 py-2 flex-wrap">
             <Button variant="ghost" size="sm" className="text-xs"
               onClick={() => synth.speak(text, profile.language)}>
@@ -198,6 +245,12 @@ export default function RozgarSamachar() {
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
   const [showProfile, setShowProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+  const {
+    data: livePulse,
+    isLoading: livePulseLoading,
+    error: livePulseError,
+    load: loadLivePulse,
+  } = useRozgarLive();
 
   const today = new Date().toLocaleDateString("en-IN", {
     weekday: "long",
@@ -207,6 +260,10 @@ export default function RozgarSamachar() {
   });
 
   const update = (key: keyof Profile) => (val: string) => setProfile(p => ({ ...p, [key]: val }));
+
+  useEffect(() => {
+    void loadLivePulse("top_jobs", profile);
+  }, [loadLivePulse]);
 
   return (
     <div className="h-full min-h-0 overflow-hidden container mx-auto px-4 py-4 max-w-[1400px]">
@@ -341,6 +398,7 @@ export default function RozgarSamachar() {
                       onClick={() => {
                         setProfileSaved(true);
                         setShowProfile(false);
+                        void loadLivePulse("top_jobs", profile);
                       }}
                     >
                       Save Profile
@@ -411,6 +469,35 @@ export default function RozgarSamachar() {
                 <span className="font-bold text-primary">Namaskar, {profile.name || "friend"}!</span>{" "}
                 Your personalized career newspaper is ready. Click any section below for an India-focused market snapshot tailored to your profile.
               </p>
+            </div>
+
+            <div className="px-5 py-4 border-b bg-background">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-bold">Live hiring pulse</p>
+                  <p className="text-sm text-secondary">Fresh live items pulled from Google News and official career pages.</p>
+                </div>
+                {livePulseLoading && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+              </div>
+              {livePulseError && <p className="mt-2 text-xs text-muted-foreground">{livePulseError}</p>}
+              {!livePulseLoading && livePulse?.items?.length ? (
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  {livePulse.items.slice(0, 3).map((item) => (
+                    <a
+                      key={`${item.title}-${item.link}`}
+                      href={item.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-xl border bg-muted/30 p-3 hover:bg-muted/60 transition-colors"
+                    >
+                      <p className="text-sm font-semibold text-secondary line-clamp-2">{item.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{item.source}</p>
+                    </a>
+                  ))}
+                </div>
+              ) : !livePulseLoading && !livePulseError ? (
+                <p className="mt-2 text-xs text-muted-foreground">No live items yet — try saving your profile or opening a section.</p>
+              ) : null}
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">

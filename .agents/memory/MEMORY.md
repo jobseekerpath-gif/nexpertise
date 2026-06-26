@@ -3,5 +3,5 @@
 - [Claude live-chat budgeting](claude-live-chat-budgeting.md) — live tutoring should use compact history and low token caps; minimize cost, never promise a fixed per-response price.
 - [English Guru compact layout](english-guru-compact-layout.md) — live conversation uses a footer-free full-viewport shell; only the chat panel scrolls.
 - [Interview Ace auto-listen](interview-auto-listen.md) — mock interviews should start listening automatically after each question and feel conversational, not scripted.
-- [Rozgar profile feed](rozgar-profile-feed.md) — Rozgar should stay candidate-driven, with profile basics shaping every section and a commercial career-news tone.
+- [Rozgar profile feed](rozgar-profile-feed.md) — Rozgar should stay candidate-driven, with profile basics shaping every section and a live hiring pulse before AI summaries.
 - [Voice switching should stop playback](voice-switch-stop.md) — changing tutor voice must cancel active speech immediately so male/female voices never mix.
