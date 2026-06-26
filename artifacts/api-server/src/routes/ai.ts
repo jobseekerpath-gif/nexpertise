@@ -1,16 +1,24 @@
 import { Router, type IRouter } from "express";
-import { GoogleGenAI, type GoogleGenAIError } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { AiChatBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
 // Models in fallback order — 2.5-flash first (best), then 1.5-flash (1500 RPD free tier)
-const MODEL_CHAIN = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"] as const;
+const GEMINI_MODEL_CHAIN = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"] as const;
+const ANTHROPIC_MODEL_CHAIN = ["claude-sonnet-4-6", "claude-sonnet-4-5", "claude-haiku-4-5"] as const;
 
 function getAI() {
   const apiKey = process.env["GEMINI_API_KEY"];
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
   return new GoogleGenAI({ apiKey });
+}
+
+function getAnthropic() {
+  const apiKey = process.env["ANTHROPIC_API_KEY"];
+  if (!apiKey) return null;
+  return new Anthropic({ apiKey });
 }
 
 function buildContents(prompt: string, system?: string | null) {
@@ -25,7 +33,12 @@ function buildContents(prompt: string, system?: string | null) {
 
 function isRateLimit(err: unknown): boolean {
   const e = err as { status?: number };
-  return e?.status === 429 || e?.status === 503;
+  return e?.status === 429 || e?.status === 503 || e?.status === 529;
+}
+
+function isAuthError(err: unknown): boolean {
+  const e = err as { status?: number };
+  return e?.status === 401 || e?.status === 403;
 }
 
 function retryDelayMs(err: unknown): number {
@@ -48,23 +61,20 @@ function userFriendlyError(err: unknown): string {
   return "AI request failed — please try again.";
 }
 
-router.post("/ai/stream", async (req, res) => {
-  const parseResult = AiChatBody.safeParse(req.body);
-  if (!parseResult.success) {
-    res.status(400).json({ error: "Invalid request body" });
-    return;
-  }
-  const { prompt, system } = parseResult.data;
-
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-
+async function streamGemini(req: Parameters<typeof router.post>[1] extends (
+  ...args: infer P
+) => unknown
+  ? P[0]
+  : never, res: Parameters<typeof router.post>[1] extends (
+  ...args: infer P
+) => unknown
+  ? P[1]
+  : never, prompt: string, system?: string | null) {
   const ai = getAI();
   const contents = buildContents(prompt, system);
 
-  for (let i = 0; i < MODEL_CHAIN.length; i++) {
-    const model = MODEL_CHAIN[i]!;
+  for (let i = 0; i < GEMINI_MODEL_CHAIN.length; i++) {
+    const model = GEMINI_MODEL_CHAIN[i]!;
     try {
       const stream = await ai.models.generateContentStream({
         model,
@@ -79,18 +89,90 @@ router.post("/ai/stream", async (req, res) => {
       res.end();
       return;
     } catch (err) {
-      const isLast = i === MODEL_CHAIN.length - 1;
+      const isLast = i === GEMINI_MODEL_CHAIN.length - 1;
       if (isRateLimit(err) && !isLast) {
         req.log.warn({ model, err }, "Rate limited — trying fallback model");
         const delay = retryDelayMs(err);
-        if (delay < 5000) await new Promise(r => setTimeout(r, delay));
+        if (delay < 5000) await new Promise((r) => setTimeout(r, delay));
         continue;
       }
-      req.log.error({ model, err }, "Gemini streaming error");
-      res.write(`data: ${JSON.stringify({ error: userFriendlyError(err) })}\n\n`);
+      throw err;
+    }
+  }
+}
+
+async function streamAnthropic(req: Parameters<typeof router.post>[1] extends (
+  ...args: infer P
+) => unknown
+  ? P[0]
+  : never, res: Parameters<typeof router.post>[1] extends (
+  ...args: infer P
+) => unknown
+  ? P[1]
+  : never, prompt: string, system?: string | null) {
+  const anthropic = getAnthropic();
+  if (!anthropic) {
+    throw new Error("ANTHROPIC_API_KEY is not configured");
+  }
+
+  const messages: Array<{ role: "user"; content: string }> = [{ role: "user", content: prompt }];
+  const systemPrompt = system ?? undefined;
+
+  for (let i = 0; i < ANTHROPIC_MODEL_CHAIN.length; i++) {
+    const model = ANTHROPIC_MODEL_CHAIN[i]!;
+    try {
+      const stream = anthropic.messages.stream({
+        model,
+        max_tokens: 8192,
+        messages,
+        ...(systemPrompt ? { system: systemPrompt } : {}),
+      });
+
+      for await (const event of stream) {
+        if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+          res.write(`data: ${JSON.stringify({ content: event.delta.text })}\n\n`);
+        }
+      }
+
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
       res.end();
       return;
+    } catch (err) {
+      const isLast = i === ANTHROPIC_MODEL_CHAIN.length - 1;
+      if ((isRateLimit(err) || isAuthError(err)) && !isLast) {
+        req.log.warn({ model, err }, "Claude issue — trying fallback model");
+        continue;
+      }
+      throw err;
     }
+  }
+}
+
+router.post("/ai/stream", async (req, res) => {
+  const parseResult = AiChatBody.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: "Invalid request body" });
+    return;
+  }
+  const { prompt, system } = parseResult.data;
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const hasClaudeKey = Boolean(process.env["ANTHROPIC_API_KEY"]);
+
+  try {
+    if (hasClaudeKey) {
+      await streamAnthropic(req, res, prompt, system);
+      return;
+    }
+
+    await streamGemini(req, res, prompt, system);
+  } catch (err) {
+    req.log.error({ err }, "AI streaming error");
+    res.write(`data: ${JSON.stringify({ error: userFriendlyError(err) })}\n\n`);
+    res.end();
   }
 });
 
@@ -101,29 +183,62 @@ router.post("/ai/chat", async (req, res) => {
     return;
   }
   const { prompt, maxTokens, system } = parseResult.data;
-  const ai = getAI();
-  const contents = buildContents(prompt, system);
 
-  for (let i = 0; i < MODEL_CHAIN.length; i++) {
-    const model = MODEL_CHAIN[i]!;
-    try {
-      const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: { maxOutputTokens: maxTokens ?? 8192 },
-      });
-      res.json({ text: response.text ?? "" });
-      return;
-    } catch (err) {
-      const isLast = i === MODEL_CHAIN.length - 1;
-      if (isRateLimit(err) && !isLast) {
-        req.log.warn({ model, err }, "Rate limited — trying fallback model");
-        continue;
+  const hasClaudeKey = Boolean(process.env["ANTHROPIC_API_KEY"]);
+
+  try {
+    if (hasClaudeKey) {
+      const anthropic = getAnthropic();
+      if (!anthropic) throw new Error("ANTHROPIC_API_KEY is not configured");
+
+      for (let i = 0; i < ANTHROPIC_MODEL_CHAIN.length; i++) {
+        const model = ANTHROPIC_MODEL_CHAIN[i]!;
+        try {
+          const response = await anthropic.messages.create({
+            model,
+            max_tokens: maxTokens ?? 8192,
+            messages: [{ role: "user", content: prompt }],
+            ...(system ? { system } : {}),
+          });
+          const block = response.content.find((part) => part.type === "text");
+          res.json({ text: block?.text ?? "" });
+          return;
+        } catch (err) {
+          const isLast = i === ANTHROPIC_MODEL_CHAIN.length - 1;
+          if ((isRateLimit(err) || isAuthError(err)) && !isLast) {
+            req.log.warn({ model, err }, "Claude issue — trying fallback model");
+            continue;
+          }
+          throw err;
+        }
       }
-      req.log.error({ model, err }, "Gemini API error");
-      res.status(503).json({ error: userFriendlyError(err) });
-      return;
+    } else {
+      const ai = getAI();
+      const contents = buildContents(prompt, system);
+
+      for (let i = 0; i < GEMINI_MODEL_CHAIN.length; i++) {
+        const model = GEMINI_MODEL_CHAIN[i]!;
+        try {
+          const response = await ai.models.generateContent({
+            model,
+            contents,
+            config: { maxOutputTokens: maxTokens ?? 8192 },
+          });
+          res.json({ text: response.text ?? "" });
+          return;
+        } catch (err) {
+          const isLast = i === GEMINI_MODEL_CHAIN.length - 1;
+          if (isRateLimit(err) && !isLast) {
+            req.log.warn({ model, err }, "Rate limited — trying fallback model");
+            continue;
+          }
+          throw err;
+        }
+      }
     }
+  } catch (err) {
+    req.log.error({ err }, "AI request error");
+    res.status(503).json({ error: userFriendlyError(err) });
   }
 });
 
