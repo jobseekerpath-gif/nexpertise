@@ -72,23 +72,40 @@ export default function InterviewAce() {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answer, setAnswer] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [autoListenEnabled, setAutoListenEnabled] = useState(true);
   const [autoAdvanceCount, setAutoAdvanceCount] = useState<number | null>(null);
   const autoAdvanceRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoSubmitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const answerRef = useRef("");
 
   const typeMeta = INTERVIEW_TYPES.find(t => t.value === type)!;
   const currentQ = questions[currentIdx];
   const avgScore = questions.filter(q => q.score !== undefined).reduce((a, b, _, arr) =>
     a + (b.score ?? 0) / arr.length, 0);
 
+  useEffect(() => {
+    answerRef.current = answer;
+  }, [answer]);
+
+  const clearAutoSubmitTimer = useCallback(() => {
+    if (autoSubmitRef.current) clearTimeout(autoSubmitRef.current);
+    autoSubmitRef.current = null;
+  }, []);
+
   // Stop recording when phase changes or feedback arrives
   useEffect(() => {
-    if (currentQ?.feedback || phase !== "interview") {
+    if (currentQ?.feedback || phase !== "interview" || isStreaming || synth.isSpeaking) {
+      clearAutoSubmitTimer();
       if (isRecording) {
         setIsRecording(false);
         speech.stop();
       }
     }
-  }, [currentQ?.feedback, phase]);
+  }, [currentQ?.feedback, phase, isStreaming, synth.isSpeaking, isRecording, speech, clearAutoSubmitTimer]);
+
+  useEffect(() => {
+    return () => clearAutoSubmitTimer();
+  }, [clearAutoSubmitTimer]);
 
   // Auto-advance countdown after feedback
   useEffect(() => {
@@ -119,53 +136,75 @@ export default function InterviewAce() {
     resetStream();
     const label = typeMeta.label;
     const full = await stream(
-      `8 interview questions for ${label} (${experience}). Q1-2: warm-up (background, motivation). Q3-6: role-specific competency. Q7-8: behavioral (STAR format). Numbered list only, no extra text.`,
-      `Expert ${label} interviewer in India. Progressive difficulty, India-relevant context.`
+      `Generate 8 natural interview questions for a ${label} role in India for a ${experience} candidate.
+      Rules:
+      - sound like a real HR interviewer, not a robot
+      - ask one question per line
+      - mix opening, competency, scenario, and behavioral prompts
+      - vary the tone slightly across the list
+      - no numbering, no intro, no closing text
+      - keep them conversational and specific
+      - if appropriate, include a light follow-up cue inside the question itself
+      `,
+      `You are a warm, sharp, realistic ${label} interviewer in India. Keep the flow natural, polite, and human. Avoid fixed-script language.`
     );
-    const lines = full.split("\n").filter(l => /^\d/.test(l.trim()));
+    const lines = full.split("\n").map(l => l.trim()).filter(Boolean);
     const parsed: QA[] = lines.slice(0, 8).map(l => ({ question: l.replace(/^\d+[.)]\s*/, "").trim() }));
     if (parsed.length === 0) return;
+    clearAutoSubmitTimer();
     setQuestions(parsed);
     setCurrentIdx(0);
     setAnswer("");
+    setIsRecording(false);
+    setAutoListenEnabled(true);
     setPhase("interview");
-    setTimeout(() => synth.speak(parsed[0]!.question, "English"), 400);
-  }, [type, experience, stream, resetStream, synth, typeMeta]);
+    setTimeout(() => synth.speak(parsed[0]!.question, "English"), 300);
+  }, [type, experience, stream, resetStream, synth, typeMeta, clearAutoSubmitTimer]);
 
   const toggleRecording = useCallback(() => {
-    if (isRecording) {
-      // Stop → auto submit if there's an answer
+    if (autoListenEnabled) {
+      setAutoListenEnabled(false);
+      clearAutoSubmitTimer();
       setIsRecording(false);
       speech.stop();
-      if (answer.trim()) {
-        void submitCurrentAnswer(answer.trim());
-      }
-    } else {
-      // Start continuous recording
-      synth.stop();
-      setIsRecording(true);
-      setAnswer("");
-      speech.startContinuous(text => {
-        setAnswer(prev => (prev + " " + text).trim());
-      });
+      return;
     }
-  }, [isRecording, answer, speech, synth]);
+
+    setAutoListenEnabled(true);
+  }, [autoListenEnabled, clearAutoSubmitTimer, speech]);
 
   const submitCurrentAnswer = useCallback(async (userAnswer: string) => {
     if (!userAnswer || !currentQ) return;
+    clearAutoSubmitTimer();
+    setIsRecording(false);
+    speech.stop();
     setAnswer("");
     const label = typeMeta.label;
     resetStream();
     const feedback = await stream(
-      `Q: "${currentQ.question}"\nAnswer: "${userAnswer}"\nRole: ${label}, ${experience}.\nGive: Score X/10, 2 strengths, 2 improvements, ideal answer snippet (2-3 lines). Be conversational, not robotic.`,
-      `Fair ${label} interviewer. Practical, encouraging feedback for Indian job seekers.`
+      `Q: "${currentQ.question}"
+Answer: "${userAnswer}"
+Role: ${label}, ${experience}.
+
+Return exactly these sections:
+Reaction: a brief natural interviewer reaction in one sentence.
+Score: X/10
+Strengths: 2 short bullets
+Improvements: 2 short bullets
+Ideal Answer: 2-3 line model answer
+Follow-up: one realistic next question
+
+Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic phrasing and generic praise.`
+      ,
+      `You are a seasoned ${label} interviewer giving natural, practical feedback to an Indian candidate. Sound like a real human interviewer.`
     );
     const scoreMatch = feedback.match(/score[:\s]+(\d+)/i) ?? feedback.match(/(\d+)\s*\/\s*10/i);
     const score = scoreMatch ? Math.min(10, Math.max(1, parseInt(scoreMatch[1]!))) : 6;
     setQuestions(prev => prev.map((q, i) => i === currentIdx ? { ...q, answer: userAnswer, feedback, score } : q));
     track("Interview Ace", `${label} — Q${currentIdx + 1}`, score * 10);
-    void synth.speak(`Score: ${score} out of 10. ${feedback.slice(0, 150)}`, "English");
-  }, [currentQ, currentIdx, type, experience, stream, resetStream, synth, track, typeMeta]);
+    const opening = feedback.split("\n")[0]?.replace(/^Reaction:\s*/i, "") ?? feedback.slice(0, 140);
+    void synth.speak(opening, "English");
+  }, [currentQ, currentIdx, type, experience, stream, resetStream, synth, track, typeMeta, clearAutoSubmitTimer, speech]);
 
   const submitAnswer = useCallback(() => {
     if (!answer.trim()) return;
@@ -179,16 +218,65 @@ export default function InterviewAce() {
     if (nextIdx >= questions.length) { setPhase("report"); return; }
     setCurrentIdx(nextIdx);
     setAnswer("");
+    setIsRecording(false);
+    clearAutoSubmitTimer();
     resetStream();
     setTimeout(() => synth.speak(questions[nextIdx]!.question, "English"), 300);
-  }, [currentIdx, questions, resetStream, synth]);
+  }, [currentIdx, questions, resetStream, synth, clearAutoSubmitTimer]);
 
   const endEarly = useCallback(() => {
     if (autoAdvanceRef.current) clearInterval(autoAdvanceRef.current);
+    clearAutoSubmitTimer();
     speech.stop();
     setIsRecording(false);
+    setAutoListenEnabled(false);
     setPhase("report");
-  }, [speech]);
+  }, [speech, clearAutoSubmitTimer]);
+
+  useEffect(() => {
+    if (
+      phase !== "interview" ||
+      !autoListenEnabled ||
+      !speech.isSupported ||
+      !currentQ ||
+      currentQ.feedback ||
+      isStreaming ||
+      synth.isSpeaking ||
+      isRecording
+    ) {
+      return;
+    }
+
+    setIsRecording(true);
+    speech.startContinuous(text => {
+      const chunk = text.trim();
+      if (!chunk) return;
+      setAnswer(prev => {
+        const next = `${prev ? `${prev} ` : ""}${chunk}`.trim();
+        answerRef.current = next;
+        return next;
+      });
+      clearAutoSubmitTimer();
+      autoSubmitRef.current = setTimeout(() => {
+        const latest = answerRef.current.trim();
+        if (latest) void submitCurrentAnswer(latest);
+      }, 1500);
+    });
+
+    return () => {
+      clearAutoSubmitTimer();
+    };
+  }, [
+    phase,
+    currentQ,
+    autoListenEnabled,
+    speech,
+    isStreaming,
+    synth.isSpeaking,
+    isRecording,
+    submitCurrentAnswer,
+    clearAutoSubmitTimer,
+  ]);
 
   const downloadReport = useCallback(() => {
     const label = typeMeta.label;
@@ -215,7 +303,7 @@ export default function InterviewAce() {
 
   if (phase === "setup") {
     return (
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+      <div className="h-full min-h-0 overflow-auto container mx-auto px-4 py-8 max-w-4xl">
         <div className="text-center mb-10">
           <div className="flex justify-center mb-4">
             <AnimatedAvatar name="Raj Sir" role="Interview Coach" isSpeaking={false} gender="male" size="lg" />
@@ -262,7 +350,7 @@ export default function InterviewAce() {
   if (phase === "report") {
     const answered = questions.filter(q => q.feedback);
     return (
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+      <div className="h-full min-h-0 overflow-auto container mx-auto px-4 py-8 max-w-4xl">
         <div className="text-center mb-8">
           <AnimatedAvatar name="Raj Sir" role="Interview Coach" isSpeaking={false} gender="male" size="md" />
           <h1 className="text-3xl font-display font-bold text-secondary mt-4 mb-2">Interview Complete!</h1>
@@ -301,18 +389,18 @@ export default function InterviewAce() {
 
   // Interview phase
   return (
-    <div className="container mx-auto px-4 py-6 max-w-5xl">
-      <div className="grid lg:grid-cols-[200px_1fr] gap-6">
+    <div className="h-full min-h-0 overflow-hidden container mx-auto px-4 py-4 max-w-[1400px]">
+      <div className="grid h-full min-h-0 lg:grid-cols-[240px_1fr] gap-5">
         {/* Desktop sidebar avatar */}
-        <aside className="hidden lg:flex flex-col items-center gap-4">
+        <aside className="hidden lg:flex flex-col items-center gap-4 min-h-0 overflow-hidden">
           <AnimatedAvatar name="Raj Sir" role={`${typeMeta.label} Interviewer`} isSpeaking={synth.isSpeaking} isThinking={isStreaming} gender="male" size="lg" />
-          <div className="w-full space-y-2">
+          <div className="w-full space-y-2 min-h-0 overflow-hidden flex flex-col">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>Progress</span>
               <span className="font-bold text-secondary">{currentIdx + 1}/{questions.length}</span>
             </div>
             <Progress value={((currentIdx + 1) / questions.length) * 100} className="h-2" />
-            <div className="space-y-1 mt-2">
+            <div className="space-y-1 mt-2 overflow-y-auto pr-1">
               {questions.map((q, i) => (
                 <div key={i} className={`flex items-center justify-between text-xs px-2 py-1.5 rounded-lg ${i === currentIdx ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"}`}>
                   <span>Q{i + 1}</span>
@@ -330,7 +418,7 @@ export default function InterviewAce() {
         </aside>
 
         {/* Main interview area */}
-        <main className="min-w-0">
+        <main className="min-w-0 min-h-0 flex flex-col">
           {/* Mobile avatar bar */}
           <AvatarBar name="Raj Sir" role={`${typeMeta.icon} ${typeMeta.label}`} isSpeaking={synth.isSpeaking} isThinking={isStreaming} className="lg:hidden mb-4" />
 
@@ -345,8 +433,8 @@ export default function InterviewAce() {
             )}
           </div>
 
-          <Card className="shadow-lg border-none">
-            <CardContent className="p-5 md:p-7">
+          <Card className="shadow-lg border-none flex-1 min-h-0 overflow-hidden">
+            <CardContent className="p-5 md:p-7 h-full min-h-0 flex flex-col">
               {/* Question */}
               <div className="flex items-start gap-3 mb-6">
                 <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 mt-0.5 text-muted-foreground hover:text-primary"
@@ -362,45 +450,38 @@ export default function InterviewAce() {
               </div>
 
               {!currentQ?.feedback ? (
-                <div className="space-y-4">
+                <div className="space-y-4 flex-1 min-h-0 flex flex-col">
                   <Textarea
-                    placeholder={isRecording ? "Listening... speak your answer" : "Tap the mic button to start speaking, or type your answer here"}
-                    className={`min-h-[160px] text-base transition-colors ${isRecording ? "bg-red-50/50 border-red-300 focus-visible:ring-red-300" : "bg-muted/40 border-muted-foreground/20"}`}
+                    placeholder="Speak naturally — the mic starts automatically after each question. You can still type here."
+                    className={`min-h-[180px] text-base transition-colors flex-1 ${isRecording ? "bg-red-50/50 border-red-300 focus-visible:ring-red-300" : "bg-muted/40 border-muted-foreground/20"}`}
                     value={isRecording && speech.interimTranscript ? answer + " " + speech.interimTranscript : answer}
                     onChange={e => !isRecording && setAnswer(e.target.value)}
                     data-testid="input-answer"
                   />
 
-                  {/* Voice recording button — primary action */}
-                  <div className="space-y-3">
-                    {speech.isSupported && (
-                      <Button
-                        onClick={toggleRecording}
-                        variant={isRecording ? "destructive" : "outline"}
-                        className={`w-full h-14 font-bold text-base gap-3 transition-all ${isRecording ? "animate-pulse shadow-lg shadow-red-200" : "border-2 border-dashed hover:border-primary hover:bg-primary/5"}`}
-                        disabled={isStreaming}
-                      >
-                        {isRecording ? (
-                          <><StopCircle className="w-5 h-5" />Stop Recording & Submit Answer</>
-                        ) : (
-                          <><Mic className="w-5 h-5" />Tap to Record Your Answer</>
-                        )}
-                      </Button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${isRecording ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+                      {isRecording ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5" />}
+                      {speech.isSupported ? (
+                        isRecording ? "Mic on — speak freely" : "Mic paused"
+                      ) : "Microphone not supported in this browser"}
+                    </div>
+                    {speech.interimTranscript && (
+                      <span className="text-xs text-muted-foreground italic flex-1 min-w-[220px] truncate">
+                        {speech.interimTranscript}
+                      </span>
                     )}
-
-                    {/* Text submit button */}
-                    {!isRecording && (
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-px bg-border" />
-                        <span className="text-xs text-muted-foreground">or</span>
-                        <div className="flex-1 h-px bg-border" />
-                      </div>
-                    )}
-                    {!isRecording && (
-                      <Button className="w-full font-bold" disabled={!answer.trim() || isStreaming} onClick={submitAnswer}>
-                        {isStreaming ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analysing...</> : "Submit Written Answer"}
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={toggleRecording}
+                      disabled={!speech.isSupported}
+                    >
+                      {autoListenEnabled ? "Pause mic" : "Resume mic"}
+                    </Button>
+                    <Button className="font-bold" disabled={!answer.trim() || isStreaming} onClick={submitAnswer}>
+                      {isStreaming ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analysing...</> : "Submit Written Answer"}
+                    </Button>
                   </div>
 
                   {isStreaming && streamText && (

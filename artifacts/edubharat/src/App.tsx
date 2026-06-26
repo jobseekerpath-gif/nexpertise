@@ -22,12 +22,20 @@ function Router() {
           <EnglishGuru />
         </Layout>
       </Route>
+      <Route path="/interview-ace">
+        <Layout compact showFooter={false}>
+          <InterviewAce />
+        </Layout>
+      </Route>
+      <Route path="/rozgar-samachar">
+        <Layout compact showFooter={false}>
+          <RozgarSamachar />
+        </Layout>
+      </Route>
       <Route>
         <Layout>
           <Switch>
             <Route path="/" component={Home} />
-            <Route path="/interview-ace" component={InterviewAce} />
-            <Route path="/rozgar-samachar" component={RozgarSamachar} />
             <Route path="/history" component={History} />
             <Route path="/login" component={Login} />
             <Route path="/progress" component={Progress} />
