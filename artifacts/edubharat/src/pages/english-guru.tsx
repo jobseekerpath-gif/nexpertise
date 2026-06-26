@@ -223,6 +223,11 @@ export default function EnglishGuru() {
   const Icon = currentMode.icon;
   const displayed = isStreaming ? aiText : result;
 
+  // Teacher persona — changes with voice gender selection
+  const teacherName   = profile.voiceGender === "male" ? "Rohit Sir" : "Priya Ma'am";
+  const teacherShort  = profile.voiceGender === "male" ? "Rohit"     : "Priya";
+  const teacherGender = profile.voiceGender === "male" ? "male"      : "female";
+
   // Live chat phrase handler
   const handleConvPhrase = useCallback((phrase: string) => {
     if (!phrase.trim() || isStreaming) return;
@@ -234,12 +239,12 @@ export default function EnglishGuru() {
     setConvHistory(h => [...h, { role: "user", text: userMsg }]);
 
     const recentHistory = [...convHistoryRef.current.slice(-4), { role: "user" as const, text: userMsg }]
-      .map(m => `${m.role === "user" ? "Student" : "Priya"}: ${m.text}`).join("\n");
+      .map(m => `${m.role === "user" ? "Student" : teacherShort}: ${m.text}`).join("\n");
 
     resetAI();
     const response = await stream(
-      `${recentHistory}\nPriya:`,
-      `You are Priya, a warm Indian English tutor for ${profile.name || "the student"}. Reply in the same language the student used. If English, respond with gentle corrections. If a regional language is used, answer naturally in that language and explain the English meaning simply. Never use markdown, bullets, numbering, or symbols. Keep replies to 1-2 short lines.`,
+      `${recentHistory}\n${teacherShort}:`,
+      `You are ${teacherShort}, a warm Indian English tutor for ${profile.name || "the student"}. Reply in the same language the student used. If English, respond with gentle corrections. If a regional language is used, answer naturally in that language and explain the English meaning simply. Never use markdown, bullets, numbering, or symbols. Keep replies to 1-2 short lines.`,
       undefined,
       { maxTokens: 120 }
     );
@@ -285,8 +290,8 @@ export default function EnglishGuru() {
         <aside className="order-2 lg:order-1 space-y-4 lg:sticky lg:top-20 self-start">
           {/* Avatar — compact strip on mobile, card on desktop */}
           <div className="hidden lg:flex flex-col items-center py-6 px-4 bg-card rounded-2xl border shadow-sm">
-            <AnimatedAvatar name="Priya Ma'am" role="English Teacher"
-              isSpeaking={synth.isSpeaking} isThinking={isStreaming} gender="female" size="lg" />
+            <AnimatedAvatar name={teacherName} role="English Teacher"
+              isSpeaking={synth.isSpeaking} isThinking={isStreaming} gender={teacherGender} size="lg" />
             <Badge variant="secondary" className="mt-3 text-xs">{level} Level</Badge>
             {liveChat && (
               <div className="mt-2 flex items-center gap-1.5 text-xs text-green-600 font-semibold animate-pulse">
@@ -296,9 +301,9 @@ export default function EnglishGuru() {
           </div>
           {/* Mobile avatar bar */}
           <div className="flex lg:hidden items-center gap-3 p-3 bg-card rounded-xl border shadow-sm">
-            <AnimatedAvatar name="Priya Ma'am" role="English Teacher" isSpeaking={synth.isSpeaking} isThinking={isStreaming} gender="female" size="sm" />
+            <AnimatedAvatar name={teacherName} role="English Teacher" isSpeaking={synth.isSpeaking} isThinking={isStreaming} gender={teacherGender} size="sm" />
             <div>
-              <p className="font-bold text-sm">Priya Ma'am</p>
+              <p className="font-bold text-sm">{teacherName}</p>
               <Badge variant="secondary" className="text-xs mt-0.5">{level}</Badge>
               {liveChat && <div className="text-xs text-green-600 font-semibold mt-0.5 animate-pulse">● Live Chat</div>}
             </div>
@@ -462,27 +467,16 @@ export default function EnglishGuru() {
                   <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${convFlowState === "user-speaking" ? "bg-green-50 text-green-700 border border-green-200" : convFlowState === "ai-thinking" || convFlowState === "ai-speaking" ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-muted text-muted-foreground"}`}>
                     <span className={`w-2.5 h-2.5 rounded-full ${convFlowState === "user-speaking" ? "bg-green-500 animate-pulse" : convFlowState === "ai-thinking" ? "bg-yellow-500 animate-pulse" : convFlowState === "ai-speaking" ? "bg-blue-500 animate-pulse" : "bg-muted-foreground"}`} />
                     {convFlowState === "user-speaking" && (speech.interimTranscript ? `"${speech.interimTranscript}"` : "Listening for you...")}
-                    {convFlowState === "ai-thinking" && "Priya Ma'am is thinking..."}
-                    {convFlowState === "ai-speaking" && "Priya Ma'am is speaking... (mic restarts when done)"}
+                    {convFlowState === "ai-thinking" && `${teacherName} is thinking...`}
+                    {convFlowState === "ai-speaking" && `${teacherName} is speaking... (mic restarts when done)`}
                     {convFlowState === "idle" && "Live chat off"}
                   </div>
                 )}
 
-                {/* Conversation history */}
-                {convHistory.length > 0 && (
-                  <div className="space-y-3 flex-1 min-h-[240px] overflow-y-auto pr-1 pb-1">
-                    {convHistory.map((msg, i) => (
-                      <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-secondary"}`}>
-                          {msg.text}
-                        </div>
-                      </div>
-                    ))}
-                    {isStreaming && aiText && (
-                      <div className="flex gap-2 justify-start">
-                        <div className="max-w-[90%] rounded-2xl px-4 py-2.5 text-sm bg-muted text-secondary whitespace-pre-wrap break-words">{stripMarkdownForSpeech(aiText)}</div>
-                      </div>
-                    )}
+                {/* Conversation history — newest message at the top */}
+                {(convHistory.length > 0 || isStreaming) && (
+                  <div className="flex flex-col gap-3 flex-1 min-h-[240px] overflow-y-auto pr-1 pt-1">
+                    {/* Streaming reply at the top (newest) */}
                     {isStreaming && !aiText && (
                       <div className="flex gap-2 justify-start">
                         <div className="px-4 py-2.5 bg-muted rounded-2xl">
@@ -490,6 +484,19 @@ export default function EnglishGuru() {
                         </div>
                       </div>
                     )}
+                    {isStreaming && aiText && (
+                      <div className="flex gap-2 justify-start">
+                        <div className="max-w-[90%] rounded-2xl px-4 py-2.5 text-sm bg-muted text-secondary whitespace-pre-wrap break-words">{stripMarkdownForSpeech(aiText)}</div>
+                      </div>
+                    )}
+                    {/* Reversed history — newest bubble just below streaming, oldest at bottom */}
+                    {[...convHistory].reverse().map((msg, i) => (
+                      <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-secondary"}`}>
+                          {msg.text}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
 
