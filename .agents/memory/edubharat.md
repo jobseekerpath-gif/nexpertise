@@ -37,3 +37,11 @@ description: India's AI Career Ecosystem — full stack platform with 3 products
 - Gemini over Anthropic: user provided their own GEMINI_API_KEY; Gemini 2.5 Flash is cost-effective and fast.
 - SSE streaming over polling: real-time text appearance is critical for voice sync with avatar.
 - localStorage for progress: works without auth, no server round-trip needed.
+
+## Gotchas
+
+**Secret changes need a restart:** after adding or updating secrets in this repl, restart the backend workflow before testing them.
+
+**Why:** the running server does not always pick up secret changes until it restarts, which can look like a bad key or missing env var.
+
+**How to apply:** whenever a new secret is added or changed, restart the API workflow first, then verify the route again before debugging the app itself.
