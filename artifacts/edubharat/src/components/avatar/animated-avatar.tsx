@@ -3,9 +3,9 @@ import type { AvatarProps } from "./types";
 
 const MOUTH_FRAMES = [
   "M 72 128 Q 100 132 128 128",
-  "M 72 128 Q 100 142 128 128",
-  "M 72 128 Q 100 150 128 128",
-  "M 72 128 Q 100 142 128 128",
+  "M 72 128 Q 100 140 128 128",
+  "M 72 128 Q 100 146 128 128",
+  "M 72 128 Q 100 140 128 128",
 ];
 
 export function AnimatedAvatar({ name, role, isSpeaking, isThinking, gender = "female", size = "md" }: AvatarProps) {
@@ -26,8 +26,8 @@ export function AnimatedAvatar({ name, role, isSpeaking, isThinking, gender = "f
     return () => clearInterval(id);
   }, []);
 
-  const hairColor = gender === "female" ? "#6B3FA0" : "#4A2C0A";
-  const skinColor = "#FDDBB4";
+  const hairColor = gender === "female" ? "#7A4BCB" : "#3F2510";
+  const accentColor = gender === "female" ? "#F472B6" : "#60A5FA";
   const eyeHeight = blink ? 2 : 14;
 
   const sizeClasses: Record<string, string> = {
@@ -38,31 +38,39 @@ export function AnimatedAvatar({ name, role, isSpeaking, isThinking, gender = "f
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <div className={`${sizeClasses[size] ?? sizeClasses.md} relative rounded-full overflow-hidden bg-gradient-to-b from-indigo-100 to-purple-100 shadow-lg border-2 border-primary/20`}>
+      <div className={`${sizeClasses[size] ?? sizeClasses.md} relative rounded-full overflow-hidden bg-gradient-to-b from-orange-50 via-white to-primary/10 shadow-lg border-2 border-primary/20`}>
         <svg viewBox="0 0 200 200" className="w-full h-full">
           <defs>
             <radialGradient id="skin" cx="50%" cy="40%" r="60%">
-              <stop offset="0%" stopColor="#FDDBB4" />
-              <stop offset="100%" stopColor="#E8A87C" />
+              <stop offset="0%" stopColor="#FFE1C2" />
+              <stop offset="100%" stopColor="#E8AA78" />
             </radialGradient>
+            <linearGradient id="shirt" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#FFF7ED" />
+              <stop offset="100%" stopColor="#FFE4C7" />
+            </linearGradient>
           </defs>
+          {/* Shirt / collar */}
+          <path d="M 38 195 Q 100 160 162 195 L 162 200 L 38 200 Z" fill="url(#shirt)" />
+          <path d="M 82 158 L 100 178 L 118 158 L 100 154 Z" fill={accentColor} opacity="0.85" />
           {/* Hair back */}
-          <ellipse cx="100" cy="75" rx="80" ry="85" fill={hairColor} />
-          {/* Neck */}
-          <rect x="83" y="165" width="34" height="35" rx="8" fill="url(#skin)" />
+          <ellipse cx="100" cy="76" rx="79" ry="82" fill={hairColor} />
           {/* Head */}
-          <ellipse cx="100" cy="100" rx="72" ry="80" fill="url(#skin)" />
+          <ellipse cx="100" cy="100" rx="70" ry="78" fill="url(#skin)" />
           {/* Hair front */}
-          <path d={`M 28 75 Q 30 20 100 18 Q 170 20 172 75 Q 160 35 100 35 Q 40 35 28 75`} fill={hairColor} />
+          <path d={`M 24 78 Q 32 16 100 16 Q 168 16 176 78 Q 160 34 100 36 Q 40 34 24 78`} fill={hairColor} />
           {gender === "female" && (
-            <path d="M 28 75 Q 22 100 28 130 Q 20 95 28 75" fill={hairColor} />
+            <path d="M 26 76 Q 18 108 28 138 Q 14 102 26 76" fill={hairColor} />
+          )}
+          {gender === "male" && (
+            <path d="M 174 76 Q 182 108 172 138 Q 186 102 174 76" fill={hairColor} />
           )}
           {/* Eyebrows */}
-          <path d="M 62 75 Q 78 69 88 73" stroke={hairColor} strokeWidth="3.5" fill="none" strokeLinecap="round" />
-          <path d="M 112 73 Q 122 69 138 75" stroke={hairColor} strokeWidth="3.5" fill="none" strokeLinecap="round" />
+          <path d="M 61 74 Q 78 67 90 72" stroke={hairColor} strokeWidth="4" fill="none" strokeLinecap="round" />
+          <path d="M 110 72 Q 122 67 139 74" stroke={hairColor} strokeWidth="4" fill="none" strokeLinecap="round" />
           {/* Eyes */}
-          <ellipse cx="75" cy="90" rx="11" ry={eyeHeight} fill="#2D2D2D" />
-          <ellipse cx="125" cy="90" rx="11" ry={eyeHeight} fill="#2D2D2D" />
+          <ellipse cx="75" cy="90" rx="11" ry={eyeHeight} fill="#243043" />
+          <ellipse cx="125" cy="90" rx="11" ry={eyeHeight} fill="#243043" />
           {/* Eye highlights */}
           {!blink && <>
             <circle cx="79" cy="85" r="3.5" fill="white" />
@@ -71,12 +79,12 @@ export function AnimatedAvatar({ name, role, isSpeaking, isThinking, gender = "f
           {/* Nose */}
           <path d="M 97 108 Q 100 116 103 108" stroke="#C68642" strokeWidth="2" fill="none" strokeLinecap="round" />
           {/* Cheeks */}
-          <ellipse cx="65" cy="118" rx="14" ry="9" fill="#F4A261" opacity="0.25" />
-          <ellipse cx="135" cy="118" rx="14" ry="9" fill="#F4A261" opacity="0.25" />
+          <ellipse cx="65" cy="118" rx="14" ry="9" fill="#F4A261" opacity="0.18" />
+          <ellipse cx="135" cy="118" rx="14" ry="9" fill="#F4A261" opacity="0.18" />
           {/* Mouth */}
-          <path d={MOUTH_FRAMES[mouthFrame]} stroke="#C0392B" strokeWidth="3" fill="none" strokeLinecap="round" />
+          <path d={MOUTH_FRAMES[mouthFrame]} stroke="#B91C1C" strokeWidth="3" fill="none" strokeLinecap="round" />
           {/* Lips */}
-          <path d={`M 72 128 Q 100 ${isSpeaking ? "124" : "126"} 128 128`} stroke="#E07070" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+          <path d={`M 72 128 Q 100 ${isSpeaking ? "124" : "126"} 128 128`} stroke="#F59E9E" strokeWidth="1.5" fill="none" strokeLinecap="round" />
           {/* Thinking dots */}
           {isThinking && (
             <g>

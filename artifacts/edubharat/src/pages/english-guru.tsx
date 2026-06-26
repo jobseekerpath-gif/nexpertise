@@ -64,7 +64,7 @@ const VOICE_PRESETS = [
   { value: "priya", label: "Female — Priya" },
   { value: "neerja", label: "Female — Neerja" },
   { value: "meera", label: "Female — Meera" },
-  { value: "ravi", label: "Male — Ravi" },
+  { value: "rohit", label: "Male — Rohit" },
   { value: "arjun", label: "Male — Arjun" },
   { value: "rahul", label: "Male — Rahul" },
 ] as const;
@@ -73,7 +73,7 @@ const VOICE_META: Record<(typeof VOICE_PRESETS)[number]["value"], { gender: "mal
   priya: { gender: "female", teacherName: "Priya Ma'am" },
   neerja: { gender: "female", teacherName: "Neerja Ma'am" },
   meera: { gender: "female", teacherName: "Meera Ma'am" },
-  ravi: { gender: "male", teacherName: "Ravi Sir" },
+  rohit: { gender: "male", teacherName: "Rohit Sir" },
   arjun: { gender: "male", teacherName: "Arjun Sir" },
   rahul: { gender: "male", teacherName: "Rahul Sir" },
 };
@@ -251,7 +251,7 @@ export default function EnglishGuru() {
   const displayed = isStreaming ? aiText : result;
 
   // Teacher persona — changes with voice gender selection
-  const teacherVoice = VOICE_META[profile.voiceStyle] ?? VOICE_META.priya;
+  const teacherVoice = VOICE_META[profile.voiceStyle as keyof typeof VOICE_META] ?? VOICE_META.priya;
   const teacherName = teacherVoice.teacherName;
   const teacherShort = teacherName.replace(/\s+(Ma'am|Sir)$/i, "");
   const teacherGender = teacherVoice.gender;
@@ -311,13 +311,13 @@ export default function EnglishGuru() {
   const currentStage = LEVEL_TO_STAGE[level] ?? "A1";
 
   return (
-    <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 max-w-6xl">
-      <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
+    <div className="min-h-full overflow-y-auto container mx-auto px-3 sm:px-4 py-4 sm:py-8 max-w-6xl">
+      <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
 
         {/* Sidebar */}
         <aside className="order-2 lg:order-1 space-y-4 lg:sticky lg:top-20 self-start">
           {/* Avatar — compact strip on mobile, card on desktop */}
-          <div className="hidden lg:flex flex-col items-center py-6 px-4 bg-card rounded-2xl border shadow-sm">
+            <div className="hidden lg:flex flex-col items-center py-6 px-4 bg-card rounded-2xl border shadow-sm">
             <AnimatedAvatar name={teacherName} role="English Teacher"
               isSpeaking={synth.isSpeaking} isThinking={isStreaming} gender={teacherGender} size="lg" />
             <Badge variant="secondary" className="mt-3 text-xs">{level} Level</Badge>
@@ -480,7 +480,7 @@ export default function EnglishGuru() {
 
           {/* ── LIVE CONVERSATION ── */}
           {mode === "conversation" && (
-            <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+            <Card className="flex min-h-[72vh] flex-col overflow-hidden">
               <CardContent className="pt-5 space-y-4 flex min-h-0 flex-1 flex-col">
                 {/* Live chat toggle */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-muted/50 rounded-xl">

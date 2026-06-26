@@ -291,8 +291,8 @@ export default function RozgarSamachar() {
   }, [loadLivePulse]);
 
   return (
-    <div className="h-full min-h-0 overflow-hidden container mx-auto px-4 py-4 max-w-[1400px]">
-      <div className="flex h-full min-h-0 flex-col gap-4">
+    <div className="min-h-full overflow-y-auto container mx-auto px-4 py-4 max-w-[1400px]">
+      <div className="flex min-h-full flex-col gap-4">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b">
           <div className="flex items-center gap-4">

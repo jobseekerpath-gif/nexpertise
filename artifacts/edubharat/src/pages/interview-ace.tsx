@@ -303,7 +303,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
 
   if (phase === "setup") {
     return (
-      <div className="h-full min-h-0 overflow-auto container mx-auto px-4 py-8 max-w-4xl">
+      <div className="min-h-full overflow-y-auto container mx-auto px-4 py-8 max-w-4xl">
         <div className="text-center mb-10">
           <div className="flex justify-center mb-4">
             <AnimatedAvatar name="Raj Sir" role="Interview Coach" isSpeaking={false} gender="male" size="lg" />
@@ -350,7 +350,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
   if (phase === "report") {
     const answered = questions.filter(q => q.feedback);
     return (
-      <div className="h-full min-h-0 overflow-auto container mx-auto px-4 py-8 max-w-4xl">
+      <div className="min-h-full overflow-y-auto container mx-auto px-4 py-8 max-w-4xl">
         <div className="text-center mb-8">
           <AnimatedAvatar name="Raj Sir" role="Interview Coach" isSpeaking={false} gender="male" size="md" />
           <h1 className="text-3xl font-display font-bold text-secondary mt-4 mb-2">Interview Complete!</h1>
@@ -389,8 +389,8 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
 
   // Interview phase
   return (
-    <div className="h-full min-h-0 overflow-hidden container mx-auto px-4 py-4 max-w-[1400px]">
-      <div className="grid h-full min-h-0 lg:grid-cols-[240px_1fr] gap-5">
+    <div className="min-h-full overflow-y-auto container mx-auto px-4 py-4 max-w-[1400px]">
+      <div className="grid min-h-full lg:grid-cols-[260px_1fr] gap-5">
         {/* Desktop sidebar avatar */}
         <aside className="hidden lg:flex flex-col items-center gap-4 min-h-0 overflow-hidden">
           <AnimatedAvatar name="Raj Sir" role={`${typeMeta.label} Interviewer`} isSpeaking={synth.isSpeaking} isThinking={isStreaming} gender="male" size="lg" />
@@ -433,7 +433,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
             )}
           </div>
 
-          <Card className="shadow-lg border-none flex-1 min-h-0 overflow-hidden">
+          <Card className="shadow-lg border-none min-h-[72vh] overflow-hidden">
             <CardContent className="p-5 md:p-7 h-full min-h-0 flex flex-col">
               {/* Question */}
               <div className="flex items-start gap-3 mb-6">

@@ -65,7 +65,7 @@ const FEMALE_VOICE_KEYWORDS = [
   "zira", "hazel", "susan", "karen", "samantha", "victoria", "moira",
 ];
 const MALE_VOICE_KEYWORDS = [
-  "ravi", "arjun", "rahul", "karan", "rohan", "mohan", "amit", "veer",
+  "ravi", "rohit", "arjun", "rahul", "karan", "rohan", "mohan", "amit", "veer",
   "aditya", "sachin", "pranav", "male", "man", "daniel", "david",
   "george", "james", "mark", "tom", "fred", "alex",
 ];
@@ -78,9 +78,9 @@ const STYLE_KEYWORDS: Record<string, string[]> = {
   priya: ["priya", "heera", "neerja", "female", "woman"],
   neerja: ["neerja", "heera", "priya", "female", "woman"],
   meera: ["meera", "lakshmi", "aarti", "aarthi", "shreya", "sita"],
-  ravi: ["ravi", "arjun", "rahul", "karan", "male", "man"],
-  arjun: ["arjun", "ravi", "rahul", "karan", "male", "man"],
-  rahul: ["rahul", "ravi", "arjun", "karan", "male", "man"],
+  rohit: ["rohit", "ravi", "arjun", "rahul", "karan", "male", "man"],
+  arjun: ["arjun", "rohit", "ravi", "rahul", "karan", "male", "man"],
+  rahul: ["rahul", "rohit", "ravi", "arjun", "karan", "male", "man"],
 };
 
 function genderMatch(v: SpeechSynthesisVoice, gender: VoiceGender): boolean {

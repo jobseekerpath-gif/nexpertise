@@ -10,9 +10,9 @@ export function Layout({
   showFooter?: boolean;
 }) {
   return (
-    <div className={compact ? "h-[100dvh] flex flex-col overflow-hidden" : "min-h-[100dvh] flex flex-col"}>
+    <div className={compact ? "h-[100dvh] flex flex-col overflow-hidden bg-background" : "min-h-[100dvh] flex flex-col"}>
       <Navbar />
-      <main className={compact ? "flex-1 flex flex-col overflow-hidden" : "flex-1 flex flex-col"}>
+      <main className={compact ? "flex-1 min-h-0 flex flex-col overflow-y-auto" : "flex-1 flex flex-col"}>
         {children}
       </main>
       {showFooter && (

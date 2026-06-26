@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 export type VoiceGender = "male" | "female";
-export type VoiceStyle = "priya" | "neerja" | "meera" | "ravi" | "arjun" | "rahul";
+export type VoiceStyle = "priya" | "neerja" | "meera" | "rohit" | "arjun" | "rahul";
 
 export type StudentProfile = {
   name: string;
@@ -19,19 +19,26 @@ const DEFAULT_PROFILE: StudentProfile = {
   voiceStyle: "priya",
 };
 
+function normalizeVoiceStyle(style: unknown, gender: VoiceGender): VoiceStyle {
+  if (style === "priya" || style === "neerja" || style === "meera" || style === "rohit" || style === "arjun" || style === "rahul") {
+    return style;
+  }
+  if (style === "ravi") return "rohit";
+  return gender === "male" ? "rohit" : "priya";
+}
+
 function loadProfile(): StudentProfile {
   if (typeof window === "undefined") return DEFAULT_PROFILE;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_PROFILE;
-    const parsed = JSON.parse(raw) as Partial<StudentProfile>;
+    const parsed = JSON.parse(raw) as { name?: unknown; preferredLanguage?: unknown; voiceGender?: unknown; voiceStyle?: unknown };
+    const voiceGender: VoiceGender = parsed.voiceGender === "male" ? "male" : "female";
     return {
       name: typeof parsed.name === "string" ? parsed.name : DEFAULT_PROFILE.name,
       preferredLanguage: typeof parsed.preferredLanguage === "string" ? parsed.preferredLanguage : DEFAULT_PROFILE.preferredLanguage,
-      voiceGender: parsed.voiceGender === "male" ? "male" : "female",
-      voiceStyle: parsed.voiceStyle === "neerja" || parsed.voiceStyle === "meera" || parsed.voiceStyle === "ravi" || parsed.voiceStyle === "arjun" || parsed.voiceStyle === "rahul"
-        ? parsed.voiceStyle
-        : (parsed.voiceGender === "male" ? "ravi" : "priya"),
+      voiceGender,
+      voiceStyle: normalizeVoiceStyle(parsed.voiceStyle, voiceGender),
     };
   } catch {
     return DEFAULT_PROFILE;

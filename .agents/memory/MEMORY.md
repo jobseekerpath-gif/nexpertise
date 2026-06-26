@@ -5,3 +5,4 @@
 - [Interview Ace auto-listen](interview-auto-listen.md) — mock interviews should start listening automatically after each question and feel conversational, not scripted.
 - [Rozgar profile feed](rozgar-profile-feed.md) — Rozgar should stay candidate-driven, with profile basics shaping every section and a live hiring pulse before AI summaries.
 - [Voice switching should stop playback](voice-switch-stop.md) — changing tutor voice must cancel active speech immediately so male/female voices never mix.
+- [Compact page scroll shells](compact-page-scroll-shells.md) — full-viewport routes still need a real scroll path; inner panes alone can make the page feel frozen.
