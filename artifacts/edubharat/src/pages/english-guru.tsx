@@ -6,11 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { INDIAN_LANGUAGES } from "@/lib/constants";
+import { useAuth } from "@/lib/use-auth";
 import { useHistory } from "@/lib/use-history";
 import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
-import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
+import { useSpeechSynthesis, type VoiceGender } from "@/lib/use-speech-synthesis";
+import { useStudentProfile } from "@/lib/use-student-profile";
 import { AnimatedAvatar } from "@/components/avatar";
 import {
   Mic, MicOff, Volume2, VolumeX, BookOpen, PenLine, Languages,
@@ -93,14 +95,45 @@ function ResultPanel({ title, content, isSpeaking, onSpeak, onStop, onSave, save
   );
 }
 
+function stripMarkdownForSpeech(text: string) {
+  return text
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/_{1,2}([^_]+)_{1,2}/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+[.)]\s+/gm, "")
+    .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function detectSpokenLanguage(text: string, fallback: string) {
+  if (/[\u0900-\u097F]/.test(text)) return "Hindi";
+  if (/[\u0980-\u09FF]/.test(text)) return "Bengali";
+  if (/[\u0B80-\u0BFF]/.test(text)) return "Tamil";
+  if (/[\u0C00-\u0C7F]/.test(text)) return "Telugu";
+  if (/[\u0A00-\u0A7F]/.test(text)) return "Punjabi";
+  if (/[\u0D00-\u0D7F]/.test(text)) return "Malayalam";
+  if (/[\u0C80-\u0CFF]/.test(text)) return "Kannada";
+  if (/[\u0A80-\u0AFF]/.test(text)) return "Gujarati";
+  if (/[\u0980-\u09FF]/.test(text)) return "Bengali";
+  if (/[\u0600-\u06FF]/.test(text)) return "Urdu";
+  return fallback;
+}
+
 export default function EnglishGuru() {
+  const { user } = useAuth();
   const { save } = useHistory();
   const { track } = useProgress();
   const { text: aiText, isStreaming, error: aiError, stream, reset: resetAI } = useGeminiStream();
   const synth = useSpeechSynthesis();
+  const { profile, updateProfile } = useStudentProfile();
 
   const [mode, setMode] = useState<Mode>("roadmap");
-  const [uiLang, setUiLang] = useState("Hindi");
+  const [uiLang, setUiLang] = useState(profile.preferredLanguage);
   const [level, setLevel] = useState("Beginner");
 
   const [grammarInput, setGrammarInput] = useState("");
@@ -111,21 +144,32 @@ export default function EnglishGuru() {
   const [convInput, setConvInput] = useState("");
   const [liveChat, setLiveChat] = useState(false);
   const [convFlowState, setConvFlowState] = useState<"idle" | "user-speaking" | "ai-thinking" | "ai-speaking">("idle");
+  const convInputRef = useRef<HTMLTextAreaElement>(null);
 
   const [result, setResult] = useState("");
   const [savedMap, setSavedMap] = useState<Record<string, boolean>>({});
-  const convEndRef = useRef<HTMLDivElement>(null);
+  const speech = useSpeechRecognition(uiLang);
 
-  const speech = useSpeechRecognition(uiLang === "English" ? "English" : "English");
-
-  const speak = useCallback((text: string, onEnd?: () => void) => {
-    synth.speak(text, "English", onEnd);
-  }, [synth]);
-
-  // Auto-scroll conversation
   useEffect(() => {
-    convEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [convHistory, aiText]);
+    if (user?.name && !profile.name) {
+      updateProfile({ name: user.name });
+    }
+  }, [user?.name, profile.name, updateProfile]);
+
+  useEffect(() => {
+    setUiLang(profile.preferredLanguage);
+  }, [profile.preferredLanguage]);
+
+  useEffect(() => {
+    const el = convInputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+  }, [convInput]);
+
+  const speak = useCallback((text: string, language = uiLang, onEnd?: () => void, voiceGender: VoiceGender = profile.voiceGender) => {
+    synth.speak(stripMarkdownForSpeech(text), language, onEnd, { voiceGender });
+  }, [synth, uiLang, profile.voiceGender]);
 
   // Live chat: restart mic after AI finishes speaking
   useEffect(() => {
@@ -186,17 +230,21 @@ export default function EnglishGuru() {
     resetAI();
     const response = await stream(
       `${recentHistory}\nPriya:`,
-      `Friendly English teacher for Indian ${level} learners. Reply in 1-2 short sentences. Gently correct mistakes. Keep conversation natural and encouraging.`
+      `You are the best English teacher in the world for an Indian student named ${profile.name || "Student"}. Reply in the same language the student used. If the student used English, teach naturally and gently correct mistakes. If the student used a regional Indian language, respond in that language and explain the English meaning simply. Never use markdown, bullets, numbering, or symbols. Keep replies short, warm, and natural.`,
+      undefined,
+      { maxTokens: 220 }
     );
     if (response) {
-      setConvHistory(h => [...h, { role: "ai", text: response }]);
+      const cleanResponse = stripMarkdownForSpeech(response);
+      setConvHistory(h => [...h, { role: "ai", text: cleanResponse }]);
       track("English Guru", "Live Conversation");
-      speak(response, () => {
+      const spokenLanguage = detectSpokenLanguage(cleanResponse, uiLang);
+      speak(cleanResponse, spokenLanguage, () => {
         if (liveChat) setConvFlowState("ai-speaking");
-      });
+      }, profile.voiceGender);
     }
     })();
-  }, [convHistory, level, stream, resetAI, speak, track, isStreaming, speech, liveChat]);
+  }, [convHistory, level, stream, resetAI, speak, track, isStreaming, speech, liveChat, profile.name, profile.voiceGender, uiLang]);
 
   const toggleLiveChat = useCallback(() => {
     if (liveChat) {
@@ -250,6 +298,15 @@ export default function EnglishGuru() {
           <Card className="border shadow-sm">
             <CardContent className="pt-4 pb-3 space-y-3">
               <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Student Name</label>
+                <Input
+                  value={profile.name}
+                  onChange={(e) => updateProfile({ name: e.target.value })}
+                  placeholder={user?.name ?? "Your name"}
+                  className="h-9 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mode</label>
                 <Select value={mode} onValueChange={(v) => { setMode(v as Mode); setResult(""); resetAI(); setLiveChat(false); speech.stop(); setConvFlowState("idle"); }}>
                   <SelectTrigger className="h-9 text-sm">
@@ -265,10 +322,23 @@ export default function EnglishGuru() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Language</label>
-                <Select value={uiLang} onValueChange={setUiLang}>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Conversation Language</label>
+                <Select value={uiLang} onValueChange={(value) => { setUiLang(value); updateProfile({ preferredLanguage: value }); }}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>{INDIAN_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    <SelectItem value="English">English</SelectItem>
+                    {INDIAN_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Voice</label>
+                <Select value={profile.voiceGender} onValueChange={(value) => updateProfile({ voiceGender: value as "male" | "female" })}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="female">Female — Priya / Neerja style</SelectItem>
+                    <SelectItem value="male">Male — Ravi / Arjun style</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
@@ -391,7 +461,7 @@ export default function EnglishGuru() {
 
                 {/* Conversation history */}
                 {convHistory.length > 0 && (
-                  <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1 scroll-smooth">
+                  <div className="space-y-3 h-[min(340px,40vh)] overflow-y-auto pr-1">
                     {convHistory.map((msg, i) => (
                       <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-secondary"}`}>
@@ -401,7 +471,7 @@ export default function EnglishGuru() {
                     ))}
                     {isStreaming && aiText && (
                       <div className="flex gap-2 justify-start">
-                        <div className="max-w-[82%] rounded-2xl px-4 py-2.5 text-sm bg-muted text-secondary">{aiText}</div>
+                        <div className="max-w-[82%] rounded-2xl px-4 py-2.5 text-sm bg-muted text-secondary">{stripMarkdownForSpeech(aiText)}</div>
                       </div>
                     )}
                     {isStreaming && !aiText && (
@@ -411,17 +481,20 @@ export default function EnglishGuru() {
                         </div>
                       </div>
                     )}
-                    <div ref={convEndRef} />
                   </div>
                 )}
 
                 {/* Manual input (always available) */}
                 {!liveChat && (
-                  <div className="flex gap-2">
-                    <Input placeholder="Type in English, or press mic to speak..." value={convInput}
+                  <div className="flex gap-2 items-end">
+                    <Textarea
+                      ref={convInputRef}
+                      placeholder={`Type in ${uiLang}, or press mic to speak...`}
+                      value={convInput}
                       onChange={e => setConvInput(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (convInput.trim()) void handleConvSend(); } }}
-                      className="flex-1 h-11 text-sm" />
+                      className="flex-1 min-h-[52px] max-h-[180px] resize-none overflow-hidden text-sm"
+                    />
                     <MicButton isListening={speech.isListening} isSupported={speech.isSupported}
                       onStart={() => speech.start(t => setConvInput(p => p + t))} onStop={speech.stop} />
                     <Button className="font-bold px-4" disabled={isStreaming || !convInput.trim()} onClick={handleConvSend}>
@@ -529,7 +602,7 @@ export default function EnglishGuru() {
                   <Input placeholder="English word or phrase to practise"
                     value={pronounceWord} onChange={e => setPronounceWord(e.target.value)} className="h-11 flex-1 text-sm" />
                   <Button variant="outline" size="icon" className="h-11 w-11 shrink-0"
-                    onClick={() => synth.speak(pronounceWord, "English")} disabled={!pronounceWord.trim() || synth.isSpeaking}>
+                    onClick={() => speak(pronounceWord, "English")} disabled={!pronounceWord.trim() || synth.isSpeaking}>
                     <Volume2 className="w-4 h-4" />
                   </Button>
                 </div>

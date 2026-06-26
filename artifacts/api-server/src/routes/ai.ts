@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import { AiChatBody } from "@workspace/api-zod";
@@ -61,15 +61,13 @@ function userFriendlyError(err: unknown): string {
   return "AI request failed — please try again.";
 }
 
-async function streamGemini(req: Parameters<typeof router.post>[1] extends (
-  ...args: infer P
-) => unknown
-  ? P[0]
-  : never, res: Parameters<typeof router.post>[1] extends (
-  ...args: infer P
-) => unknown
-  ? P[1]
-  : never, prompt: string, system?: string | null) {
+async function streamGemini(
+  req: Request,
+  res: Response,
+  prompt: string,
+  system?: string | null,
+  maxTokens = 8192,
+) {
   const ai = getAI();
   const contents = buildContents(prompt, system);
 
@@ -79,7 +77,7 @@ async function streamGemini(req: Parameters<typeof router.post>[1] extends (
       const stream = await ai.models.generateContentStream({
         model,
         contents,
-        config: { maxOutputTokens: 8192 },
+        config: { maxOutputTokens: maxTokens },
       });
       for await (const chunk of stream) {
         const text = chunk.text;
@@ -101,15 +99,13 @@ async function streamGemini(req: Parameters<typeof router.post>[1] extends (
   }
 }
 
-async function streamAnthropic(req: Parameters<typeof router.post>[1] extends (
-  ...args: infer P
-) => unknown
-  ? P[0]
-  : never, res: Parameters<typeof router.post>[1] extends (
-  ...args: infer P
-) => unknown
-  ? P[1]
-  : never, prompt: string, system?: string | null) {
+async function streamAnthropic(
+  req: Request,
+  res: Response,
+  prompt: string,
+  system?: string | null,
+  maxTokens = 8192,
+) {
   const anthropic = getAnthropic();
   if (!anthropic) {
     throw new Error("ANTHROPIC_API_KEY is not configured");
@@ -123,7 +119,7 @@ async function streamAnthropic(req: Parameters<typeof router.post>[1] extends (
     try {
       const stream = anthropic.messages.stream({
         model,
-        max_tokens: 8192,
+        max_tokens: maxTokens,
         messages,
         ...(systemPrompt ? { system: systemPrompt } : {}),
       });
@@ -154,7 +150,7 @@ router.post("/ai/stream", async (req, res) => {
     res.status(400).json({ error: "Invalid request body" });
     return;
   }
-  const { prompt, system } = parseResult.data;
+  const { prompt, system, maxTokens } = parseResult.data;
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -164,11 +160,11 @@ router.post("/ai/stream", async (req, res) => {
 
   try {
     if (hasClaudeKey) {
-      await streamAnthropic(req, res, prompt, system);
+      await streamAnthropic(req, res, prompt, system, maxTokens ?? 8192);
       return;
     }
 
-    await streamGemini(req, res, prompt, system);
+    await streamGemini(req, res, prompt, system, maxTokens ?? 8192);
   } catch (err) {
     req.log.error({ err }, "AI streaming error");
     res.write(`data: ${JSON.stringify({ error: userFriendlyError(err) })}\n\n`);

@@ -1,5 +1,9 @@
 import { useState, useCallback } from "react";
 
+export type StreamOptions = {
+  maxTokens?: number;
+};
+
 async function* parseSSE(response: Response): AsyncGenerator<string> {
   const reader = response.body?.getReader();
   if (!reader) return;
@@ -35,7 +39,8 @@ export function useGeminiStream() {
     async (
       prompt: string,
       system?: string,
-      onChunk?: (chunk: string, fullText: string) => void
+      onChunk?: (chunk: string, fullText: string) => void,
+      options?: StreamOptions,
     ): Promise<string> => {
       setIsStreaming(true);
       setText("");
@@ -46,7 +51,7 @@ export function useGeminiStream() {
         const response = await fetch(`${base}/api/ai/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, system }),
+          body: JSON.stringify({ prompt, system, maxTokens: options?.maxTokens }),
           credentials: "include",
         });
 

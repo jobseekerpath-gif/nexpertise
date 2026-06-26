@@ -13,9 +13,19 @@ description: India's AI Career Ecosystem — full stack platform with 3 products
 
 ## Key decisions
 
-**Indian voice TTS:** `use-speech-synthesis.ts` uses async `getVoices()` (voices load async in browsers). Prefers named Indian voices (Heera, Ravi, Neerja), then `en-IN` locale, then `en-GB` as fallback. Rate 0.88, pitch 1.05.
+**Indian voice TTS:** learner-facing speech should prefer Indian-accent voices, expose a male/female voice choice when it matters, and fall back by locale/name when the exact accent is unavailable.
+
+**Why:** the best voice for English practice is not always the default browser voice, and learners respond better when they can choose the sound that feels natural to them.
+
+**How to apply:** when adding a new speaking flow, route the final plain-text version of the reply into speech synthesis and let the user remember their preferred voice style.
 
 **Streaming:** Backend SSE endpoint `/api/ai/stream` — frontend `useGeminiStream` hook parses SSE via ReadableStream. Non-streaming fallback at `/api/ai/chat` for simple calls.
+
+**Live conversation memory:** tutor conversations should keep a remembered learner name, preferred language, and voice choice so replies stay personalized across sessions.
+
+**Why:** live tutoring feels much better when the assistant can address the learner naturally and keep using the same language/voice preferences after a refresh.
+
+**How to apply:** store the learner profile locally, reuse it when building prompts, and clean markdown/symbols out of anything sent to speech synthesis.
 
 **Progress tracking:** `useProgress` hook + `edubharat_progress` localStorage key. Tracks sessions per tool, interview scores (0-100), daily activity for streak calculation.
 
