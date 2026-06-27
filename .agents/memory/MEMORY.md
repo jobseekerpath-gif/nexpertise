@@ -12,3 +12,6 @@
 - [Compact page scroll shells](compact-page-scroll-shells.md) — full-viewport routes still need a real scroll path; inner panes alone can make the page feel frozen.
 - [Progress tab shell gating](progress-tab-gating.md) — multi-tab dashboards should always render the tab shell; per-tab empty states handle missing data.
 - [Shared localStorage keys](shared-localstorage-keys.md) — hooks reading the same domain must use the same key scheme so offline/guest data stays consistent.
+- [Expo mobile design sync](expo-mobile-design-sync.md) — sync web artifact CSS tokens into Expo constants/colors.ts before building screens; derive tool colors from useColors for dark mode.
+- [Expo tab bottom padding](expo-tab-bottom-padding.md) — useSafeBottomPadding distinguishes iOS 26 NativeTabs from classic Tabs; useBottomTabBarHeight only in the classic branch.
+- [Expo progress ring SVG](expo-progress-ring-svg.md) — use react-native-svg strokeDashoffset for accurate circular progress, not border/rotation tricks.

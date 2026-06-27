@@ -6,7 +6,7 @@ export interface AvatarProviderConfig {
 
 export interface AvatarProps {
   name: string;
-  role: string;
+  subtitle: string;
   isSpeaking: boolean;
   isThinking?: boolean;
   gender?: "male" | "female";

@@ -146,6 +146,12 @@ function TutorSelector({
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  // Capture opener and restore focus on close
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    return () => opener?.focus();
+  }, []);
+
   // Initial focus — move to close button when dialog opens
   useEffect(() => { closeBtnRef.current?.focus(); }, []);
 
@@ -172,18 +178,20 @@ function TutorSelector({
   }, []);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      role="presentation"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/50"
+        role="presentation"
+        aria-hidden="true"
+        tabIndex={-1}
+        onClick={onClose}
+      />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="tutor-dialog-title"
-        className="bg-card rounded-2xl border shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5"
-        onClick={e => e.stopPropagation()}
+        className="relative bg-card rounded-2xl border shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5"
       >
         <div className="flex items-center justify-between mb-5">
           <div>
@@ -326,7 +334,6 @@ function EnglishGuruContent() {
   // Sync level to profile englishLevel when profile changes externally
   useEffect(() => {
     setLevel(mapEnglishLevel(profile.englishLevel));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.englishLevel]);
 
   // Sync tutor to profile when profile changes externally
@@ -335,8 +342,7 @@ function EnglishGuruContent() {
     const byStyle = TUTORS.find(t => t.voiceStyle === profile.voiceStyle);
     const preferred = byId ?? byStyle;
     if (preferred && preferred.id !== tutorId) setTutorId(preferred.id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.preferredTutor, profile.voiceStyle]);
+  }, [profile.preferredTutor, profile.voiceStyle, tutorId]);
 
   const speak = useCallback((text: string, language = uiLang, onEnd?: () => void) => {
     synth.speak(stripMarkdownForSpeech(text), language, onEnd, {
@@ -458,7 +464,7 @@ function EnglishGuruContent() {
           <div className="hidden lg:flex flex-col items-center py-6 px-4 bg-card rounded-2xl border shadow-sm">
             <AnimatedAvatar
               name={tutor.name}
-              role={tutor.role}
+              subtitle={tutor.role}
               isSpeaking={synth.isSpeaking}
               isThinking={isStreaming}
               gender={tutor.gender}
@@ -493,7 +499,7 @@ function EnglishGuruContent() {
           <div className="flex lg:hidden items-center gap-3 p-3 bg-card rounded-xl border shadow-sm">
             <AnimatedAvatar
               name={tutor.name}
-              role={tutor.role}
+              subtitle={tutor.role}
               isSpeaking={synth.isSpeaking}
               isThinking={isStreaming}
               gender={tutor.gender}
@@ -513,17 +519,17 @@ function EnglishGuruContent() {
 
           <Card className="border shadow-sm">
             <CardContent className="pt-4 pb-3 space-y-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Student Name</label>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Student Name</span>
                 <Input
                   value={profile.name}
                   onChange={(e) => updateProfile({ name: e.target.value })}
                   placeholder={user?.name ?? "Your name"}
                   className="h-9 text-sm"
                 />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mode</label>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mode</span>
                 <Select value={mode} onValueChange={(v) => { setMode(v as Mode); setResult(""); resetAI(); setLiveChat(false); speech.stop(); setConvFlowState("idle"); }}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -534,9 +540,9 @@ function EnglishGuruContent() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Conversation Language</label>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Conversation Language</span>
                 <Select value={uiLang} onValueChange={(value) => { setUiLang(value); updateProfile({ preferredLanguage: value }); }}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -544,16 +550,16 @@ function EnglishGuruContent() {
                     {INDIAN_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">My Level</label>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">My Level</span>
                 <Select value={level} onValueChange={setLevel}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {["Beginner", "Intermediate", "Advanced"].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
+              </label>
             </CardContent>
           </Card>
         </aside>

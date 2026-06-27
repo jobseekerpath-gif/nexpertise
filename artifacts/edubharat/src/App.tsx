@@ -1,11 +1,14 @@
-import { Suspense, lazy } from "react";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Suspense, lazy, useEffect } from "react";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HelmetProvider } from "react-helmet-async";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Layout } from "@/components/layout";
 import { PageSkeleton } from "@/components/page-skeleton";
+import { CookieConsent } from "@/components/cookie-consent";
+import { reportWebVitals } from "@/lib/web-vitals";
+import { trackPageView } from "@/lib/analytics";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +22,14 @@ const History = lazy(() => import("@/pages/history"));
 const Login = lazy(() => import("@/pages/login"));
 const Progress = lazy(() => import("@/pages/progress"));
 const ProfilePage = lazy(() => import("@/pages/profile"));
+
+function Analytics() {
+  const [location] = useLocation();
+  useEffect(() => {
+    trackPageView(location);
+  }, [location]);
+  return null;
+}
 
 function Router() {
   return (
@@ -60,14 +71,20 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    reportWebVitals();
+  }, []);
+
   return (
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}>
+            <Analytics />
             <Suspense fallback={<PageSkeleton />}>
               <Router />
             </Suspense>
+            <CookieConsent />
             <Toaster />
           </WouterRouter>
         </TooltipProvider>

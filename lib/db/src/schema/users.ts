@@ -105,12 +105,37 @@ export const historyItemsTable = pgTable("history_items", {
   savedAt: timestamp("saved_at").defaultNow().notNull(),
 });
 
+export const analyticsEventsTable = pgTable("analytics_events", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id),
+  anonymousId: text("anonymous_id").notNull(),
+  event: text("event").notNull(),
+  path: text("path").notNull(),
+  properties: text("properties"), // JSON
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const webVitalsTable = pgTable("web_vitals", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id),
+  anonymousId: text("anonymous_id").notNull(),
+  name: text("name").notNull(), // CLS, LCP, INP, FCP, TTFB
+  value: text("value").notNull(), // stored as text to preserve precision
+  rating: text("rating"), // good, needs-improvement, poor
+  delta: text("delta"),
+  navigationType: text("navigation_type"),
+  path: text("path").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertOtpSchema = createInsertSchema(otpsTable).omit({ id: true, createdAt: true });
 export const insertLearningProgressSchema = createInsertSchema(learningProgressTable).omit({ id: true, createdAt: true });
 export const insertInterviewSessionSchema = createInsertSchema(interviewSessionsTable).omit({ id: true, createdAt: true });
 export const insertSavedJobSchema = createInsertSchema(savedJobsTable).omit({ id: true, savedAt: true });
 export const insertHistoryItemSchema = createInsertSchema(historyItemsTable).omit({ id: true, savedAt: true });
+export const insertAnalyticsEventSchema = createInsertSchema(analyticsEventsTable).omit({ id: true, createdAt: true });
+export const insertWebVitalSchema = createInsertSchema(webVitalsTable).omit({ id: true, createdAt: true });
 
 export type User = typeof usersTable.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -119,3 +144,5 @@ export type LearningProgress = typeof learningProgressTable.$inferSelect;
 export type InterviewSession = typeof interviewSessionsTable.$inferSelect;
 export type SavedJob = typeof savedJobsTable.$inferSelect;
 export type HistoryItem = typeof historyItemsTable.$inferSelect;
+export type AnalyticsEvent = typeof analyticsEventsTable.$inferSelect;
+export type WebVital = typeof webVitalsTable.$inferSelect;

@@ -157,7 +157,7 @@ function AvatarBar({ coach, isSpeaking, isThinking, className = "" }: {
     <div className={`flex items-center gap-3 p-3 bg-card rounded-xl border shadow-sm ${className}`}>
       <AnimatedAvatar
         name={coach.name}
-        role={coach.role}
+        subtitle={coach.role}
         isSpeaking={isSpeaking}
         isThinking={isThinking}
         gender={coach.gender}
@@ -679,7 +679,7 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
                 <div className="flex items-center gap-3 mb-2">
                   <AnimatedAvatar
                     name={c.name}
-                    role={c.role}
+                    subtitle={c.role}
                     isSpeaking={false}
                     gender={c.gender}
                     size="sm"
@@ -710,22 +710,22 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
             <CardDescription>Duration-based · Adaptive questions · Detailed AI report</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold">Interview Type</label>
+            <label className="block space-y-2">
+              <span className="text-sm font-semibold">Interview Type</span>
               <Select value={type} onValueChange={setType}>
                 <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
                 <SelectContent>{INTERVIEW_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.icon} {t.label}</SelectItem>)}</SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold">Experience Level</label>
+            </label>
+            <label className="block space-y-2">
+              <span className="text-sm font-semibold">Experience Level</span>
               <Select value={experience} onValueChange={setExperience}>
                 <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
                 <SelectContent>{EXPERIENCE_LEVELS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold">Interview Duration</label>
+            </label>
+            <label className="block space-y-2">
+              <span className="text-sm font-semibold">Interview Duration</span>
               <div className="grid grid-cols-3 gap-2">
                 {DURATIONS.map(d => (
                   <button
@@ -745,7 +745,7 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
                   </button>
                 ))}
               </div>
-            </div>
+            </label>
           </CardContent>
           <CardFooter>
             <Button className="w-full h-12 font-bold text-base shadow-md shadow-primary/20" onClick={startSession} disabled={isStreaming}>
@@ -772,7 +772,7 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
         {/* Hero */}
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <AnimatedAvatar name={coach.name} role={coach.role} isSpeaking={false} gender={coach.gender} size="lg" imageSrc={coach.imageSrc} />
+            <AnimatedAvatar name={coach.name} subtitle={coach.role} isSpeaking={false} gender={coach.gender} size="lg" imageSrc={coach.imageSrc} />
           </div>
           <h1 className="text-3xl font-display font-bold text-secondary mt-2 mb-3">Interview Complete!</h1>
           <div className={`inline-flex items-center gap-3 px-6 py-3 rounded-2xl border-2 ${g.bg}`}>
@@ -909,7 +909,7 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
         <aside className="hidden lg:flex flex-col items-center gap-4 min-h-0 overflow-hidden">
           <AnimatedAvatar
             name={coach.name}
-            role={`${typeMeta.label} Interviewer`}
+            subtitle={`${typeMeta.label} Interviewer`}
             isSpeaking={synth.isSpeaking}
             isThinking={isStreaming}
             gender={coach.gender}

@@ -333,24 +333,24 @@ function ResumeIntelligenceContent() {
       </div>
 
       <div className="grid sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <label className="text-sm font-semibold">Target Role</label>
+        <label className="block space-y-2">
+          <span className="text-sm font-semibold">Target Role</span>
           <Select value={targetRole} onValueChange={setTargetRole} disabled={isAnalysing}>
             <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
             <SelectContent>
               {TARGET_ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
             </SelectContent>
           </Select>
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-semibold">Experience Level</label>
+        </label>
+        <label className="block space-y-2">
+          <span className="text-sm font-semibold">Experience Level</span>
           <Select value={experienceLevel} onValueChange={setExperienceLevel} disabled={isAnalysing}>
             <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
             <SelectContent>
               {EXPERIENCE_LEVELS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
             </SelectContent>
           </Select>
-        </div>
+        </label>
       </div>
 
       {/* Upload zone */}
@@ -384,8 +384,8 @@ function ResumeIntelligenceContent() {
             {hasResume && <CheckCircle2 className="w-4 h-4 text-green-600 ml-auto" />}
           </div>
         )}
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground">Or paste resume text directly</label>
+        <label className="block space-y-1">
+          <span className="text-xs font-semibold text-muted-foreground">Or paste resume text directly</span>
           <Textarea
             placeholder="Paste your resume text here if you don't have a file..."
             className="min-h-[160px] text-sm font-mono"
@@ -394,7 +394,7 @@ function ResumeIntelligenceContent() {
             disabled={isAnalysing}
           />
           <p className="text-xs text-muted-foreground text-right">{resumeText.split(/\s+/).filter(Boolean).length} words</p>
-        </div>
+        </label>
       </div>
 
       {error && (

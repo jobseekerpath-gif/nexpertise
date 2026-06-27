@@ -86,7 +86,7 @@ function FallbackSVG({
 
 export function AnimatedAvatar({
   name,
-  role,
+  subtitle,
   isSpeaking,
   isThinking = false,
   gender = "female",
@@ -175,7 +175,7 @@ export function AnimatedAvatar({
 
       <div className="text-center">
         <p className="text-xs font-bold text-secondary leading-tight">{name}</p>
-        <p className="text-[10px] text-muted-foreground leading-tight">{role}</p>
+        <p className="text-[10px] text-muted-foreground leading-tight">{subtitle}</p>
       </div>
     </div>
   );

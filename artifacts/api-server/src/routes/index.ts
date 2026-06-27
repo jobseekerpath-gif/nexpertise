@@ -8,6 +8,7 @@ import sessionsRouter from "./sessions.js";
 import savedJobsRouter from "./saved-jobs.js";
 import historyItemsRouter from "./history-items.js";
 import resumeRouter from "./resume.js";
+import analyticsRouter from "./analytics.js";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(sessionsRouter);
 router.use(savedJobsRouter);
 router.use(historyItemsRouter);
 router.use(resumeRouter);
+router.use(analyticsRouter);
 
 export default router;

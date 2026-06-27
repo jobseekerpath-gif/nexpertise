@@ -11,8 +11,14 @@ export function Layout({
 }) {
   return (
     <div className={compact ? "h-[100dvh] flex flex-col overflow-hidden bg-background" : "min-h-[100dvh] flex flex-col"}>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
+      >
+        Skip to main content
+      </a>
       <Navbar />
-      <main className={compact ? "flex-1 min-h-0 flex flex-col overflow-y-auto animate-in fade-in duration-300" : "flex-1 flex flex-col animate-in fade-in duration-300"}>
+      <main id="main-content" className={compact ? "flex-1 min-h-0 flex flex-col overflow-y-auto animate-in fade-in duration-300" : "flex-1 flex flex-col animate-in fade-in duration-300"}>
         {children}
       </main>
       {showFooter && (

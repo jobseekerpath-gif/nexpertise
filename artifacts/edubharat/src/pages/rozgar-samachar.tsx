@@ -493,8 +493,8 @@ function FilterPanel({
         <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={onClear}>Clear all</Button>
       </div>
 
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-muted-foreground">City / State</label>
+      <label className="block space-y-2">
+        <span className="text-xs font-bold text-muted-foreground">City / State</span>
         <div className="relative">
           <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -504,48 +504,48 @@ function FilterPanel({
             className="pl-9 h-10 text-sm rounded-xl"
           />
         </div>
-      </div>
+      </label>
 
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-muted-foreground">Work Mode</label>
+      <label className="block space-y-2">
+        <span className="text-xs font-bold text-muted-foreground">Work Mode</span>
         <Select value={filters.workMode} onValueChange={v => onChange({ workMode: v as FilterState["workMode"] })}>
           <SelectTrigger className="h-10 text-sm rounded-xl"><SelectValue /></SelectTrigger>
           <SelectContent>{WORK_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
         </Select>
-      </div>
+      </label>
 
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-muted-foreground">Sector</label>
+      <label className="block space-y-2">
+        <span className="text-xs font-bold text-muted-foreground">Sector</span>
         <Select value={filters.sector} onValueChange={v => onChange({ sector: v as FilterState["sector"] })}>
           <SelectTrigger className="h-10 text-sm rounded-xl"><SelectValue /></SelectTrigger>
           <SelectContent>{SECTORS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
         </Select>
-      </div>
+      </label>
 
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-muted-foreground">Experience</label>
+      <label className="block space-y-2">
+        <span className="text-xs font-bold text-muted-foreground">Experience</span>
         <Select value={filters.experience} onValueChange={v => onChange({ experience: v as FilterState["experience"] })}>
           <SelectTrigger className="h-10 text-sm rounded-xl"><SelectValue /></SelectTrigger>
           <SelectContent>{EXPERIENCES.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}</SelectContent>
         </Select>
-      </div>
+      </label>
 
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-muted-foreground">Employment Type</label>
+      <label className="block space-y-2">
+        <span className="text-xs font-bold text-muted-foreground">Employment Type</span>
         <Select value={filters.employmentType} onValueChange={v => onChange({ employmentType: v as FilterState["employmentType"] })}>
           <SelectTrigger className="h-10 text-sm rounded-xl"><SelectValue /></SelectTrigger>
           <SelectContent>{EMPLOYMENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
         </Select>
-      </div>
+      </label>
 
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-muted-foreground">Salary range (LPA)</label>
+      <label className="block space-y-2">
+        <span className="text-xs font-bold text-muted-foreground">Salary range (LPA)</span>
         <div className="flex items-center gap-2">
           <Input type="number" min={0} placeholder="Min" value={filters.salaryMin} onChange={e => onChange({ salaryMin: e.target.value })} className="h-10 text-sm rounded-xl" />
           <span className="text-muted-foreground">-</span>
           <Input type="number" min={0} placeholder="Max" value={filters.salaryMax} onChange={e => onChange({ salaryMax: e.target.value })} className="h-10 text-sm rounded-xl" />
         </div>
-      </div>
+      </label>
     </div>
   );
 }
@@ -765,67 +765,67 @@ function RozgarSamacharContent() {
                 </CardHeader>
                 <CardContent className="space-y-3 overflow-y-auto">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold">Name</label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold">Name</span>
                       <Input value={profile.name} onChange={e => update("name")(e.target.value)} placeholder="Your name" className="h-10 text-sm rounded-xl" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold">Age</label>
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold">Age</span>
                       <Input type="number" min="15" max="55" value={profile.age} onChange={e => update("age")(e.target.value)} className="h-10 text-sm rounded-xl" />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <label className="text-xs font-bold">Education</label>
+                    </label>
+                    <label className="block space-y-1.5 sm:col-span-2">
+                      <span className="text-xs font-bold">Education</span>
                       <Select value={profile.education} onValueChange={update("education")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>{["10th Pass", "12th Pass", "Diploma", "Graduate", "Post-Graduate", "PhD"].map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
                       </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold">Current Status</label>
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold">Current Status</span>
                       <Select value={profile.status} onValueChange={update("status")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>{["Student", "Fresher", "Working Professional", "Career Switcher", "Entrepreneur"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                       </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold">Career Goal</label>
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold">Career Goal</span>
                       <Select value={profile.careerGoal} onValueChange={update("careerGoal")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>{["Government Job", "Private Job", "IT / Tech", "Startup", "Business", "Higher Education", "Foreign Opportunity"].map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                       </Select>
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <label className="text-xs font-bold">Skills</label>
+                    </label>
+                    <label className="block space-y-1.5 sm:col-span-2">
+                      <span className="text-xs font-bold">Skills</span>
                       <Input value={profile.skills} onChange={e => update("skills")(e.target.value)} placeholder="Excel, communication, Java..." className="h-10 text-sm rounded-xl" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold">Salary Expectation</label>
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold">Salary Expectation</span>
                       <Select value={profile.salaryExpectation} onValueChange={update("salaryExpectation")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>{["₹2-3 LPA", "₹3-5 LPA", "₹5-8 LPA", "₹8-12 LPA", "₹12+ LPA"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                       </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold">Language</label>
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold">Language</span>
                       <Select value={profile.language} onValueChange={update("language")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent><SelectItem value="English">English</SelectItem>{INDIAN_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
                       </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold">State / Location</label>
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold">State / Location</span>
                       <Select value={profile.location} onValueChange={update("location")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>{INDIAN_STATES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                       </Select>
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <label className="text-xs font-bold">Industry</label>
+                    </label>
+                    <label className="block space-y-1.5 sm:col-span-2">
+                      <span className="text-xs font-bold">Industry</span>
                       <Select value={profile.industry} onValueChange={update("industry")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>{INDUSTRIES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
                       </Select>
-                    </div>
+                    </label>
                   </div>
                   <div className="flex justify-end gap-3 pt-2">
                     <Button variant="outline" size="sm" onClick={() => setShowProfile(false)} className="rounded-full">Close</Button>
