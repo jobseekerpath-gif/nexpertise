@@ -1,11 +1,14 @@
 - [EduBharat project](edubharat.md) — India AI Career Ecosystem; Gemini 2.5 Flash, SSE streaming, Indian voice TTS, Google OAuth + Email OTP, PostgreSQL, 4 products + progress dashboard.
-- [Resume Intelligence module](resume-intelligence.md) — section parsing uses positional string splitting (not regex) to avoid Edit-tool corruption with special chars like - [EduBharat project](edubharat.md) — India AI Career Ecosystem; Gemini 2.5 Flash, SSE streaming, Indian voice TTS, Google OAuth + Email OTP, PostgreSQL, 3 products + progress dashboard..
-- [Task 1 — DB persistence](task1-db-persistence.md) — schema layout, API route patterns, hook offline-first strategy, declaration rebuild steps, IDOR fix.
+- [Resume Intelligence module](resume-intelligence.md) — section parsing uses positional string splitting (not regex) to avoid Edit-tool corruption with special chars.
+- [Database persistence patterns](task1-db-persistence.md) — offline-first hooks, schema/API conventions, and rebuild steps for EduBharat DB features.
 - [Tutor portrait system](tutor-portraits.md) — real AI-generated photos replace cartoon SVG; SVG is fallback only; imgFailed resets on imageSrc change; TUTORS array in lib/tutors.ts.
 - [Speech voice fallback](speech-voice-fallback.md) — browser voice lists vary; match by locale/name, then shape pitch/rate when a perfect Indian voice is missing.
 - [Claude live-chat budgeting](claude-live-chat-budgeting.md) — live tutoring should use compact history and low token caps; minimize cost, never promise a fixed per-response price.
 - [English Guru compact layout](english-guru-compact-layout.md) — live conversation uses a footer-free full-viewport shell; only the chat panel scrolls.
 - [Interview Ace auto-listen](interview-auto-listen.md) — mock interviews should start listening automatically after each question and feel conversational, not scripted.
+- [Interview Ace analytics](interview-analytics.md) — persist one canonical interview session per completed report, not per-question, so progress trends reflect full interviews.
 - [Rozgar profile feed](rozgar-profile-feed.md) — Rozgar should stay candidate-driven, with profile basics shaping every section and a live hiring pulse before AI summaries.
-- [Voice switching should stop playback](voice-switch-stop.md) — changing tutor voice must cancel active speech immediately so male/female voices never mix.
+- [Voice switching should stop playback](voice-switch-stop-playback.md) — changing tutor voice must cancel active speech immediately so male/female voices never mix.
 - [Compact page scroll shells](compact-page-scroll-shells.md) — full-viewport routes still need a real scroll path; inner panes alone can make the page feel frozen.
+- [Progress tab shell gating](progress-tab-gating.md) — multi-tab dashboards should always render the tab shell; per-tab empty states handle missing data.
+- [Shared localStorage keys](shared-localstorage-keys.md) — hooks reading the same domain must use the same key scheme so offline/guest data stays consistent.

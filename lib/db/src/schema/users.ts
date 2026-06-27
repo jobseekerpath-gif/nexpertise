@@ -92,6 +92,7 @@ export const savedJobsTable = pgTable("saved_jobs", {
   salary: text("salary"),
   jobType: text("job_type"),
   source: text("source"),
+  applicationStatus: text("application_status").default("saved"),
   savedAt: timestamp("saved_at").defaultNow().notNull(),
 });
 

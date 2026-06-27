@@ -7,7 +7,7 @@ const router: IRouter = Router();
 
 // POST /api/jobs/save — save a job
 router.post("/jobs/save", requireAuth, async (req: Request, res: Response) => {
-  const { jobId, title, company, link, location, salary, jobType, source } = req.body as {
+  const { jobId, title, company, link, location, salary, jobType, source, applicationStatus } = req.body as {
     jobId?: string;
     title?: string;
     company?: string;
@@ -16,6 +16,7 @@ router.post("/jobs/save", requireAuth, async (req: Request, res: Response) => {
     salary?: string;
     jobType?: string;
     source?: string;
+    applicationStatus?: string;
   };
 
   if (!jobId || !title || !link) {
@@ -48,6 +49,7 @@ router.post("/jobs/save", requireAuth, async (req: Request, res: Response) => {
         salary: salary ?? null,
         jobType: jobType ?? null,
         source: source ?? null,
+        applicationStatus: applicationStatus ?? "saved",
       })
       .returning();
 
@@ -55,6 +57,35 @@ router.post("/jobs/save", requireAuth, async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "Save job error");
     res.status(500).json({ error: "Failed to save job" });
+  }
+});
+
+// PATCH /api/jobs/save/:jobId — update application status
+router.patch("/jobs/save/:jobId", requireAuth, async (req: Request, res: Response) => {
+  const { jobId } = req.params as { jobId: string };
+  const { applicationStatus } = req.body as { applicationStatus?: string };
+
+  if (!applicationStatus) {
+    res.status(400).json({ error: "applicationStatus required" });
+    return;
+  }
+
+  try {
+    const updated = await db
+      .update(savedJobsTable)
+      .set({ applicationStatus })
+      .where(and(eq(savedJobsTable.userId, req.session.userId!), eq(savedJobsTable.jobId, jobId)))
+      .returning();
+
+    if (!updated.length) {
+      res.status(404).json({ error: "Saved job not found" });
+      return;
+    }
+
+    res.json({ saved: updated[0] });
+  } catch (err) {
+    req.log.error({ err }, "Update job status error");
+    res.status(500).json({ error: "Failed to update job status" });
   }
 });
 

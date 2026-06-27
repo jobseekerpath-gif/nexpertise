@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -6,17 +6,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useHistory } from "@/lib/use-history";
-import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
 import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
 import { useStudentProfile } from "@/lib/use-student-profile";
+import { useAuth } from "@/lib/use-auth";
 import { AnimatedAvatar } from "@/components/avatar";
 import { INTERVIEW_COACHES } from "@/lib/tutors";
+import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Mic, MicOff, PlayCircle, ChevronRight, Download, Volume2,
   LogOut, CheckCircle2, ChevronDown, MessageCircle, Pencil, Flame, Brain,
-  Star, Trophy,
+  Star, Trophy, Clock, Timer, AlertCircle, Save,
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -37,6 +38,11 @@ const INTERVIEW_TYPES = [
 ];
 
 const EXPERIENCE_LEVELS = ["Fresher", "1-2 years", "3-5 years", "5+ years"];
+const DURATIONS = [
+  { value: 15, label: "15 minutes", questions: "~4-5 questions" },
+  { value: 30, label: "30 minutes", questions: "~8-10 questions" },
+  { value: 45, label: "45 minutes", questions: "~12-15 questions" },
+];
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -56,15 +62,22 @@ type QA = {
 
 type Coach = typeof INTERVIEW_COACHES[number];
 
+type InterviewReport = {
+  overallScore: number;
+  communicationScore: number;
+  grammarScore: number;
+  confidenceScore: number;
+  technicalScore: number;
+  roleFit: string;
+  strengths: string[];
+  improvements: string[];
+  nextSteps: string[];
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Extract a sub-score from AI feedback — handles colon, dash, slash, markdown, and /10 suffixes */
 function parseSubScore(text: string, key: string): number | undefined {
-  // Match patterns like "Communication: 7", "Communication - 7/10", "**Communication**: 8/10", "communication – 7"
-  const pattern = new RegExp(
-    `\\b${key}\\b[^\\d]{0,10}(\\d{1,2})(?:\\s*\\/\\s*10)?`,
-    "i"
-  );
+  const pattern = new RegExp(`\\b${key}\\b[^\\d]{0,10}(\\d{1,2})(?:\\s*\\/\\s*10)?`, "i");
   const m = text.match(pattern);
   if (!m) return undefined;
   const n = parseInt(m[1]!);
@@ -77,11 +90,36 @@ function avgOf(nums: (number | undefined)[]): number {
 }
 
 function grade(score: number): { label: string; color: string; bg: string } {
-  if (score >= 9) return { label: "Outstanding", color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200" };
-  if (score >= 8) return { label: "Excellent", color: "text-green-700", bg: "bg-green-50 border-green-200" };
-  if (score >= 7) return { label: "Good", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" };
-  if (score >= 6) return { label: "Average", color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200" };
+  if (score >= 90) return { label: "Outstanding", color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200" };
+  if (score >= 80) return { label: "Excellent", color: "text-green-700", bg: "bg-green-50 border-green-200" };
+  if (score >= 70) return { label: "Good", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" };
+  if (score >= 60) return { label: "Average", color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200" };
+  if (score >= 50) return { label: "Below Average", color: "text-orange-700", bg: "bg-orange-50 border-orange-200" };
   return { label: "Needs Work", color: "text-red-700", bg: "bg-red-50 border-red-200" };
+}
+
+function formatTime(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
+function parseReportJson(text: string): InterviewReport | null {
+  const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  try {
+    const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+    return {
+      overallScore: Math.min(100, Math.max(0, Number(parsed["overallScore"]) || 0)),
+      communicationScore: Math.min(100, Math.max(0, Number(parsed["communicationScore"]) || 0)),
+      grammarScore: Math.min(100, Math.max(0, Number(parsed["grammarScore"]) || 0)),
+      confidenceScore: Math.min(100, Math.max(0, Number(parsed["confidenceScore"]) || 0)),
+      technicalScore: Math.min(100, Math.max(0, Number(parsed["technicalScore"]) || 0)),
+      roleFit: String(parsed["roleFit"] || ""),
+      strengths: Array.isArray(parsed["strengths"]) ? parsed["strengths"].map(String) : [],
+      improvements: Array.isArray(parsed["improvements"]) ? parsed["improvements"].map(String) : [],
+      nextSteps: Array.isArray(parsed["nextSteps"]) ? parsed["nextSteps"].map(String) : [],
+    };
+  } catch { return null; }
 }
 
 // ─── Small components ─────────────────────────────────────────────────────────
@@ -90,7 +128,7 @@ function ScoreBadge({ score }: { score: number }) {
   const g = grade(score);
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold border ${g.bg} ${g.color}`}>
-      {score}/10
+      {score}%
     </span>
   );
 }
@@ -104,9 +142,9 @@ function SkillBar({ icon: Icon, label, value, color }: {
         <div className={`flex items-center gap-1.5 text-xs font-bold ${color}`}>
           <Icon className="w-3 h-3" />{label}
         </div>
-        <span className={`text-xs font-bold ${color}`}>{value}/10</span>
+        <span className={`text-xs font-bold ${color}`}>{value}%</span>
       </div>
-      <Progress value={value * 10} className="h-2" />
+      <Progress value={value} className="h-2" />
     </div>
   );
 }
@@ -135,18 +173,66 @@ function AvatarBar({ coach, isSpeaking, isThinking, className = "" }: {
   );
 }
 
+function TimerDisplay({ elapsedSeconds, durationMinutes }: { elapsedSeconds: number; durationMinutes: number }) {
+  const totalSeconds = durationMinutes * 60;
+  const pct = Math.min(100, (elapsedSeconds / totalSeconds) * 100);
+  const remaining = totalSeconds - elapsedSeconds;
+  const isEnding = remaining <= 120;
+  return (
+    <div className="flex items-center gap-3">
+      <div className={`flex items-center gap-1.5 text-sm font-bold ${isEnding ? "text-red-600" : "text-muted-foreground"}`}>
+        <Timer className="w-4 h-4" />
+        {formatTime(elapsedSeconds)} / {durationMinutes} min
+      </div>
+      <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+        <div
+          className={`h-full transition-all ${isEnding ? "bg-red-500" : "bg-primary"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RingChart({ value, label, color }: { value: number; label: string; color: string }) {
+  const radius = 32;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (value / 100) * circumference;
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div className="relative w-20 h-20">
+        <svg className="w-full h-full -rotate-90">
+          <circle cx="40" cy="40" r={radius} stroke="#e2e8f0" strokeWidth="6" fill="none" />
+          <circle
+            cx="40" cy="40" r={radius}
+            stroke={color}
+            strokeWidth="6"
+            fill="none"
+            strokeLinecap="round"
+            style={{ strokeDasharray: circumference, strokeDashoffset: offset, transition: "stroke-dashoffset 0.5s ease" }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-sm font-bold text-secondary">{value}%</span>
+        </div>
+      </div>
+      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function InterviewAce() {
   const { save } = useHistory();
-  const { track } = useProgress();
   const { text: streamText, isStreaming, stream, reset: resetStream } = useGeminiStream();
   const synth = useSpeechSynthesis();
   const speech = useSpeechRecognition("English");
   const { profile } = useStudentProfile();
+  const { user } = useAuth();
+  const { toast } = useToast();
 
   const mapExperience = (raw: string): string => {
-    // Check most specific patterns first to avoid substring collisions
     if (/5\+|senior|6|7|8|9|10/i.test(raw)) return "5+ years";
     if (/3|4|5\s*year/i.test(raw)) return "3-5 years";
     if (/1|2/i.test(raw)) return "1-2 years";
@@ -170,25 +256,48 @@ export default function InterviewAce() {
 
   const [type, setType] = useState(() => mapPreferredRoleToType(profile.preferredRole));
   const [experience, setExperience] = useState(() => mapExperience(profile.experienceLevel));
-  const [coach, setCoach] = useState<Coach>(INTERVIEW_COACHES[0]!);
+  const [coach, setCoach] = useState<Coach>(() => {
+    const preferred = profile.preferredInterviewer;
+    return INTERVIEW_COACHES.find(c => c.id === preferred) ?? INTERVIEW_COACHES[0]!;
+  });
+  const [duration, setDuration] = useState(15);
   const [phase, setPhase] = useState<"setup" | "interview" | "report">("setup");
   const [questions, setQuestions] = useState<QA[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answer, setAnswer] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [autoListenEnabled, setAutoListenEnabled] = useState(true);
-  const [autoAdvanceCount, setAutoAdvanceCount] = useState<number | null>(null);
   const [sessionStart, setSessionStart] = useState(() => Date.now());
-  const autoAdvanceRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [report, setReport] = useState<InterviewReport | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const autoSubmitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const answerRef = useRef("");
 
   const typeMeta = INTERVIEW_TYPES.find(t => t.value === type)!;
   const currentQ = questions[currentIdx];
-  const avgScore = questions.filter(q => q.score !== undefined).reduce((a, b, _, arr) =>
-    a + (b.score ?? 0) / arr.length, 0);
+  const answeredCount = questions.filter(q => q.feedback).length;
 
   useEffect(() => { answerRef.current = answer; }, [answer]);
+
+  // Live timer during interview
+  useEffect(() => {
+    if (phase !== "interview") return;
+    const id = setInterval(() => setElapsedSeconds(Math.floor((Date.now() - sessionStart) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [phase, sessionStart]);
+
+  // Auto-end when duration is up and current answer is processed
+  useEffect(() => {
+    if (phase !== "interview") return;
+    const durationSeconds = duration * 60;
+    if (elapsedSeconds >= durationSeconds && currentQ && !currentQ.feedback && !isStreaming && !isRecording) {
+      // No active answer being processed; end the interview
+      setPhase("report");
+    }
+  }, [elapsedSeconds, duration, phase, currentQ, isStreaming, isRecording]);
 
   const clearAutoSubmitTimer = useCallback(() => {
     if (autoSubmitRef.current) clearTimeout(autoSubmitRef.current);
@@ -204,52 +313,52 @@ export default function InterviewAce() {
 
   useEffect(() => { return () => clearAutoSubmitTimer(); }, [clearAutoSubmitTimer]);
 
-  useEffect(() => {
-    if (currentQ?.feedback && phase === "interview") {
-      setAutoAdvanceCount(5);
-      autoAdvanceRef.current = setInterval(() => {
-        setAutoAdvanceCount(prev => {
-          if (prev === null || prev <= 1) { clearInterval(autoAdvanceRef.current!); return null; }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      setAutoAdvanceCount(null);
-      if (autoAdvanceRef.current) clearInterval(autoAdvanceRef.current);
-    }
-    return () => { if (autoAdvanceRef.current) clearInterval(autoAdvanceRef.current); };
-  }, [currentQ?.feedback]);
+  const buildProfileSummary = useCallback(() => {
+    return [
+      `Name: ${profile.name || "Candidate"}`,
+      `Education: ${profile.degree || "Not specified"}`,
+      `Experience: ${experience}`,
+      `Career goal: ${profile.careerGoal || typeMeta.label}`,
+      `Preferred role: ${profile.preferredRole || typeMeta.label}`,
+      `Industry: ${profile.industryPreference || "Not specified"}`,
+      `Skills: ${(profile.skills || []).join(", ") || "Not specified"}`,
+      `English level: ${profile.englishLevel || "Beginner"}`,
+    ].join(" | ");
+  }, [profile, experience, typeMeta]);
 
-  useEffect(() => { if (autoAdvanceCount === 0) nextQuestion(); }, [autoAdvanceCount]);
+  const buildTranscript = useCallback((upToIndex: number) => {
+    return questions
+      .slice(0, upToIndex + 1)
+      .map((q, i) => `Q${i + 1}: ${q.question}\nA${i + 1}: ${q.answer ?? "(not answered)"}`)
+      .join("\n\n");
+  }, [questions]);
 
   const startSession = useCallback(async () => {
     resetStream();
-    const label = typeMeta.label;
     const full = await stream(
-      `Generate 8 natural interview questions for a ${label} role in India for a ${experience} candidate.
-Rules:
-- sound like a real ${coach.role}, not a robot
-- one question per line
-- mix opening, competency, scenario, and behavioral prompts
-- vary the tone slightly across the list
-- no numbering, no intro, no closing text
-- keep them conversational and specific
-- if appropriate, include a light follow-up cue inside the question itself`,
-      `You are ${coach.name}, ${coach.role}. Style: ${coach.style}. Keep the flow natural, polite, and human.`
+      `You are starting a ${duration}-minute mock interview for a ${typeMeta.label} role in India for a ${experience} candidate.
+
+Candidate profile: ${buildProfileSummary()}
+
+Generate ONLY the first opening question. Make it natural, warm, and specific to the role and candidate level. Do not include any intro, numbering, or explanation — just the question itself.`,
+      `You are ${coach.name}, ${coach.role}. ${coach.style}. Conduct a realistic Indian hiring interview. Be warm but professional. Ask one question at a time. Do not add filler text.`,
+      undefined,
+      { maxTokens: 250 }
     );
-    const lines = full.split("\n").map(l => l.trim()).filter(Boolean);
-    const parsed: QA[] = lines.slice(0, 8).map(l => ({ question: l.replace(/^\d+[.)]\s*/, "").trim() }));
-    if (parsed.length === 0) return;
-    clearAutoSubmitTimer();
-    setQuestions(parsed);
+    const question = full.replace(/^\s*["']?|["']?\s*$/g, "").trim();
+    if (!question) return;
+    setQuestions([{ question }]);
     setCurrentIdx(0);
     setAnswer("");
     setIsRecording(false);
     setAutoListenEnabled(true);
-    setSessionStart(Date.now()); // reset duration timer for each new session
+    setSessionStart(Date.now());
+    setElapsedSeconds(0);
+    setReport(null);
+    setSaved(false);
     setPhase("interview");
-    setTimeout(() => synth.speak(parsed[0]!.question, "English"), 300);
-  }, [type, experience, coach, stream, resetStream, synth, typeMeta, clearAutoSubmitTimer]);
+    setTimeout(() => synth.speak(question, "English"), 300);
+  }, [typeMeta, experience, duration, coach, stream, resetStream, synth, buildProfileSummary]);
 
   const toggleRecording = useCallback(() => {
     if (autoListenEnabled) {
@@ -270,14 +379,25 @@ Rules:
     setAnswer("");
     const label = typeMeta.label;
     resetStream();
-    const feedback = await stream(
-      `Q: "${currentQ.question}"
-Answer: "${userAnswer}"
-Role: ${label}, ${experience}. Interviewer: ${coach.name} (${coach.style}).
 
-Return EXACTLY these sections (no extras):
-Reaction: a brief natural interviewer reaction in one sentence.
-Score: X/10
+    const elapsedMin = Math.floor(elapsedSeconds / 60);
+    const remainingMin = duration - elapsedMin;
+    const shouldWrap = remainingMin <= 2;
+
+    const feedback = await stream(
+      `Interview context: ${label}, ${experience}, ${duration} minutes total. ${remainingMin} minutes remaining. ${shouldWrap ? "This is the final answer of the interview — provide feedback and then stop." : "Provide feedback and then ask exactly one natural follow-up question."}
+
+Candidate profile: ${buildProfileSummary()}
+
+Transcript so far:
+${buildTranscript(currentIdx - 1)}
+
+Current question: ${currentQ.question}
+Candidate's answer: "${userAnswer}"
+
+Return EXACTLY these sections (no extras, no markdown):
+Reaction: one warm sentence acknowledging the answer.
+Score: X/10 (overall answer quality)
 Communication: X/10
 Grammar: X/10
 Confidence: X/10
@@ -285,10 +405,12 @@ Technical: X/10
 Strengths: 2 short bullets
 Improvements: 2 short bullets
 Ideal Answer: 2-3 line model answer
-Follow-up: one realistic next question
+${shouldWrap ? "Final: END" : "Next Question: one adaptive follow-up question based on this answer"}
 
-Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic phrasing and generic praise.`,
-      `You are ${coach.name}, ${coach.role}. ${coach.style}. Give natural, practical feedback to an Indian candidate.`
+Keep it human, realistic, and encouraging. Use Indian hiring context.`,
+      `You are ${coach.name}, ${coach.role}. ${coach.style}. Give natural feedback and ask sharp, adaptive follow-up questions.`,
+      undefined,
+      { maxTokens: 700 }
     );
 
     const scoreMatch = feedback.match(/^score[:\s]+(\d+)/im) ?? feedback.match(/(\d+)\s*\/\s*10/i);
@@ -298,24 +420,27 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
     const confidence = parseSubScore(feedback, "Confidence");
     const technical = parseSubScore(feedback, "Technical");
 
+    const nextMatch = feedback.match(/Next Question:\s*(.+)/is);
+    const nextQuestion = nextMatch ? nextMatch[1].trim() : undefined;
+    const isFinal = /Final:\s*END/i.test(feedback) || shouldWrap || !nextQuestion;
+
     setQuestions(prev => prev.map((q, i) => i === currentIdx
       ? { ...q, answer: userAnswer, feedback, score, communication, grammar, confidence, technical }
       : q
     ));
 
-    // Track with sub-scores
-    track("Interview Ace", `${label} — Q${currentIdx + 1}`, score * 10, undefined, {
-      interviewType: type,
-      experienceLevel: experience,
-      communicationScore: communication !== undefined ? communication * 10 : undefined,
-      grammarScore: grammar !== undefined ? grammar * 10 : undefined,
-      confidenceScore: confidence !== undefined ? confidence * 10 : undefined,
-      technicalScore: technical !== undefined ? technical * 10 : undefined,
-    });
+    // Add next question if available and not final
+    if (nextQuestion && !isFinal) {
+      setQuestions(prev => [...prev, { question: nextQuestion }]);
+    }
 
-    const opening = feedback.split("\n")[0]?.replace(/^Reaction:\s*/i, "") ?? feedback.slice(0, 140);
+    const opening = feedback.split("\n")[0]?.replace(/^Reaction:\s*/i, "").trim() ?? feedback.slice(0, 140);
     void synth.speak(opening, "English");
-  }, [currentQ, currentIdx, type, experience, coach, stream, resetStream, synth, track, typeMeta, clearAutoSubmitTimer, speech]);
+
+    if (isFinal) {
+      setTimeout(() => setPhase("report"), 800);
+    }
+  }, [currentQ, currentIdx, type, experience, duration, elapsedSeconds, coach, stream, resetStream, synth, typeMeta, buildProfileSummary, buildTranscript, clearAutoSubmitTimer, speech]);
 
   const submitAnswer = useCallback(() => {
     if (!answer.trim()) return;
@@ -324,8 +449,6 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
 
   const nextQuestion = useCallback(() => {
     const nextIdx = currentIdx + 1;
-    setAutoAdvanceCount(null);
-    if (autoAdvanceRef.current) clearInterval(autoAdvanceRef.current);
     if (nextIdx >= questions.length) { setPhase("report"); return; }
     setCurrentIdx(nextIdx);
     setAnswer("");
@@ -336,7 +459,6 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
   }, [currentIdx, questions, resetStream, synth, clearAutoSubmitTimer]);
 
   const endEarly = useCallback(() => {
-    if (autoAdvanceRef.current) clearInterval(autoAdvanceRef.current);
     clearAutoSubmitTimer();
     speech.stop();
     setIsRecording(false);
@@ -364,23 +486,138 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
     return () => { clearAutoSubmitTimer(); };
   }, [phase, currentQ, autoListenEnabled, speech, isStreaming, synth.isSpeaking, isRecording, submitCurrentAnswer, clearAutoSubmitTimer]);
 
+  // Generate detailed report when entering report phase
+  useEffect(() => {
+    if (phase !== "report" || report || isGeneratingReport) return;
+    const answered = questions.filter(q => q.feedback);
+    if (answered.length === 0) return;
+    setIsGeneratingReport(true);
+
+    const generate = async () => {
+      const transcript = answered
+        .map((q, i) => `Q${i + 1}: ${q.question}\nA${i + 1}: ${q.answer ?? ""}\nFeedback: ${q.feedback ?? ""}`)
+        .join("\n\n");
+
+      const reportText = await stream(
+        `You are an expert interview evaluator. Review the full mock interview transcript and produce a detailed structured report.
+
+Role: ${typeMeta.label}
+Candidate experience: ${experience}
+Duration: ${formatTime(elapsedSeconds)}
+Transcript:
+${transcript}
+
+Return ONLY a valid JSON object with these exact keys:
+{
+  "overallScore": number 0-100,
+  "communicationScore": number 0-100,
+  "grammarScore": number 0-100,
+  "confidenceScore": number 0-100,
+  "technicalScore": number 0-100,
+  "roleFit": "short sentence",
+  "strengths": ["string", "string", "string"],
+  "improvements": ["string", "string", "string"],
+  "nextSteps": ["string", "string", "string"]
+}
+
+Be fair but honest. Use the full conversation to judge improvement and consistency.`,
+        `You are a senior hiring manager and interview coach. Evaluate an Indian candidate fairly.`,
+        undefined,
+        { maxTokens: 1200 }
+      );
+
+      const parsed = parseReportJson(reportText) ?? {
+        overallScore: Math.round(avgOf(answered.map(q => q.score)) * 10),
+        communicationScore: avgOf(answered.map(q => q.communication)) * 10,
+        grammarScore: avgOf(answered.map(q => q.grammar)) * 10,
+        confidenceScore: avgOf(answered.map(q => q.confidence)) * 10,
+        technicalScore: avgOf(answered.map(q => q.technical)) * 10,
+        roleFit: "Promising candidate with room to grow.",
+        strengths: ["Participated actively in the mock interview", "Provided structured answers", "Showed willingness to learn"],
+        improvements: ["Add more specific examples", "Tighten language clarity", "Work on concise delivery"],
+        nextSteps: ["Practice STAR method answers", "Record yourself and review", "Schedule another mock interview next week"],
+      };
+
+      setReport(parsed);
+      setIsGeneratingReport(false);
+      await saveSession(parsed, answered);
+    };
+
+    void generate();
+  }, [phase, report, isGeneratingReport, questions, typeMeta, experience, elapsedSeconds, stream, coach]);
+
+  const saveSession = useCallback(async (reportData: InterviewReport, answered: QA[]) => {
+    if (saved) return;
+    setIsSaving(true);
+    const durationSeconds = elapsedSeconds;
+    const payload = {
+      role: profile.preferredRole || typeMeta.label,
+      experienceLevel: experience,
+      interviewType: typeMeta.label,
+      questionsData: JSON.stringify(answered),
+      overallScore: reportData.overallScore,
+      durationSeconds,
+      feedbackJson: JSON.stringify(reportData),
+      communicationScore: reportData.communicationScore,
+      grammarScore: reportData.grammarScore,
+      confidenceScore: reportData.confidenceScore,
+      technicalScore: reportData.technicalScore,
+    };
+
+    // Save to localStorage as fallback / offline
+    try {
+      const key = "edubharat_interview_sessions";
+      const existing = JSON.parse(localStorage.getItem(key) || "[]") as Array<Record<string, unknown>>;
+      existing.unshift({ ...payload, savedAt: new Date().toISOString(), local: true });
+      localStorage.setItem(key, JSON.stringify(existing.slice(0, 50)));
+    } catch { /* ignore */ }
+
+    if (user) {
+      try {
+        const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+        const res = await fetch(`${base}/api/sessions/interview`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error("Server save failed");
+        toast({ title: "Report saved", description: "Your interview report is synced to your account." });
+      } catch {
+        toast({ title: "Saved locally", description: "Report saved on this device. Sign in to sync across devices.", variant: "destructive" });
+      }
+    }
+    setSaved(true);
+    setIsSaving(false);
+  }, [saved, elapsedSeconds, profile.preferredRole, typeMeta, experience, user, toast]);
+
   const downloadReport = useCallback(() => {
     const label = typeMeta.label;
     const answered = questions.filter(q => q.feedback);
-    const duration = Math.round((Date.now() - sessionStart) / 60000);
-    const subAvg = (key: keyof SubScores) => avgOf(answered.map(q => q[key]));
+    const durationMin = Math.round(elapsedSeconds / 60);
+    const avgScore = avgOf(answered.map(q => q.score)) * 10;
     const lines = [
       `EDUBHARAT — INTERVIEW ACE REPORT`,
       `Coach: ${coach.name} (${coach.role})`,
-      `Role: ${label} | Experience: ${experience}`,
-      `Date: ${new Date().toLocaleDateString("en-IN")} | Duration: ~${duration} min`,
-      `Overall Score: ${avgScore.toFixed(1)}/10 — ${grade(avgScore).label}`,
+      `Role: ${label} | Experience: ${experience} | Duration: ${durationMin} min`,
+      `Date: ${new Date().toLocaleDateString("en-IN")}`,
+      report ? `Overall Score: ${report.overallScore}% — ${grade(report.overallScore).label}` : `Overall Score: ${avgScore}% — ${grade(avgScore).label}`,
       ``,
       `SKILL BREAKDOWN`,
-      `Communication: ${subAvg("communication") || "N/A"}/10`,
-      `Grammar:       ${subAvg("grammar") || "N/A"}/10`,
-      `Confidence:    ${subAvg("confidence") || "N/A"}/10`,
-      `Technical:     ${subAvg("technical") || "N/A"}/10`,
+      report ? `Communication: ${report.communicationScore}%` : "Communication: N/A",
+      report ? `Grammar: ${report.grammarScore}%` : "Grammar: N/A",
+      report ? `Confidence: ${report.confidenceScore}%` : "Confidence: N/A",
+      report ? `Technical: ${report.technicalScore}%` : "Technical: N/A",
+      report ? `Role Fit: ${report.roleFit}` : "Role Fit: N/A",
+      ``,
+      `STRENGTHS`,
+      ...(report ? report.strengths : []),
+      ``,
+      `AREAS TO IMPROVE`,
+      ...(report ? report.improvements : []),
+      ``,
+      `NEXT STEPS`,
+      ...(report ? report.nextSteps : []),
       ``,
       `QUESTION-BY-QUESTION`,
       ...answered.map((q, i) => [
@@ -389,7 +626,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
         `Score: ${q.score ?? "N/A"}/10`,
         ...(q.communication !== undefined ? [`  Communication: ${q.communication}/10 | Grammar: ${q.grammar}/10 | Confidence: ${q.confidence}/10 | Technical: ${q.technical}/10`] : []),
         `Feedback:\n${q.feedback ?? ""}`,
-        ``,
+        "",
       ].join("\n")),
     ].join("\n");
     const blob = new Blob([lines], { type: "text/plain" });
@@ -399,7 +636,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
     a.download = `interview-${label.toLowerCase().replace(/ /g, "-")}-${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [questions, type, experience, avgScore, typeMeta, coach, sessionStart]);
+  }, [questions, type, experience, elapsedSeconds, typeMeta, coach, report]);
 
   // ── Setup ──────────────────────────────────────────────────────────────────
   if (phase === "setup") {
@@ -439,9 +676,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
                     <p className="font-bold text-sm text-secondary truncate">{c.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{c.role}</p>
                   </div>
-                  {coach.id === c.id && (
-                    <CheckCircle2 className="w-4 h-4 text-primary ml-auto shrink-0" />
-                  )}
+                  {coach.id === c.id && <CheckCircle2 className="w-4 h-4 text-primary ml-auto shrink-0" />}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-base">{c.icon}</span>
@@ -451,8 +686,6 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
               </button>
             ))}
           </div>
-
-          {/* Selected coach intro */}
           <div className="mt-4 p-4 rounded-2xl bg-muted/40 border text-sm text-secondary italic">
             "{coach.intro}"
           </div>
@@ -461,33 +694,50 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
         <Card className="max-w-lg mx-auto shadow-xl border-none">
           <CardHeader>
             <CardTitle>Configure Your Session</CardTitle>
-            <CardDescription>8 questions · Voice-powered · Instant AI feedback</CardDescription>
+            <CardDescription>Duration-based · Adaptive questions · Detailed AI report</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="space-y-2">
               <label className="text-sm font-semibold">Interview Type</label>
               <Select value={type} onValueChange={setType}>
                 <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {INTERVIEW_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.icon} {t.label}</SelectItem>)}
-                </SelectContent>
+                <SelectContent>{INTERVIEW_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.icon} {t.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold">Experience Level</label>
               <Select value={experience} onValueChange={setExperience}>
                 <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EXPERIENCE_LEVELS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                </SelectContent>
+                <SelectContent>{EXPERIENCE_LEVELS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">Interview Duration</label>
+              <div className="grid grid-cols-3 gap-2">
+                {DURATIONS.map(d => (
+                  <button
+                    key={d.value}
+                    onClick={() => setDuration(d.value)}
+                    className={`rounded-xl border-2 p-3 text-left transition-all ${
+                      duration === d.value
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-card hover:border-primary/40"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 text-sm font-bold text-secondary">
+                      <Clock className="w-4 h-4" />
+                      {d.label}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">{d.questions}</p>
+                  </button>
+                ))}
+              </div>
             </div>
           </CardContent>
           <CardFooter>
-            <Button className="w-full h-12 font-bold text-base shadow-md shadow-primary/20"
-              onClick={startSession} disabled={isStreaming}>
+            <Button className="w-full h-12 font-bold text-base shadow-md shadow-primary/20" onClick={startSession} disabled={isStreaming}>
               {isStreaming
-                ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Preparing questions...</>
+                ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Preparing session...</>
                 : <><PlayCircle className="w-5 h-5 mr-2" />Begin with {coach.name}</>}
             </Button>
           </CardFooter>
@@ -499,12 +749,10 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
   // ── Report ─────────────────────────────────────────────────────────────────
   if (phase === "report") {
     const answered = questions.filter(q => q.feedback);
-    const g = grade(avgScore);
-    const hasSubScores = answered.some(q => q.communication !== undefined);
-    const avgComm = avgOf(answered.map(q => q.communication));
-    const avgGram = avgOf(answered.map(q => q.grammar));
-    const avgConf = avgOf(answered.map(q => q.confidence));
-    const avgTech = avgOf(answered.map(q => q.technical));
+    const avgScore = avgOf(answered.map(q => q.score)) * 10;
+    const g = report ? grade(report.overallScore) : grade(avgScore);
+    const displayScore = report ? report.overallScore : avgScore;
+    const durationMin = Math.round(elapsedSeconds / 60);
 
     return (
       <div className="min-h-full overflow-y-auto container mx-auto px-4 py-8 max-w-4xl space-y-6">
@@ -515,31 +763,100 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
           </div>
           <h1 className="text-3xl font-display font-bold text-secondary mt-2 mb-3">Interview Complete!</h1>
           <div className={`inline-flex items-center gap-3 px-6 py-3 rounded-2xl border-2 ${g.bg}`}>
-            <span className={`text-5xl font-extrabold ${g.color}`}>{avgScore.toFixed(1)}</span>
+            <span className={`text-5xl font-extrabold ${g.color}`}>{displayScore}</span>
             <div className="text-left">
               <div className={`text-xs font-bold uppercase tracking-wider ${g.color}`}>Overall Score</div>
               <div className={`text-lg font-bold ${g.color}`}>{g.label}</div>
             </div>
           </div>
           <p className="text-muted-foreground mt-3 text-sm">
-            {typeMeta.icon} {typeMeta.label} · {experience} · {answered.length} questions answered · with {coach.name}
+            {typeMeta.icon} {typeMeta.label} · {experience} · {answered.length} questions · {durationMin} min · with {coach.name}
           </p>
         </div>
 
-        {/* Skill breakdown */}
-        {hasSubScores && (
+        {isGeneratingReport && !report && (
+          <div className="text-center py-8">
+            <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">Generating your detailed interview report...</p>
+          </div>
+        )}
+
+        {report && (
+          <>
+            {/* Skill rings */}
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-2 pt-5 px-5">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-primary" />
+                  Skill Breakdown
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-5 pb-5">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 justify-items-center">
+                  <RingChart value={report.overallScore} label="Overall" color="#f97316" />
+                  <RingChart value={report.communicationScore} label="Communication" color="#3b82f6" />
+                  <RingChart value={report.grammarScore} label="Grammar" color="#22c55e" />
+                  <RingChart value={report.confidenceScore} label="Confidence" color="#f97316" />
+                  <RingChart value={report.technicalScore} label="Technical" color="#a855f7" />
+                </div>
+                <p className="text-sm text-secondary mt-5 text-center">{report.roleFit}</p>
+              </CardContent>
+            </Card>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Card className="border shadow-sm">
+                <CardHeader className="pb-2 pt-5 px-5">
+                  <CardTitle className="text-base flex items-center gap-2 text-green-700">
+                    <Star className="w-4 h-4" />Strengths
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-5">
+                  <ul className="space-y-2">
+                    {report.strengths.map((s, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-secondary">
+                        <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />{s}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+              <Card className="border shadow-sm">
+                <CardHeader className="pb-2 pt-5 px-5">
+                  <CardTitle className="text-base flex items-center gap-2 text-orange-700">
+                    <AlertCircle className="w-4 h-4" />Improvement Areas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-5">
+                  <ul className="space-y-2">
+                    {report.improvements.map((s, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-secondary">
+                        <Pencil className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />{s}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-2 pt-5 px-5">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-primary" />Personalised Learning Plan
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-5 pb-5">
+                <ol className="space-y-2 list-decimal list-inside text-sm text-secondary">
+                  {report.nextSteps.map((s, i) => <li key={i}>{s}</li>)}
+                </ol>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {!report && !isGeneratingReport && (
           <Card className="border shadow-sm">
-            <CardHeader className="pb-2 pt-5 px-5">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Trophy className="w-4 h-4 text-primary" />
-                Skill Breakdown
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 pb-5 grid sm:grid-cols-2 gap-4">
-              <SkillBar icon={MessageCircle} label="Communication" value={avgComm} color="text-blue-600" />
-              <SkillBar icon={Pencil} label="Grammar & Language" value={avgGram} color="text-green-600" />
-              <SkillBar icon={Flame} label="Confidence & Tone" value={avgConf} color="text-orange-600" />
-              <SkillBar icon={Brain} label="Technical Accuracy" value={avgTech} color="text-purple-600" />
+            <CardContent className="p-5 text-center">
+              <p className="text-sm text-muted-foreground">Could not generate a detailed report. Per-question feedback is still available below.</p>
             </CardContent>
           </Card>
         )}
@@ -547,9 +864,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
         {/* Per-question review */}
         <div className="space-y-3">
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Question-by-Question</h2>
-          {answered.map((q, i) => (
-            <QuestionReview key={i} q={q} idx={i} coachName={coach.name} hasSubScores={hasSubScores} />
-          ))}
+          {answered.map((q, i) => <QuestionReview key={i} q={q} idx={i} coachName={coach.name} />)}
         </div>
 
         {/* Actions */}
@@ -557,22 +872,16 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
           <Button variant="outline" onClick={downloadReport}>
             <Download className="w-4 h-4 mr-2" />Download Report
           </Button>
-          <Button onClick={() => { setPhase("setup"); setQuestions([]); }}>
+          <Button onClick={() => { setPhase("setup"); setQuestions([]); setReport(null); setSaved(false); }}>
             <PlayCircle className="w-4 h-4 mr-2" />New Session
           </Button>
-          <Button variant="secondary"
-            onClick={() => save({
-              tool: "Interview Ace",
-              title: `${typeMeta.label} with ${coach.name} — ${avgScore.toFixed(1)}/10`,
-              content: answered.map((q, i) => [
-                `Q${i + 1}: ${q.question}`,
-                `Answer: ${q.answer}`,
-                `Score: ${q.score}/10`,
-                ...(q.communication !== undefined ? [`Communication: ${q.communication}/10 | Grammar: ${q.grammar}/10 | Confidence: ${q.confidence}/10 | Technical: ${q.technical}/10`] : []),
-                `Feedback: ${q.feedback}`,
-              ].join("\n")).join("\n\n"),
-            })}>
-            <Star className="w-4 h-4 mr-2" />Save to History
+          <Button
+            variant={saved ? "secondary" : "default"}
+            onClick={() => report && saveSession(report, answered)}
+            disabled={isSaving || saved || !report}
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : saved ? <CheckCircle2 className="w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+            {saved ? "Saved" : isSaving ? "Saving..." : "Save Report"}
           </Button>
         </div>
       </div>
@@ -595,26 +904,25 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
             imageSrc={coach.imageSrc}
           />
           <div className="w-full space-y-2 min-h-0 overflow-hidden flex flex-col">
+            <TimerDisplay elapsedSeconds={elapsedSeconds} durationMinutes={duration} />
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>Progress</span>
-              <span className="font-bold text-secondary">{currentIdx + 1}/{questions.length}</span>
+              <span className="font-bold text-secondary">{answeredCount} answered</span>
             </div>
-            <Progress value={((currentIdx + 1) / questions.length) * 100} className="h-2" />
+            <Progress value={Math.min(100, (elapsedSeconds / (duration * 60)) * 100)} className="h-2" />
             <div className="space-y-1 mt-2 overflow-y-auto pr-1">
               {questions.map((q, i) => (
                 <div key={i} className={`flex items-center justify-between text-xs px-2 py-1.5 rounded-lg ${i === currentIdx ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"}`}>
-                  <span>Q{i + 1}</span>
-                  {q.score !== undefined && <ScoreBadge score={q.score} />}
+                  <span className="truncate mr-2">Q{i + 1}</span>
+                  {q.score !== undefined && <ScoreBadge score={q.score * 10} />}
                   {i === currentIdx && !q.feedback && <span className="text-primary text-[10px] animate-pulse">●</span>}
                 </div>
               ))}
             </div>
           </div>
-          {currentIdx >= 3 && !currentQ?.feedback && (
-            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground w-full" onClick={endEarly}>
-              <LogOut className="w-3 h-3 mr-1" />End Interview
-            </Button>
-          )}
+          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground w-full" onClick={endEarly}>
+            <LogOut className="w-3 h-3 mr-1" />End Interview
+          </Button>
         </aside>
 
         {/* Main interview area */}
@@ -622,13 +930,11 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
           <AvatarBar coach={coach} isSpeaking={synth.isSpeaking} isThinking={isStreaming} className="lg:hidden mb-4" />
 
           <div className="flex items-center gap-3 mb-4 lg:hidden">
-            <Progress value={((currentIdx + 1) / questions.length) * 100} className="h-1.5 flex-1" />
-            <span className="text-xs text-muted-foreground shrink-0">Q{currentIdx + 1}/{questions.length}</span>
-            {currentIdx >= 3 && !currentQ?.feedback && (
-              <Button variant="ghost" size="sm" className="text-xs shrink-0 h-7 px-2" onClick={endEarly}>
-                <LogOut className="w-3 h-3 mr-1" />End
-              </Button>
-            )}
+            <Progress value={Math.min(100, (elapsedSeconds / (duration * 60)) * 100)} className="h-1.5 flex-1" />
+            <TimerDisplay elapsedSeconds={elapsedSeconds} durationMinutes={duration} />
+            <Button variant="ghost" size="sm" className="text-xs shrink-0 h-7 px-2" onClick={endEarly}>
+              <LogOut className="w-3 h-3 mr-1" />End
+            </Button>
           </div>
 
           <Card className="shadow-lg border-none min-h-[72vh] overflow-hidden">
@@ -657,18 +963,16 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
                   <div className="flex flex-wrap items-center gap-3">
                     <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${isRecording ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
                       {isRecording ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5" />}
-                      {speech.isSupported ? (isRecording ? "Mic on — speak freely" : "Mic paused") : "Microphone not supported in this browser"}
+                      {speech.isSupported ? (isRecording ? "Mic on — speak freely" : "Mic paused") : "Microphone not supported"}
                     </div>
                     {speech.interimTranscript && (
-                      <span className="text-xs text-muted-foreground italic flex-1 min-w-[220px] truncate">
-                        {speech.interimTranscript}
-                      </span>
+                      <span className="text-xs text-muted-foreground italic flex-1 min-w-[220px] truncate">{speech.interimTranscript}</span>
                     )}
                     <Button variant="outline" size="sm" onClick={toggleRecording} disabled={!speech.isSupported}>
                       {autoListenEnabled ? "Pause mic" : "Resume mic"}
                     </Button>
                     <Button className="font-bold" disabled={!answer.trim() || isStreaming} onClick={submitAnswer}>
-                      {isStreaming ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analysing...</> : "Submit Written Answer"}
+                      {isStreaming ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analysing...</> : "Submit Answer"}
                     </Button>
                   </div>
                   {isStreaming && streamText && (
@@ -686,8 +990,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
                   <div className="p-5 bg-green-50 border border-green-200 rounded-xl">
                     <div className="flex items-center gap-3 mb-3 flex-wrap">
                       <span className="text-xs font-bold text-green-700 uppercase tracking-wider">{coach.name}'s Feedback</span>
-                      {currentQ.score !== undefined && <ScoreBadge score={currentQ.score} />}
-                      {/* Mini sub-scores */}
+                      {currentQ.score !== undefined && <ScoreBadge score={currentQ.score * 10} />}
                       {currentQ.communication !== undefined && (
                         <div className="flex gap-1.5 ml-auto flex-wrap">
                           {[
@@ -705,12 +1008,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
                     </div>
                     <div className="text-sm text-green-950 whitespace-pre-wrap leading-relaxed">{currentQ.feedback}</div>
                   </div>
-                  <div className="flex items-center justify-between pt-1">
-                    <div className="text-sm text-muted-foreground">
-                      {autoAdvanceCount !== null && autoAdvanceCount > 0 && (
-                        <span>Next question in <span className="font-bold text-primary">{autoAdvanceCount}s</span>…</span>
-                      )}
-                    </div>
+                  <div className="flex items-center justify-end pt-1">
                     <Button onClick={nextQuestion} className="font-bold">
                       {currentIdx < questions.length - 1
                         ? <><ChevronRight className="w-4 h-4 mr-1" />Next Question</>
@@ -729,9 +1027,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
 
 // ─── Question review card ──────────────────────────────────────────────────────
 
-function QuestionReview({ q, idx, coachName, hasSubScores }: {
-  q: QA; idx: number; coachName: string; hasSubScores: boolean;
-}) {
+function QuestionReview({ q, idx, coachName }: { q: QA; idx: number; coachName: string }) {
   const [open, setOpen] = useState(idx === 0);
   return (
     <Card className="border shadow-sm overflow-hidden">
@@ -744,14 +1040,13 @@ function QuestionReview({ q, idx, coachName, hasSubScores }: {
           <span className="text-sm font-semibold text-secondary line-clamp-1">{q.question}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-2">
-          {q.score !== undefined && <ScoreBadge score={q.score} />}
+          {q.score !== undefined && <ScoreBadge score={q.score * 10} />}
           <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
         </div>
       </button>
       {open && (
         <div className="border-t px-4 pb-4 pt-3 space-y-3 bg-muted/20 animate-in slide-in-from-top-1">
-          {/* Sub-scores */}
-          {hasSubScores && q.communication !== undefined && (
+          {q.communication !== undefined && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
                 { label: "Communication", val: q.communication, icon: MessageCircle, color: "text-blue-600 bg-blue-50" },

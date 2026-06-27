@@ -18,7 +18,28 @@ function today() { return new Date().toISOString().slice(0, 10); }
 function loadLocal(): ProgressEntry[] {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as ProgressEntry[]) : [];
+    const progress = raw ? (JSON.parse(raw) as ProgressEntry[]) : [];
+
+    // Merge canonical interview sessions saved by Interview Ace for offline analytics
+    const interviewKey = "edubharat_interview_sessions";
+    const interviewRaw = localStorage.getItem(interviewKey);
+    const interviewSessions: Array<Record<string, unknown>> = interviewRaw ? JSON.parse(interviewRaw) : [];
+    const interviewEntries: ProgressEntry[] = interviewSessions.map((s, i) => ({
+      id: `local-interview-${i}`,
+      date: typeof s["savedAt"] === "string" ? (s["savedAt"] as string).slice(0, 10) : today(),
+      tool: "Interview Ace",
+      activity: typeof s["interviewType"] === "string" ? (s["interviewType"] as string) : (typeof s["role"] === "string" ? (s["role"] as string) : "Interview"),
+      score: typeof s["overallScore"] === "number" ? s["overallScore"] : undefined,
+      duration: typeof s["durationSeconds"] === "number" ? Math.round((s["durationSeconds"] as number) / 60) : undefined,
+    }));
+
+    // Filter out legacy per-question Interview Ace rows so trend charts reflect sessions
+    const cleanedProgress = progress.filter(p => !(p.tool === "Interview Ace" && / — Q\d+/.test(p.activity)));
+
+    const merged = [...interviewEntries, ...cleanedProgress]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 500);
+    return merged;
   } catch { return []; }
 }
 
@@ -135,7 +156,7 @@ export function useProgress() {
   // Derived metrics
   const interviewScores = entries
     .filter(e => e.tool === "Interview Ace" && e.score !== undefined)
-    .slice(0, 20)
+    .slice(0, 5)
     .reverse();
 
   const last7Days = Array.from({ length: 7 }, (_, i) => {
