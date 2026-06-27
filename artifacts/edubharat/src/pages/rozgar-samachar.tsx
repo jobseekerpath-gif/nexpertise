@@ -4,28 +4,24 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import { INDIAN_LANGUAGES } from "@/lib/constants";
 import { useHistory } from "@/lib/use-history";
 import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useRozgarLive, type RozgarLiveItem } from "@/lib/use-rozgar-live";
+import { useRozgarJobs } from "@/lib/use-rozgar-jobs";
 import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
-import { useStudentProfile } from "@/lib/use-student-profile";
+import { useStudentProfile, type StudentProfile } from "@/lib/use-student-profile";
 import { useSavedJobs, type SavedJob } from "@/lib/use-saved-jobs";
 import {
-  Newspaper,
-  Volume2,
-  Bookmark,
-  BookmarkCheck,
-  Loader2,
-  ChevronDown,
-  ChevronUp,
-  User,
-  Settings,
-  Search,
-  ExternalLink,
-  X,
-  Briefcase,
+  enrichJob, filterJobs, activeFilterCount, computeMatchScore, type EnrichedJob, type FilterState, DEFAULT_FILTERS, makeJobId,
+} from "@/lib/rozgar-utils";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Newspaper, Volume2, Bookmark, BookmarkCheck, Loader2, ChevronDown, ChevronUp,
+  User, Settings, Search, ExternalLink, X, Briefcase, SlidersHorizontal, MapPin,
+  Share2, EyeOff, Filter, Calendar, IndianRupee, Trash2,
 } from "lucide-react";
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -58,9 +54,9 @@ const VACANCY_SECTIONS = new Set<SectionId>([
   "top_jobs", "govt_jobs", "private_jobs", "internships", "scholarships",
 ]);
 
-type FilterId = "all" | "jobs" | "career" | "news" | "english" | "inspire";
+type FilterTabId = "all" | "jobs" | "career" | "news" | "english" | "inspire";
 
-const SECTION_CATEGORIES: Record<FilterId, SectionId[]> = {
+const SECTION_CATEGORIES: Record<FilterTabId, SectionId[]> = {
   all: [],
   jobs: ["top_jobs", "govt_jobs", "private_jobs", "internships", "scholarships"],
   career: ["skill_trends", "career_growth", "salary_insights", "govt_schemes"],
@@ -69,7 +65,7 @@ const SECTION_CATEGORIES: Record<FilterId, SectionId[]> = {
   inspire: ["success_stories", "motivation", "jokes"],
 };
 
-const FILTER_TABS: { id: FilterId; label: string; emoji: string }[] = [
+const FILTER_TABS: { id: FilterTabId; label: string; emoji: string }[] = [
   { id: "all", label: "All", emoji: "🗂️" },
   { id: "jobs", label: "Jobs", emoji: "💼" },
   { id: "career", label: "Career", emoji: "🚀" },
@@ -91,16 +87,42 @@ const INDUSTRIES = [
   "Media / Entertainment", "Agriculture", "Construction",
 ];
 
-// FNV-1a 32-bit hash over the FULL URL — collision-resistant for practical job list sizes
-function makeJobId(link: string): string {
-  let h = 2166136261;
-  for (let i = 0; i < link.length; i++) {
-    h ^= link.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-    h >>>= 0; // keep unsigned 32-bit
-  }
-  return `r${h.toString(36)}`;
-}
+const WORK_MODES = [
+  { value: "all", label: "Any" },
+  { value: "remote", label: "Remote" },
+  { value: "hybrid", label: "Hybrid" },
+  { value: "onsite", label: "On-site" },
+];
+
+const SECTORS = [
+  { value: "all", label: "Any" },
+  { value: "government", label: "Government" },
+  { value: "private", label: "Private" },
+  { value: "startup", label: "Startup" },
+];
+
+const EXPERIENCES = [
+  { value: "all", label: "Any" },
+  { value: "fresher", label: "Fresher" },
+  { value: "junior", label: "Junior (1-3 yrs)" },
+  { value: "mid", label: "Mid (3-6 yrs)" },
+  { value: "senior", label: "Senior (6+ yrs)" },
+];
+
+const EMPLOYMENT_TYPES = [
+  { value: "all", label: "Any" },
+  { value: "full-time", label: "Full-time" },
+  { value: "part-time", label: "Part-time" },
+  { value: "internship", label: "Internship" },
+  { value: "contract", label: "Contract" },
+];
+
+const SORT_OPTIONS = [
+  { value: "relevance", label: "Relevance" },
+  { value: "newest", label: "Newest" },
+  { value: "salary", label: "Salary (high to low)" },
+  { value: "match", label: "Match Score" },
+];
 
 // ─── Profile type ─────────────────────────────────────────────────────────────
 
@@ -130,25 +152,54 @@ const DEFAULT_PROFILE: Profile = {
   industry: "Technology",
 };
 
+function scoreColor(score: number): string {
+  if (score >= 80) return "bg-emerald-100 text-emerald-700 border-emerald-200";
+  if (score >= 60) return "bg-blue-100 text-blue-700 border-blue-200";
+  if (score >= 40) return "bg-yellow-100 text-yellow-700 border-yellow-200";
+  return "bg-slate-100 text-slate-600 border-slate-200";
+}
+
 // ─── Job card component ────────────────────────────────────────────────────────
 
 function JobCard({
   item,
   onSave,
   onUnsave,
+  onShare,
+  onHide,
   saved,
+  matchScore,
 }: {
-  item: RozgarLiveItem;
+  item: EnrichedJob;
   onSave: (item: RozgarLiveItem) => void;
   onUnsave: (jobId: string) => void;
+  onShare: (item: EnrichedJob) => void;
+  onHide: (jobId: string) => void;
   saved: boolean;
+  matchScore?: number;
 }) {
-  const jobId = makeJobId(item.link);
   return (
-    <div className="block rounded-xl border bg-muted/30 hover:bg-muted/60 transition-colors">
-      <div className="p-3">
-        <div className="flex items-start justify-between gap-2">
+    <div className="block rounded-xl border bg-card hover:border-primary/30 transition-colors">
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              {matchScore !== undefined && (
+                <Badge variant="outline" className={`rounded-full text-[10px] font-bold ${scoreColor(matchScore)}`}>
+                  {matchScore}% Match
+                </Badge>
+              )}
+              {item.workMode !== "unknown" && (
+                <Badge variant="secondary" className="rounded-full text-[10px]">
+                  {item.workMode === "remote" ? "Remote" : item.workMode === "hybrid" ? "Hybrid" : "On-site"}
+                </Badge>
+              )}
+              {item.sector !== "unknown" && (
+                <Badge variant="secondary" className="rounded-full text-[10px]">
+                  {item.sector === "government" ? "Govt" : item.sector === "startup" ? "Startup" : "Private"}
+                </Badge>
+              )}
+            </div>
             <p className="font-semibold text-secondary line-clamp-2 text-sm">{item.title}</p>
             <p className="text-xs text-muted-foreground mt-1">
               {item.company ? `${item.company} • ` : ""}
@@ -157,41 +208,65 @@ function JobCard({
               {item.publishedAt ? ` • ${new Date(item.publishedAt).toLocaleDateString("en-IN")}` : ""}
             </p>
           </div>
-          <Badge variant="outline" className="rounded-full shrink-0 text-[10px]">
-            {item.remote ? "Remote" : item.kind === "vacancy" ? "Open" : item.kind === "news" ? "News" : "Update"}
-          </Badge>
         </div>
-        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-          {item.jobType && <span className="rounded-full bg-background px-2 py-0.5 border">{item.jobType}</span>}
-          {item.salary && <span className="rounded-full bg-background px-2 py-0.5 border text-green-700">{item.salary}</span>}
+        <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
+          {item.jobType && <span className="rounded-full bg-muted px-2 py-0.5 border">{item.jobType}</span>}
+          {item.salary && <span className="rounded-full bg-green-50 text-green-700 px-2 py-0.5 border">{item.salary}</span>}
+          {item.experience !== "unknown" && (
+            <span className="rounded-full bg-muted px-2 py-0.5 border capitalize">{item.experience}</span>
+          )}
+          {item.employmentType !== "unknown" && (
+            <span className="rounded-full bg-muted px-2 py-0.5 border capitalize">{item.employmentType}</span>
+          )}
+          {item.requiredSkills.slice(0, 3).map(skill => (
+            <span key={skill} className="rounded-full bg-primary/10 text-primary px-2 py-0.5 border">{skill}</span>
+          ))}
         </div>
-        {item.summary && <p className="mt-2 text-xs text-secondary line-clamp-2">{item.summary}</p>}
+        {item.summary && <p className="mt-3 text-xs text-secondary line-clamp-2">{item.summary}</p>}
       </div>
       {/* Actions */}
-      <div className="flex items-center gap-1 px-3 pb-3">
-        <a
-          href={item.link}
-          target="_blank"
-          rel="noreferrer"
-          className="flex-1"
-        >
-          <Button variant="default" size="sm" className="w-full text-xs font-semibold h-8 rounded-lg">
+      <div className="flex items-center gap-2 px-4 pb-4">
+        <a href={item.link} target="_blank" rel="noreferrer" className="flex-1">
+          <Button variant="default" size="sm" className="w-full text-xs font-semibold h-9 rounded-lg">
             <ExternalLink className="w-3.5 h-3.5 mr-1.5" />Apply / View
           </Button>
         </a>
         <Button
           variant={saved ? "secondary" : "outline"}
           size="sm"
-          className={`h-8 w-8 p-0 rounded-lg shrink-0 ${saved ? "text-primary" : ""}`}
+          className={`h-9 w-9 p-0 rounded-lg shrink-0 ${saved ? "text-primary" : ""}`}
           onClick={e => {
             e.preventDefault();
-            if (saved) onUnsave(jobId);
+            if (saved) onUnsave(item.jobId);
             else onSave(item);
           }}
           title={saved ? "Unsave job" : "Save job"}
-          aria-label={saved ? "Unsave job" : "Save job"}
         >
-          {saved ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
+          {saved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 w-9 p-0 rounded-lg shrink-0"
+          onClick={e => {
+            e.preventDefault();
+            onShare(item);
+          }}
+          title="Share job"
+        >
+          <Share2 className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 w-9 p-0 rounded-lg shrink-0"
+          onClick={e => {
+            e.preventDefault();
+            onHide(item.jobId);
+          }}
+          title="Hide job"
+        >
+          <EyeOff className="w-4 h-4" />
         </Button>
       </div>
     </div>
@@ -203,17 +278,25 @@ function JobCard({
 function SectionCard({
   section,
   profile,
+  studentProfile,
   synth,
   onSaveJob,
   onUnsaveJob,
+  onShare,
+  onHide,
   isJobSaved,
+  hiddenJobIds,
 }: {
   section: typeof SECTIONS[number];
   profile: Profile;
+  studentProfile: StudentProfile;
   synth: ReturnType<typeof useSpeechSynthesis>;
   onSaveJob: (item: RozgarLiveItem) => void;
   onUnsaveJob: (jobId: string) => void;
+  onShare: (job: EnrichedJob) => void;
+  onHide: (jobId: string) => void;
   isJobSaved: (jobId: string) => boolean;
+  hiddenJobIds: Set<string>;
 }) {
   const { save } = useHistory();
   const { track } = useProgress();
@@ -228,7 +311,6 @@ function SectionCard({
       setExpanded(e => !e);
       return;
     }
-
     setExpanded(true);
     setLoaded(true);
     track("Rozgar Samachar", section.id);
@@ -290,6 +372,8 @@ function SectionCard({
     );
   }, [loadLive, loaded, isStreaming, profile, section, stream, track]);
 
+  const visibleLiveItems = (liveData?.items ?? []).filter(item => !hiddenJobIds.has(makeJobId(item.link)));
+
   return (
     <Card className="overflow-hidden border shadow-sm rounded-2xl">
       <button
@@ -302,16 +386,11 @@ function SectionCard({
           <span className="font-semibold text-secondary truncate">{section.title}</span>
           {isStreaming && <Loader2 className="w-4 h-4 animate-spin text-primary ml-2 shrink-0" />}
         </div>
-        {expanded ? (
-          <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
-        )}
+        {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
       </button>
-
-      {expanded && (VACANCY_SECTIONS.has(section.id) ? (liveLoading || Boolean(liveData?.items?.length) || Boolean(liveError)) : (text || isStreaming || liveLoading || Boolean(liveData?.items?.length) || Boolean(liveError))) && (
+      {expanded && (VACANCY_SECTIONS.has(section.id) ? (liveLoading || visibleLiveItems.length > 0 || Boolean(liveError)) : (text || isStreaming || liveLoading || visibleLiveItems.length > 0 || Boolean(liveError))) && (
         <CardContent className="px-5 pb-5 pt-0 border-t bg-muted/20">
-          {(liveLoading || liveData?.items?.length || liveError) && (
+          {(liveLoading || visibleLiveItems.length > 0 || liveError) && (
             <div className="mb-4 rounded-2xl border bg-background p-4">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <p className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Live source</p>
@@ -319,29 +398,31 @@ function SectionCard({
               </div>
               {liveError && <p className="text-xs text-muted-foreground mb-3">{liveError}</p>}
               <div className="space-y-3">
-                {(liveData?.items ?? []).slice(0, 4).map((item: RozgarLiveItem) => (
-                  <JobCard
-                    key={`${item.title}-${item.link}`}
-                    item={item}
-                    onSave={onSaveJob}
-                    onUnsave={onUnsaveJob}
-                    saved={isJobSaved(makeJobId(item.link))}
-                  />
-                ))}
+                {visibleLiveItems.slice(0, 4).map(item => {
+                  const enriched = enrichJob(item);
+                  return (
+                    <JobCard
+                      key={`${item.title}-${item.link}`}
+                      item={enriched}
+                      onSave={onSaveJob}
+                      onUnsave={onUnsaveJob}
+                      onShare={onShare}
+                      onHide={onHide}
+                      saved={isJobSaved(makeJobId(item.link))}
+                      matchScore={computeMatchScore(enriched, studentProfile)}
+                    />
+                  );
+                })}
               </div>
             </div>
           )}
           {!VACANCY_SECTIONS.has(section.id) && (
             <div className="flex justify-end gap-2 py-2 flex-wrap">
-              <Button variant="ghost" size="sm" className="text-xs"
-                onClick={() => synth.speak(text, profile.language)}>
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => synth.speak(text, profile.language)}>
                 <Volume2 className="w-3.5 h-3.5 mr-1" />Listen
               </Button>
               <Button variant="ghost" size="sm" className="text-xs" disabled={saved}
-                onClick={() => {
-                  save({ tool: "Rozgar Samachar", title: `${section.title} — ${new Date().toLocaleDateString("en-IN")}`, content: text });
-                  setSaved(true);
-                }}>
+                onClick={() => { save({ tool: "Rozgar Samachar", title: `${section.title} — ${new Date().toLocaleDateString("en-IN")}`, content: text }); setSaved(true); }}>
                 {saved
                   ? <><BookmarkCheck className="w-3.5 h-3.5 mr-1 text-primary" />Saved</>
                   : <><Bookmark className="w-3.5 h-3.5 mr-1" />Save</>}
@@ -369,11 +450,10 @@ function SavedJobCard({ job, onUnsave }: { job: SavedJob; onUnsave: (id: string)
         </div>
         <button
           onClick={() => onUnsave(job.jobId)}
-          className="shrink-0 p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
+          className="shrink-0 p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
           title="Remove"
-          aria-label="Remove saved job"
         >
-          <X className="w-3.5 h-3.5" />
+          <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
       <div className="flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
@@ -394,10 +474,86 @@ function SavedJobCard({ job, onUnsave }: { job: SavedJob; onUnsave: (id: string)
   );
 }
 
+// ─── Filter panel content ──────────────────────────────────────────────────────
+
+function FilterPanel({
+  filters,
+  onChange,
+  onClear,
+}: {
+  filters: FilterState;
+  onChange: (patch: Partial<FilterState>) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-secondary flex items-center gap-2"><Filter className="w-4 h-4" />Filters</h3>
+        <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={onClear}>Clear all</Button>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-bold text-muted-foreground">City / State</label>
+        <div className="relative">
+          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="e.g. Bangalore, Delhi"
+            value={filters.city}
+            onChange={e => onChange({ city: e.target.value })}
+            className="pl-9 h-10 text-sm rounded-xl"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-bold text-muted-foreground">Work Mode</label>
+        <Select value={filters.workMode} onValueChange={v => onChange({ workMode: v as FilterState["workMode"] })}>
+          <SelectTrigger className="h-10 text-sm rounded-xl"><SelectValue /></SelectTrigger>
+          <SelectContent>{WORK_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-bold text-muted-foreground">Sector</label>
+        <Select value={filters.sector} onValueChange={v => onChange({ sector: v as FilterState["sector"] })}>
+          <SelectTrigger className="h-10 text-sm rounded-xl"><SelectValue /></SelectTrigger>
+          <SelectContent>{SECTORS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-bold text-muted-foreground">Experience</label>
+        <Select value={filters.experience} onValueChange={v => onChange({ experience: v as FilterState["experience"] })}>
+          <SelectTrigger className="h-10 text-sm rounded-xl"><SelectValue /></SelectTrigger>
+          <SelectContent>{EXPERIENCES.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-bold text-muted-foreground">Employment Type</label>
+        <Select value={filters.employmentType} onValueChange={v => onChange({ employmentType: v as FilterState["employmentType"] })}>
+          <SelectTrigger className="h-10 text-sm rounded-xl"><SelectValue /></SelectTrigger>
+          <SelectContent>{EMPLOYMENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-bold text-muted-foreground">Salary range (LPA)</label>
+        <div className="flex items-center gap-2">
+          <Input type="number" min={0} placeholder="Min" value={filters.salaryMin} onChange={e => onChange({ salaryMin: e.target.value })} className="h-10 text-sm rounded-xl" />
+          <span className="text-muted-foreground">-</span>
+          <Input type="number" min={0} placeholder="Max" value={filters.salaryMax} onChange={e => onChange({ salaryMax: e.target.value })} className="h-10 text-sm rounded-xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function RozgarSamachar() {
   const synth = useSpeechSynthesis();
+  const { toast } = useToast();
   const { profile: studentProfile } = useStudentProfile();
   const { saveJob, unsaveJob, isJobSaved, savedJobs, count: savedCount } = useSavedJobs();
 
@@ -419,10 +575,15 @@ export default function RozgarSamachar() {
   const [profile, setProfile] = useState<Profile>(derivedDefault);
   const [showProfile, setShowProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<keyof typeof SECTION_CATEGORIES>("all");
-  const [activeTab, setActiveTab] = useState<"feed" | "saved">("feed");
+  const [activeTab, setActiveTab] = useState<"jobs" | "feed" | "saved">("jobs");
+  const [activeFilterTab, setActiveFilterTab] = useState<FilterTabId>("all");
+  const [hiddenJobIds, setHiddenJobIds] = useState<Set<string>>(new Set());
 
+  const [filters, setFilters] = useState<FilterState>(() => readFiltersFromUrl());
+  const [searchInput, setSearchInput] = useState(filters.keyword);
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const { data: allJobs, isLoading: jobsLoading, error: jobsError, reload } = useRozgarJobs(studentProfile);
   const {
     data: livePulse,
     isLoading: livePulseLoading,
@@ -430,9 +591,7 @@ export default function RozgarSamachar() {
     load: loadLivePulse,
   } = useRozgarLive();
 
-  const today = new Date().toLocaleDateString("en-IN", {
-    weekday: "long", year: "numeric", month: "long", day: "numeric",
-  });
+  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
   useEffect(() => {
     setProfile(p => ({
@@ -449,51 +608,113 @@ export default function RozgarSamachar() {
       location: studentProfile.preferredCity || studentProfile.location || p.location,
       industry: studentProfile.industryPreference || p.industry,
     }));
-  }, [
-    studentProfile.name, studentProfile.degree, studentProfile.experienceLevel,
-    studentProfile.skills, studentProfile.expectedSalary, studentProfile.careerGoal,
-    studentProfile.preferredLanguage, studentProfile.preferredCity,
-    studentProfile.location, studentProfile.industryPreference,
-  ]);
-
-  const update = (key: keyof Profile) => (val: string) => setProfile(p => ({ ...p, [key]: val }));
+  }, [studentProfile]);
 
   useEffect(() => { void loadLivePulse("top_jobs", profile); }, [loadLivePulse]);
 
-  // Filter + search the section list
-  const visibleSections = useMemo(() => {
-    let sections = [...SECTIONS];
-    if (activeFilter !== "all") {
-      const allowed = new Set(SECTION_CATEGORIES[activeFilter]);
-      sections = sections.filter(s => allowed.has(s.id));
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      sections = sections.filter(s =>
-        s.title.toLowerCase().includes(q) || s.id.replace(/_/g, " ").includes(q)
-      );
-    }
-    return sections;
-  }, [activeFilter, searchQuery]);
+  // Sync filters to URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filters.keyword) params.set("q", filters.keyword);
+    if (filters.city) params.set("city", filters.city);
+    if (filters.workMode !== "all") params.set("workMode", filters.workMode);
+    if (filters.sector !== "all") params.set("sector", filters.sector);
+    if (filters.experience !== "all") params.set("experience", filters.experience);
+    if (filters.employmentType !== "all") params.set("type", filters.employmentType);
+    if (filters.salaryMin) params.set("salaryMin", filters.salaryMin);
+    if (filters.salaryMax) params.set("salaryMax", filters.salaryMax);
+    if (filters.sort !== "relevance") params.set("sort", filters.sort);
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [filters]);
 
-  // Save a live item as a job
+  // Debounce keyword input into filters
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters(f => f.keyword === searchInput ? f : { ...f, keyword: searchInput });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const enrichedJobs = useMemo(() => allJobs.map(enrichJob), [allJobs]);
+  const filteredJobs = useMemo(() => filterJobs(enrichedJobs, filters, studentProfile).filter(j => !hiddenJobIds.has(j.jobId)), [enrichedJobs, filters, studentProfile, hiddenJobIds]);
+
+  const visibleLivePulse = useMemo(() => (livePulse?.items ?? []).filter(item => !hiddenJobIds.has(makeJobId(item.link))).slice(0, 3), [livePulse, hiddenJobIds]);
+
+  const update = (key: keyof Profile) => (val: string) => setProfile(p => ({ ...p, [key]: val }));
+
   const handleSaveJob = useCallback((item: RozgarLiveItem) => {
     const jobId = makeJobId(item.link);
-    void saveJob({
-      jobId,
-      title: item.title,
-      company: item.company,
-      link: item.link,
-      location: item.location,
-      salary: item.salary,
-      jobType: item.jobType,
-      source: item.source,
-    });
+    void saveJob({ jobId, title: item.title, company: item.company, link: item.link, location: item.location, salary: item.salary, jobType: item.jobType, source: item.source });
   }, [saveJob]);
 
   const handleUnsaveJob = useCallback((jobId: string) => {
     void unsaveJob(jobId);
   }, [unsaveJob]);
+
+  const handleShare = useCallback((job: EnrichedJob) => {
+    const url = job.link;
+    navigator.clipboard.writeText(url).then(() => {
+      toast({ title: "Link copied!", description: "You can share this job with friends." });
+    }).catch(() => {
+      toast({ title: "Could not copy", description: "Please copy the link manually.", variant: "destructive" });
+    });
+  }, [toast]);
+
+  const handleHide = useCallback((jobId: string) => {
+    setHiddenJobIds(prev => new Set([...prev, jobId]));
+    toast({ title: "Hidden", description: "This job will not appear in your current session." });
+  }, [toast]);
+
+  const clearFilters = useCallback(() => {
+    setFilters(DEFAULT_FILTERS);
+    setSearchInput("");
+  }, []);
+
+  const updateFilters = useCallback((patch: Partial<FilterState>) => {
+    setFilters(f => ({ ...f, ...patch }));
+  }, []);
+
+  const activeCount = activeFilterCount(filters);
+
+  // Filter panel for desktop sidebar
+  const filterSidebar = (
+    <div className="hidden lg:block">
+      <Card className="rounded-2xl border shadow-sm sticky top-20">
+        <CardContent className="p-5">
+          <FilterPanel filters={filters} onChange={updateFilters} onClear={clearFilters} />
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  // Mobile filter sheet
+  const filterSheet = (
+    <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
+      <SheetTrigger asChild>
+        <Button variant="outline" size="sm" className="lg:hidden rounded-full font-semibold">
+          <SlidersHorizontal className="w-4 h-4 mr-1.5" />
+          Filters
+          {activeCount > 0 && (
+            <span className="ml-1.5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+              {activeCount}
+            </span>
+          )}
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto">
+        <SheetHeader className="text-left">
+          <SheetTitle>Filter jobs</SheetTitle>
+        </SheetHeader>
+        <div className="py-4">
+          <FilterPanel filters={filters} onChange={updateFilters} onClear={clearFilters} />
+        </div>
+        <SheetClose asChild>
+          <Button className="w-full mt-2">Show {filteredJobs.length} jobs</Button>
+        </SheetClose>
+      </SheetContent>
+    </Sheet>
+  );
 
   return (
     <div className="min-h-full overflow-y-auto container mx-auto px-4 py-4 max-w-[1400px]">
@@ -514,22 +735,16 @@ export default function RozgarSamachar() {
               <User className="w-3 h-3 mr-1" />
               {profile.name || "Anonymous"} • {profile.location}
             </Badge>
-            {profileSaved && (
-              <Badge variant="outline" className="text-xs rounded-full px-3 py-1">Profile ready</Badge>
-            )}
-            <Button
-              variant="outline" size="sm"
-              onClick={() => setShowProfile(!showProfile)}
-              className="font-semibold rounded-full shadow-sm"
-            >
+            {profileSaved && <Badge variant="outline" className="text-xs rounded-full px-3 py-1">Profile ready</Badge>}
+            <Button variant="outline" size="sm" onClick={() => setShowProfile(!showProfile)} className="font-semibold rounded-full shadow-sm">
               <Settings className="w-4 h-4 mr-1.5" />Profile
             </Button>
           </div>
         </div>
 
-        <div className="grid flex-1 min-h-0 gap-5 lg:grid-cols-[360px_1fr]">
+        <div className="grid flex-1 min-h-0 gap-5 lg:grid-cols-[280px_1fr]">
           {/* ── Left rail ── */}
-          <aside className="flex min-h-0 flex-col gap-4 overflow-hidden">
+          <aside className="flex min-h-0 flex-col gap-4">
             {showProfile ? (
               <Card className="border-primary/20 bg-primary/3 shadow-sm rounded-2xl">
                 <CardHeader className="pb-3">
@@ -549,27 +764,21 @@ export default function RozgarSamachar() {
                       <label className="text-xs font-bold">Education</label>
                       <Select value={profile.education} onValueChange={update("education")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {["10th Pass", "12th Pass", "Diploma", "Graduate", "Post-Graduate", "PhD"].map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                        </SelectContent>
+                        <SelectContent>{["10th Pass", "12th Pass", "Diploma", "Graduate", "Post-Graduate", "PhD"].map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold">Current Status</label>
                       <Select value={profile.status} onValueChange={update("status")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {["Student", "Fresher", "Working Professional", "Career Switcher", "Entrepreneur"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        </SelectContent>
+                        <SelectContent>{["Student", "Fresher", "Working Professional", "Career Switcher", "Entrepreneur"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold">Career Goal</label>
                       <Select value={profile.careerGoal} onValueChange={update("careerGoal")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {["Government Job", "Private Job", "IT / Tech", "Startup", "Business", "Higher Education", "Foreign Opportunity"].map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                        </SelectContent>
+                        <SelectContent>{["Government Job", "Private Job", "IT / Tech", "Startup", "Business", "Higher Education", "Foreign Opportunity"].map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
@@ -580,46 +789,34 @@ export default function RozgarSamachar() {
                       <label className="text-xs font-bold">Salary Expectation</label>
                       <Select value={profile.salaryExpectation} onValueChange={update("salaryExpectation")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {["₹2-3 LPA", "₹3-5 LPA", "₹5-8 LPA", "₹8-12 LPA", "₹12+ LPA"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        </SelectContent>
+                        <SelectContent>{["₹2-3 LPA", "₹3-5 LPA", "₹5-8 LPA", "₹8-12 LPA", "₹12+ LPA"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold">Language</label>
                       <Select value={profile.language} onValueChange={update("language")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="English">English</SelectItem>
-                          {INDIAN_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                        </SelectContent>
+                        <SelectContent><SelectItem value="English">English</SelectItem>{INDIAN_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold">State / Location</label>
                       <Select value={profile.location} onValueChange={update("location")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {INDIAN_STATES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        </SelectContent>
+                        <SelectContent>{INDIAN_STATES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
                       <label className="text-xs font-bold">Industry</label>
                       <Select value={profile.industry} onValueChange={update("industry")}>
                         <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {INDUSTRIES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}
-                        </SelectContent>
+                        <SelectContent>{INDUSTRIES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                   </div>
                   <div className="flex justify-end gap-3 pt-2">
                     <Button variant="outline" size="sm" onClick={() => setShowProfile(false)} className="rounded-full">Close</Button>
-                    <Button size="sm" className="font-bold rounded-full"
-                      onClick={() => { setProfileSaved(true); setShowProfile(false); void loadLivePulse("top_jobs", profile); }}>
-                      Save Profile
-                    </Button>
+                    <Button size="sm" className="font-bold rounded-full" onClick={() => { setProfileSaved(true); setShowProfile(false); void reload(); }}>Save Profile</Button>
                   </div>
                 </CardContent>
               </Card>
@@ -634,25 +831,16 @@ export default function RozgarSamachar() {
                     <Badge variant="outline" className="rounded-full px-3 py-1 shrink-0">{profile.careerGoal}</Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-xl bg-muted/40 p-3">
-                      <p className="text-muted-foreground">Location</p>
-                      <p className="font-semibold text-secondary">{profile.location}</p>
-                    </div>
-                    <div className="rounded-xl bg-muted/40 p-3">
-                      <p className="text-muted-foreground">Salary</p>
-                      <p className="font-semibold text-secondary">{profile.salaryExpectation}</p>
-                    </div>
-                    <div className="rounded-xl bg-muted/40 p-3 col-span-2">
-                      <p className="text-muted-foreground">Skills</p>
-                      <p className="font-semibold text-secondary truncate">{profile.skills}</p>
-                    </div>
+                    <div className="rounded-xl bg-muted/40 p-3"><p className="text-muted-foreground">Location</p><p className="font-semibold text-secondary">{profile.location}</p></div>
+                    <div className="rounded-xl bg-muted/40 p-3"><p className="text-muted-foreground">Salary</p><p className="font-semibold text-secondary">{profile.salaryExpectation}</p></div>
+                    <div className="rounded-xl bg-muted/40 p-3 col-span-2"><p className="text-muted-foreground">Skills</p><p className="font-semibold text-secondary truncate">{profile.skills}</p></div>
                   </div>
-                  <Button variant="outline" className="w-full rounded-full font-semibold" onClick={() => setShowProfile(true)}>
-                    Refine profile for better results
-                  </Button>
+                  <Button variant="outline" className="w-full rounded-full font-semibold" onClick={() => setShowProfile(true)}>Refine profile for better results</Button>
                 </CardContent>
               </Card>
             )}
+
+            {filterSidebar}
 
             <div className="rounded-2xl border bg-muted/30 p-4 shadow-sm">
               <p className="text-xs uppercase tracking-wider text-muted-foreground font-bold">Today's brief</p>
@@ -661,12 +849,8 @@ export default function RozgarSamachar() {
               </p>
             </div>
 
-            {/* Saved jobs quick stats */}
             {savedCount > 0 && (
-              <button
-                onClick={() => setActiveTab("saved")}
-                className="rounded-2xl border bg-primary/5 border-primary/20 p-4 shadow-sm w-full text-left hover:bg-primary/10 transition-colors"
-              >
+              <button onClick={() => setActiveTab("saved")} className="rounded-2xl border bg-primary/5 border-primary/20 p-4 shadow-sm w-full text-left hover:bg-primary/10 transition-colors">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-wider text-primary font-bold">Saved Jobs</p>
@@ -682,46 +866,38 @@ export default function RozgarSamachar() {
           {/* ── Right feed ── */}
           <section className="flex min-h-0 flex-col rounded-2xl border shadow-sm overflow-hidden bg-card">
             {/* Tab bar */}
-            <div className="flex items-center gap-1 px-4 pt-4 border-b">
-              <button
-                onClick={() => setActiveTab("feed")}
-                className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${
-                  activeTab === "feed"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-secondary"
-                }`}
-              >
-                Career Feed
-              </button>
-              <button
-                onClick={() => setActiveTab("saved")}
-                className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors flex items-center gap-1.5 ${
-                  activeTab === "saved"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-secondary"
-                }`}
-              >
-                <Bookmark className="w-3.5 h-3.5" />
-                Saved Jobs
-                {savedCount > 0 && (
-                  <span className="bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                    {savedCount > 9 ? "9+" : savedCount}
-                  </span>
-                )}
-              </button>
+            <div className="flex items-center gap-1 px-4 pt-4 border-b overflow-x-auto">
+              {[
+                { id: "jobs", label: "Jobs Feed", icon: Search },
+                { id: "feed", label: "Career Feed", icon: Newspaper },
+                { id: "saved", label: "Saved Jobs", icon: Bookmark },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                  className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+                    activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-secondary"
+                  }`}
+                >
+                  <tab.icon className="w-3.5 h-3.5" />
+                  {tab.label}
+                  {tab.id === "saved" && savedCount > 0 && (
+                    <span className="bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                      {savedCount > 9 ? "9+" : savedCount}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
 
-            {activeTab === "saved" ? (
-              /* ── Saved Jobs view ── */
+            {activeTab === "saved" && (
               <div className="flex-1 overflow-y-auto p-5">
                 {savedJobs.length === 0 ? (
                   <div className="text-center py-16">
                     <Bookmark className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
                     <p className="font-semibold text-secondary">No saved jobs yet</p>
                     <p className="text-sm text-muted-foreground mt-1">Click the bookmark icon on any job card to save it here.</p>
-                    <Button variant="outline" className="mt-4" onClick={() => setActiveTab("feed")}>
-                      Browse Jobs
-                    </Button>
+                    <Button variant="outline" className="mt-4" onClick={() => setActiveTab("jobs")}>Browse Jobs</Button>
                   </div>
                 ) : (
                   <>
@@ -729,144 +905,229 @@ export default function RozgarSamachar() {
                       <p className="text-sm font-semibold text-secondary">{savedCount} saved job{savedCount !== 1 ? "s" : ""}</p>
                       <Badge variant="secondary" className="text-xs">Tap to apply</Badge>
                     </div>
-                    <div className="space-y-3">
-                      {savedJobs.map(job => (
-                        <SavedJobCard key={job.id} job={job} onUnsave={handleUnsaveJob} />
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {savedJobs.map(job => <SavedJobCard key={job.id} job={job} onUnsave={handleUnsaveJob} />)}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {activeTab === "jobs" && (
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                {/* Search + controls */}
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by role, company, skills, or keyword"
+                        value={searchInput}
+                        onChange={e => setSearchInput(e.target.value)}
+                        className="pl-9 h-11 text-sm rounded-xl"
+                      />
+                    </div>
+                    {filterSheet}
+                    <Select value={filters.sort} onValueChange={v => updateFilters({ sort: v as FilterState["sort"] })}>
+                      <SelectTrigger className="h-11 text-sm rounded-xl w-full sm:w-[180px]">
+                        <span className="text-muted-foreground mr-1">Sort:</span>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>{SORT_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Active filter chips */}
+                  {activeCount > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {filters.city && (
+                        <Badge variant="secondary" className="rounded-full text-xs pl-2 pr-1 py-1 gap-1">
+                          <MapPin className="w-3 h-3" />{filters.city}
+                          <button onClick={() => updateFilters({ city: "" })} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+                        </Badge>
+                      )}
+                      {filters.workMode !== "all" && (
+                        <Badge variant="secondary" className="rounded-full text-xs pl-2 pr-1 py-1 gap-1">
+                          {filters.workMode}
+                          <button onClick={() => updateFilters({ workMode: "all" })} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+                        </Badge>
+                      )}
+                      {filters.sector !== "all" && (
+                        <Badge variant="secondary" className="rounded-full text-xs pl-2 pr-1 py-1 gap-1">
+                          {filters.sector}
+                          <button onClick={() => updateFilters({ sector: "all" })} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+                        </Badge>
+                      )}
+                      {filters.experience !== "all" && (
+                        <Badge variant="secondary" className="rounded-full text-xs pl-2 pr-1 py-1 gap-1">
+                          {filters.experience}
+                          <button onClick={() => updateFilters({ experience: "all" })} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+                        </Badge>
+                      )}
+                      {filters.employmentType !== "all" && (
+                        <Badge variant="secondary" className="rounded-full text-xs pl-2 pr-1 py-1 gap-1">
+                          {filters.employmentType}
+                          <button onClick={() => updateFilters({ employmentType: "all" })} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+                        </Badge>
+                      )}
+                      {(filters.salaryMin || filters.salaryMax) && (
+                        <Badge variant="secondary" className="rounded-full text-xs pl-2 pr-1 py-1 gap-1">
+                          <IndianRupee className="w-3 h-3" />{filters.salaryMin || "0"}-{filters.salaryMax || "∞"} LPA
+                          <button onClick={() => updateFilters({ salaryMin: "", salaryMax: "" })} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+                        </Badge>
+                      )}
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={clearFilters}>Clear all</Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Live pulse */}
+                <div className="rounded-2xl border bg-background p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground font-bold">Live hiring pulse</p>
+                      <p className="text-sm text-secondary">Fresh items from job APIs and official career pages.</p>
+                    </div>
+                    {livePulseLoading && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => loadLivePulse("top_jobs", profile)}>
+                      <Calendar className="w-3.5 h-3.5 mr-1" />Refresh
+                    </Button>
+                  </div>
+                  {livePulseError && <p className="text-xs text-muted-foreground">{livePulseError}</p>}
+                  {visibleLivePulse.length > 0 ? (
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {visibleLivePulse.map(item => (
+                        <JobCard
+                          key={makeJobId(item.link)}
+                          item={enrichJob(item)}
+                          onSave={handleSaveJob}
+                          onUnsave={handleUnsaveJob}
+                          onShare={handleShare}
+                          onHide={handleHide}
+                          saved={isJobSaved(makeJobId(item.link))}
+                          matchScore={computeMatchScore(enrichJob(item), studentProfile)}
+                        />
+                      ))}
+                    </div>
+                  ) : !livePulseLoading && !livePulseError ? (
+                    <p className="text-xs text-muted-foreground">No live items yet — try refreshing.</p>
+                  ) : null}
+                </div>
+
+                {/* Job results */}
+                {jobsLoading ? (
+                  <div className="text-center py-16">
+                    <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground">Finding the best jobs for your profile…</p>
+                  </div>
+                ) : jobsError ? (
+                  <div className="text-center py-16">
+                    <p className="font-semibold text-secondary">Could not load jobs</p>
+                    <p className="text-sm text-muted-foreground mt-1">{jobsError}</p>
+                    <Button variant="outline" className="mt-4" onClick={() => reload()}>Try again</Button>
+                  </div>
+                ) : filteredJobs.length === 0 ? (
+                  <div className="text-center py-16">
+                    <Search className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                    <p className="font-semibold text-secondary">No jobs match your filters</p>
+                    <p className="text-sm text-muted-foreground mt-1">Try clearing filters or widening your search.</p>
+                    <Button variant="outline" className="mt-4" onClick={clearFilters}>Clear filters</Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">{filteredJobs.length} job{filteredJobs.length !== 1 ? "s" : ""} found</p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {filteredJobs.map(job => (
+                        <JobCard
+                          key={job.jobId}
+                          item={job}
+                          onSave={handleSaveJob}
+                          onUnsave={handleUnsaveJob}
+                          onShare={handleShare}
+                          onHide={handleHide}
+                          saved={isJobSaved(job.jobId)}
+                          matchScore={job.matchScore}
+                        />
                       ))}
                     </div>
                   </>
                 )}
               </div>
-            ) : (
-              /* ── Career Feed view ── */
-              <>
-                <div className="px-5 py-4 border-b bg-gradient-to-r from-purple-50 to-background">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-muted-foreground font-bold">Live Career Feed</p>
-                      <p className="font-display text-xl font-bold text-secondary">Commercial, useful, candidate-focused updates</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      {FILTER_TABS.slice(1, 4).map(f => (
-                        <Badge key={f.id} variant="secondary" className="rounded-full">{f.label}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+            )}
 
-                <div className="px-5 py-4 border-b bg-primary/5">
-                  <p className="text-sm text-secondary">
-                    <span className="font-bold text-primary">Namaskar, {profile.name || "friend"}!</span>{" "}
-                    Your personalized career newspaper is ready. Click any section below for India-focused market snapshots tailored to your profile.
-                  </p>
-                </div>
-
-                {/* Live pulse */}
-                <div className="px-5 py-4 border-b bg-background">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-muted-foreground font-bold">Live hiring pulse</p>
-                      <p className="text-sm text-secondary">Fresh items from Google News and official career pages.</p>
-                    </div>
-                    {livePulseLoading && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
-                  </div>
-                  {livePulseError && <p className="mt-2 text-xs text-muted-foreground">{livePulseError}</p>}
-                  {!livePulseLoading && livePulse?.items?.length ? (
-                    <div className="mt-3 grid gap-2 md:grid-cols-3">
-                      {livePulse.items.slice(0, 3).map((item) => (
-                        <JobCard
-                          key={`${item.title}-${item.link}`}
-                          item={item}
-                          onSave={handleSaveJob}
-                          onUnsave={handleUnsaveJob}
-                          saved={isJobSaved(makeJobId(item.link))}
-                        />
-                      ))}
-                    </div>
-                  ) : !livePulseLoading && !livePulseError ? (
-                    <p className="mt-2 text-xs text-muted-foreground">No live items yet — try saving your profile or opening a section.</p>
-                  ) : null}
-                </div>
-
-                {/* Search + filter */}
-                <div className="px-5 py-3 border-b bg-background space-y-3">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search sections (e.g. government, salary, interview...)"
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
-                      className="pl-9 h-10 text-sm rounded-xl"
-                    />
-                    {searchQuery && (
-                      <button
-                        onClick={() => setSearchQuery("")}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-secondary"
-                        aria-label="Clear search"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {activeTab === "feed" && (
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                <div className="px-1 py-2">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-bold mb-2">Filter sections</p>
+                  <div className="flex flex-wrap gap-2">
                     {FILTER_TABS.map(f => (
                       <button
                         key={f.id}
-                        onClick={() => setActiveFilter(f.id as keyof typeof SECTION_CATEGORIES)}
-                        className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                          activeFilter === f.id
-                            ? "bg-primary text-primary-foreground shadow-sm"
-                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                        onClick={() => setActiveFilterTab(f.id)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                          activeFilterTab === f.id
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-muted-foreground hover:bg-muted"
                         }`}
                       >
-                        <span>{f.emoji}</span>{f.label}
-                        {f.id !== "all" && (
-                          <span className="text-[10px] opacity-70">
-                            {SECTION_CATEGORIES[f.id]?.length}
-                          </span>
-                        )}
+                        {f.emoji} {f.label}
                       </button>
                     ))}
                   </div>
-                  {(searchQuery || activeFilter !== "all") && (
-                    <p className="text-xs text-muted-foreground">
-                      Showing {visibleSections.length} of {SECTIONS.length} sections
-                      {searchQuery && ` matching "${searchQuery}"`}
-                      {activeFilter !== "all" && ` in ${FILTER_TABS.find(f => f.id === activeFilter)?.label}`}
-                    </p>
-                  )}
                 </div>
-
-                {/* Sections list */}
-                <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
-                  {visibleSections.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Search className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-                      <p className="font-semibold text-secondary">No sections found</p>
-                      <p className="text-sm text-muted-foreground mt-1">Try a different keyword or filter</p>
-                      <Button variant="ghost" className="mt-3 text-sm" onClick={() => { setSearchQuery(""); setActiveFilter("all"); }}>
-                        Clear filters
-                      </Button>
-                    </div>
-                  ) : (
-                    visibleSections.map(section => (
-                      <SectionCard
-                        key={section.id}
-                        section={section}
-                        profile={profile}
-                        synth={synth}
-                        onSaveJob={handleSaveJob}
-                        onUnsaveJob={handleUnsaveJob}
-                        isJobSaved={isJobSaved}
-                      />
-                    ))
-                  )}
+                <div className="space-y-4">
+                  {SECTIONS.filter(s => activeFilterTab === "all" || SECTION_CATEGORIES[activeFilterTab].includes(s.id)).map(section => (
+                    <SectionCard
+                      key={section.id}
+                      section={section}
+                      profile={profile}
+                      studentProfile={studentProfile}
+                      synth={synth}
+                      onSaveJob={handleSaveJob}
+                      onUnsaveJob={handleUnsaveJob}
+                      onShare={handleShare}
+                      onHide={handleHide}
+                      isJobSaved={isJobSaved}
+                      hiddenJobIds={hiddenJobIds}
+                    />
+                  ))}
                 </div>
-              </>
+              </div>
             )}
           </section>
         </div>
       </div>
     </div>
   );
+}
+
+// ─── URL helpers ──────────────────────────────────────────────────────────────
+
+const VALID_WORK_MODES = new Set<FilterState["workMode"]>(["all", "remote", "hybrid", "onsite"]);
+const VALID_SECTORS = new Set<FilterState["sector"]>(["all", "government", "private", "startup"]);
+const VALID_EXPERIENCES = new Set<FilterState["experience"]>(["all", "fresher", "junior", "mid", "senior"]);
+const VALID_EMPLOYMENT_TYPES = new Set<FilterState["employmentType"]>(["all", "full-time", "part-time", "internship", "contract"]);
+const VALID_SORTS = new Set<FilterState["sort"]>(["relevance", "newest", "salary", "match"]);
+
+function readFiltersFromUrl(): FilterState {
+  if (typeof window === "undefined") return DEFAULT_FILTERS;
+  const params = new URLSearchParams(window.location.search);
+  const workMode = (params.get("workMode") as FilterState["workMode"]) || "all";
+  const sector = (params.get("sector") as FilterState["sector"]) || "all";
+  const experience = (params.get("experience") as FilterState["experience"]) || "all";
+  const employmentType = (params.get("type") as FilterState["employmentType"]) || "all";
+  const sort = (params.get("sort") as FilterState["sort"]) || "relevance";
+  return {
+    keyword: params.get("q") || "",
+    city: params.get("city") || "",
+    workMode: VALID_WORK_MODES.has(workMode) ? workMode : "all",
+    sector: VALID_SECTORS.has(sector) ? sector : "all",
+    experience: VALID_EXPERIENCES.has(experience) ? experience : "all",
+    employmentType: VALID_EMPLOYMENT_TYPES.has(employmentType) ? employmentType : "all",
+    salaryMin: params.get("salaryMin") || "",
+    salaryMax: params.get("salaryMax") || "",
+    sort: VALID_SORTS.has(sort) ? sort : "relevance",
+  };
 }
