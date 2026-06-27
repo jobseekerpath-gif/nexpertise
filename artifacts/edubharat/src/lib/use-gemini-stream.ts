@@ -51,7 +51,8 @@ export function useGeminiStream() {
         const response = await fetch(`${base}/api/ai/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, system, maxTokens: options?.maxTokens }),
+          // Clamp default token budget for all UI streams to keep Claude/Gemini calls cheap
+          body: JSON.stringify({ prompt, system, maxTokens: options?.maxTokens ?? 1200 }),
           credentials: "include",
         });
 

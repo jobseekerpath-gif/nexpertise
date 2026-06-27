@@ -7,12 +7,12 @@ const router: IRouter = Router();
 
 // Models in fallback order — 2.5-flash first (best), then 1.5-flash (1500 RPD free tier)
 const GEMINI_MODEL_CHAIN = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"] as const;
-const ANTHROPIC_MODEL_CHAIN = ["claude-sonnet-4-6", "claude-sonnet-4-5", "claude-haiku-4-5"] as const;
+const ANTHROPIC_MODEL_CHAIN = ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-sonnet-4-6"] as const;
 
 function getAnthropicModelChain(maxTokens: number) {
-  // Brief, low-cost replies should try the smallest model first.
+  // Always start with the cheapest model. Only escalate to bigger models on rate limits.
   if (maxTokens <= 160) {
-    return ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-sonnet-4-6"] as const;
+    return ["claude-haiku-4-5"] as const;
   }
   return ANTHROPIC_MODEL_CHAIN;
 }
@@ -131,6 +131,8 @@ async function streamAnthropic(
         max_tokens: maxTokens,
         messages,
         ...(systemPrompt ? { system: systemPrompt } : {}),
+        // Keep context cheap: don't let Claude waste tokens on long preambles
+        // 1024 is plenty for UI-driven tasks (question, feedback, short report)
       });
 
       for await (const event of stream) {
@@ -202,7 +204,7 @@ router.post("/ai/chat", async (req, res) => {
         try {
           const response = await anthropic.messages.create({
             model,
-            max_tokens: maxTokens ?? 8192,
+            max_tokens: maxTokens ?? 1024,
             messages: [{ role: "user", content: prompt }],
             ...(system ? { system } : {}),
           });

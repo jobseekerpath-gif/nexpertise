@@ -99,30 +99,25 @@ function styleMatch(v: SpeechSynthesisVoice, style?: string): boolean {
 }
 
 function pickEnglishVoice(voices: SpeechSynthesisVoice[], gender: VoiceGender, style?: string): SpeechSynthesisVoice | undefined {
-  // Priority 1 — known Indian English voice matching gender
-  const indian = voices.filter(v => v.lang.startsWith("en-IN"));
-  const withStyle = indian.filter(v => styleMatch(v, style) && genderMatch(v, gender));
-  if (withStyle.length > 0) return withStyle[0];
+  const allEnglish = voices.filter(v => v.lang.startsWith("en-"));
+  if (allEnglish.length === 0) return undefined;
 
-  const withGender = indian.filter(v => genderMatch(v, gender));
-  if (withGender.length > 0) return withGender[0];
-  if (indian.length > 0) return indian[0];
+  // Priority 1 — native-sounding English (en-GB / en-US / en-AU) with gender/style match.
+  // These voices are usually higher quality and less "synthetic accent" than en-IN voices.
+  const nativeEnglish = allEnglish.filter(v => /^en-(GB|US|AU|CA|IE|NZ|ZA)$/i.test(v.lang));
+  const nativeStyle = nativeEnglish.filter(v => styleMatch(v, style) && genderMatch(v, gender));
+  if (nativeStyle.length > 0) return nativeStyle[0];
+  const nativeGender = nativeEnglish.filter(v => genderMatch(v, gender));
+  if (nativeGender.length > 0) return nativeGender[0];
+  if (nativeEnglish.length > 0) return nativeEnglish[0];
 
   // Priority 2 — any English voice matching gender keyword
-  const allEnglish = voices.filter(v => v.lang.startsWith("en-"));
   const genMatch = allEnglish.filter(v => styleMatch(v, style) && genderMatch(v, gender));
   if (genMatch.length > 0) return genMatch[0];
-
   const genFallback = allEnglish.filter(v => genderMatch(v, gender));
   if (genFallback.length > 0) return genFallback[0];
 
-  // Priority 3 — any Indian-keyword English voice
-  const named = allEnglish.find(v =>
-    INDIAN_ENGLISH_KEYWORDS.some(k => v.name.toLowerCase().includes(k))
-  );
-  if (named) return named;
-
-  // Priority 4 — en-GB as closer to Indian cadence than en-US
+  // Priority 3 — en-GB as closest to a neutral Indian cadence without being synthetic
   return allEnglish.find(v => v.lang === "en-GB") ?? allEnglish[0];
 }
 
@@ -218,12 +213,16 @@ export function useSpeechSynthesis() {
 
       // Per-language natural rate & pitch
       const langPitch = LANG_PITCH[language] ?? LANG_PITCH["English"]!;
-      utterance.rate  = options.rate  ?? (LANG_RATE[language] ?? 0.86);
-      utterance.pitch = options.pitch ?? (
+      const baseRate = options.rate ?? (LANG_RATE[language] ?? 0.86);
+      const basePitch = options.pitch ?? (
         genderOpt === "male"   ? langPitch.male :
         genderOpt === "female" ? langPitch.female :
         (langPitch.male + langPitch.female) / 2
       );
+
+      // For English, use a slightly slower, lower pitch delivery to sound more natural and less robotic
+      utterance.rate = language === "English" ? Math.min(baseRate, 0.82) : baseRate;
+      utterance.pitch = language === "English" ? Math.min(basePitch, 1.0) : basePitch;
       utterance.volume = 1.0;
 
       utterance.onstart = () => setIsSpeaking(true);
