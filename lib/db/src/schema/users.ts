@@ -32,6 +32,11 @@ export const usersTable = pgTable("users", {
   voiceStyle: text("voice_style").default("priya"),
   preferredInterviewer: text("preferred_interviewer").default("raj"),
   preferredTutor: text("preferred_tutor").default("priya"),
+  // Resume Intelligence
+  resumeText: text("resume_text"),
+  resumeFileName: text("resume_file_name"),
+  resumeAnalysis: text("resume_analysis"), // JSON object stored as text
+  experienceSummary: text("experience_summary"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

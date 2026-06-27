@@ -47,7 +47,7 @@ router.put("/profile", requireAuth, async (req: Request, res: Response) => {
     skills, careerGoal, preferredRole, industryPreference,
     preferredCity, location, expectedSalary, experienceLevel,
     englishLevel, preferredLanguage, voiceGender, voiceStyle,
-    preferredInterviewer, preferredTutor,
+    preferredInterviewer, preferredTutor, resumeAnalysis, experienceSummary,
   } = req.body as Record<string, unknown>;
 
   const patch: Partial<typeof usersTable.$inferInsert> = {};
@@ -73,6 +73,9 @@ router.put("/profile", requireAuth, async (req: Request, res: Response) => {
   if (typeof voiceStyle === "string") patch.voiceStyle = voiceStyle;
   if (typeof preferredInterviewer === "string") patch.preferredInterviewer = preferredInterviewer;
   if (typeof preferredTutor === "string") patch.preferredTutor = preferredTutor;
+  if (typeof resumeAnalysis === "string") patch.resumeAnalysis = resumeAnalysis;
+  if (typeof resumeAnalysis === "object" && resumeAnalysis !== null) patch.resumeAnalysis = JSON.stringify(resumeAnalysis);
+  if (typeof experienceSummary === "string") patch.experienceSummary = experienceSummary;
 
   patch.updatedAt = new Date();
 

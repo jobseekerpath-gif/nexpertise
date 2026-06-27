@@ -26,6 +26,19 @@ export type StudentProfile = {
   englishLevel: string;
   preferredInterviewer: string;
   preferredTutor: string;
+  resumeFileName: string;
+  resumeAnalysis: ResumeAnalysis | null;
+  experienceSummary: string;
+};
+
+export type ResumeAnalysis = {
+  overallScore?: number;
+  skills?: string[];
+  education?: string[];
+  experienceSummary?: string;
+  atsGaps?: string[];
+  formattingIssues?: string[];
+  suggestions?: string[];
 };
 
 const STORAGE_KEY = "edubharat_student_profile";
@@ -52,6 +65,9 @@ const DEFAULT_PROFILE: StudentProfile = {
   englishLevel: "Beginner",
   preferredInterviewer: "raj",
   preferredTutor: "priya",
+  resumeFileName: "",
+  resumeAnalysis: null,
+  experienceSummary: "",
 };
 
 function normalizeVoiceStyle(style: unknown, gender: VoiceGender): VoiceStyle {
@@ -88,7 +104,18 @@ function fromApiUser(user: Record<string, unknown>): StudentProfile {
     englishLevel: typeof user["englishLevel"] === "string" ? user["englishLevel"] : "Beginner",
     preferredInterviewer: typeof user["preferredInterviewer"] === "string" ? user["preferredInterviewer"] : "raj",
     preferredTutor: typeof user["preferredTutor"] === "string" ? user["preferredTutor"] : "priya",
+    resumeFileName: typeof user["resumeFileName"] === "string" ? user["resumeFileName"] : "",
+    resumeAnalysis: parseResumeAnalysis(user["resumeAnalysis"]),
+    experienceSummary: typeof user["experienceSummary"] === "string" ? user["experienceSummary"] : "",
   };
+}
+
+function parseResumeAnalysis(value: unknown): ResumeAnalysis | null {
+  if (typeof value === "string") {
+    try { return JSON.parse(value) as ResumeAnalysis; } catch { return null; }
+  }
+  if (value && typeof value === "object") return value as ResumeAnalysis;
+  return null;
 }
 
 function loadLocalProfile(): StudentProfile {
@@ -121,6 +148,9 @@ function loadLocalProfile(): StudentProfile {
       englishLevel: typeof parsed["englishLevel"] === "string" ? parsed["englishLevel"] : "Beginner",
       preferredInterviewer: typeof parsed["preferredInterviewer"] === "string" ? parsed["preferredInterviewer"] : "raj",
       preferredTutor: typeof parsed["preferredTutor"] === "string" ? parsed["preferredTutor"] : "priya",
+      resumeFileName: typeof parsed["resumeFileName"] === "string" ? parsed["resumeFileName"] : "",
+      resumeAnalysis: parseResumeAnalysis(parsed["resumeAnalysis"]),
+      experienceSummary: typeof parsed["experienceSummary"] === "string" ? parsed["experienceSummary"] : "",
     };
   } catch {
     return DEFAULT_PROFILE;
