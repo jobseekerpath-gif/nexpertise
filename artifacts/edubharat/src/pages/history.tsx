@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, BookmarkX, Clock, BookOpen, Mic, Newspaper } from "lucide-react";
+import { PageMeta } from "@/components/page-meta";
 
 const TOOL_META: Record<string, { icon: typeof BookOpen; color: string }> = {
   "English Guru": { icon: BookOpen, color: "bg-orange-100 text-orange-600" },
@@ -23,6 +24,15 @@ function formatDate(iso: string) {
 }
 
 export default function History() {
+  return (
+    <>
+      <PageMeta title="Saved Items" description="Your saved English Guru lessons, interview feedback, and Rozgar Samachar articles in one place." />
+      <HistoryContent />
+    </>
+  );
+}
+
+function HistoryContent() {
   const { items, remove, clear } = useHistory();
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -102,7 +112,7 @@ export default function History() {
                       variant="ghost"
                       size="icon"
                       onClick={() => remove(item.id)}
-                      className="w-8 h-8 text-muted-foreground hover:text-destructive"
+                      className="min-h-11 min-w-11 text-muted-foreground hover:text-destructive"
                       data-testid={`button-delete-${item.id}`}
                     >
                       <Trash2 className="w-4 h-4" />

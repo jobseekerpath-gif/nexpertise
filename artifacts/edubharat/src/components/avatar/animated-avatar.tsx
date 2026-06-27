@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import type { AvatarProps } from "./types";
 
-const sizeClasses: Record<string, { container: string; image: string; ring: string }> = {
-  sm: { container: "w-16 h-16", image: "w-16 h-16", ring: "w-16 h-16" },
-  md: { container: "w-24 h-24", image: "w-24 h-24", ring: "w-24 h-24" },
-  lg: { container: "w-32 h-32", image: "w-32 h-32", ring: "w-32 h-32" },
-  xl: { container: "w-40 h-40", image: "w-40 h-40", ring: "w-40 h-40" },
+const sizeClasses: Record<string, { container: string; image: string; ring: string; px: number }> = {
+  sm: { container: "w-16 h-16", image: "w-16 h-16", ring: "w-16 h-16", px: 64 },
+  md: { container: "w-24 h-24", image: "w-24 h-24", ring: "w-24 h-24", px: 96 },
+  lg: { container: "w-32 h-32", image: "w-32 h-32", ring: "w-32 h-32", px: 128 },
+  xl: { container: "w-40 h-40", image: "w-40 h-40", ring: "w-40 h-40", px: 160 },
 };
 
 /** Fallback cartoon SVG when no real image is available */
@@ -132,6 +132,8 @@ export function AnimatedAvatar({
             <img
               src={imageSrc}
               alt={name}
+              width={sz.px}
+              height={sz.px}
               className="w-full h-full object-cover object-top"
               onError={() => setImgFailed(true)}
               draggable={false}

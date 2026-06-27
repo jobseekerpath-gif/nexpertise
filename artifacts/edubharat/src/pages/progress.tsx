@@ -10,6 +10,7 @@ import { OverviewTab } from "@/components/progress/overview-tab";
 import { LearningTab } from "@/components/progress/learning-tab";
 import { InterviewsTab } from "@/components/progress/interviews-tab";
 import { CareerTab } from "@/components/progress/career-tab";
+import { PageMeta } from "@/components/page-meta";
 import {
   BookOpen, Mic, Newspaper, BarChart3, LogIn, TrendingUp, Award, Star, Zap, Target,
 } from "lucide-react";
@@ -95,6 +96,7 @@ export default function ProgressPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl space-y-6">
+      <PageMeta title="My Progress" description="Track your English learning, mock interview scores, saved jobs, and career readiness on EduBharat." />
       {/* ── Page header ── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>

@@ -1,20 +1,24 @@
+import { Suspense, lazy } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HelmetProvider } from "react-helmet-async";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
-import Home from "@/pages/home";
-import EnglishGuru from "@/pages/english-guru";
-import InterviewAce from "@/pages/interview-ace";
-import RozgarSamachar from "@/pages/rozgar-samachar";
-import ResumeIntelligence from "@/pages/resume-intelligence";
-import History from "@/pages/history";
-import Login from "@/pages/login";
-import Progress from "@/pages/progress";
-import ProfilePage from "@/pages/profile";
 import { Layout } from "@/components/layout";
+import { PageSkeleton } from "@/components/page-skeleton";
 
 const queryClient = new QueryClient();
+
+const NotFound = lazy(() => import("@/pages/not-found"));
+const Home = lazy(() => import("@/pages/home"));
+const EnglishGuru = lazy(() => import("@/pages/english-guru"));
+const InterviewAce = lazy(() => import("@/pages/interview-ace"));
+const RozgarSamachar = lazy(() => import("@/pages/rozgar-samachar"));
+const ResumeIntelligence = lazy(() => import("@/pages/resume-intelligence"));
+const History = lazy(() => import("@/pages/history"));
+const Login = lazy(() => import("@/pages/login"));
+const Progress = lazy(() => import("@/pages/progress"));
+const ProfilePage = lazy(() => import("@/pages/profile"));
 
 function Router() {
   return (
@@ -57,14 +61,18 @@ function Router() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <HelmetProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}>
+            <Suspense fallback={<PageSkeleton />}>
+              <Router />
+            </Suspense>
+            <Toaster />
+          </WouterRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </HelmetProvider>
   );
 }
 

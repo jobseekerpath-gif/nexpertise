@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { useLocation } from "wouter";
 import { User, GraduationCap, Briefcase, MapPin, Mic, BookOpen, CheckCircle, LogIn, X, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PageMeta } from "@/components/page-meta";
 
 const INDIAN_LANGUAGES = ["English", "Hindi", "Tamil", "Telugu", "Kannada", "Malayalam", "Marathi", "Gujarati", "Punjabi", "Bengali", "Odia"];
 const DEGREES = ["10th Pass", "12th Pass", "ITI", "Diploma", "B.A.", "B.Com.", "B.Sc.", "B.Tech.", "BBA", "BCA", "M.A.", "M.Com.", "M.Sc.", "M.Tech.", "MBA", "MCA", "Ph.D.", "Other"];
@@ -38,6 +39,15 @@ function SectionTitle({ icon: Icon, title }: { icon: React.ElementType; title: s
 }
 
 export default function ProfilePage() {
+  return (
+    <>
+      <PageMeta title="My Profile" description="Update your EduBharat profile, skills, and career preferences to get personalised coaching and job matches." />
+      <ProfilePageContent />
+    </>
+  );
+}
+
+function ProfilePageContent() {
   const { user, isLoading: authLoading } = useAuth();
   const { profile, updateProfile, completionPct } = useStudentProfile();
   const [, navigate] = useLocation();
@@ -258,7 +268,7 @@ export default function ProfilePage() {
                 placeholder="Type a skill and press Enter"
                 className="flex-1"
               />
-              <Button type="button" variant="outline" size="icon" onClick={addSkill} className="shrink-0">
+              <Button type="button" variant="outline" size="icon" onClick={addSkill} className="shrink-0 min-h-11 min-w-11">
                 <Plus className="w-4 h-4" />
               </Button>
             </div>

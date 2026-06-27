@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BookOpen, Briefcase, Newspaper, ArrowRight, Sparkles, CheckCircle2, Star } from "lucide-react";
 import { TUTORS } from "@/lib/tutors";
+import { HomeMeta } from "@/components/page-meta";
 
 const FEATURED_TUTORS = TUTORS.slice(0, 3);
 
@@ -49,7 +50,9 @@ const PROOF_POINTS = [
 
 export default function Home() {
   return (
-    <div className="flex flex-col w-full">
+    <>
+      <HomeMeta />
+      <div className="flex flex-col w-full">
       {/* Hero */}
       <section className="relative overflow-hidden bg-background pt-12 pb-16 lg:pt-16 lg:pb-20">
         <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-background to-blue-50 pointer-events-none" />
@@ -110,6 +113,8 @@ export default function Home() {
                         <img
                           src={tutor.imageSrc}
                           alt={tutor.name}
+                          width={64}
+                          height={64}
                           className="w-16 h-16 rounded-full object-cover object-top border-2 border-white shadow-md"
                           loading="lazy"
                           decoding="async"
@@ -191,6 +196,8 @@ export default function Home() {
                     <img
                       src={tutor.imageSrc}
                       alt={tutor.name}
+                      width={80}
+                      height={80}
                       className="w-20 h-20 rounded-full object-cover object-top border-3 shadow-md group-hover:border-primary/60 transition-colors"
                       style={{ border: `3px solid ${tutor.accentColor}30` }}
                       loading={idx < 3 ? "eager" : "lazy"}
@@ -220,5 +227,6 @@ export default function Home() {
         </div>
       </section>
     </div>
+    </>
   );
 }

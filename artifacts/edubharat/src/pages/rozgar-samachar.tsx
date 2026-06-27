@@ -18,6 +18,7 @@ import {
   enrichJob, filterJobs, activeFilterCount, computeMatchScore, type EnrichedJob, type FilterState, DEFAULT_FILTERS, makeJobId,
 } from "@/lib/rozgar-utils";
 import { useToast } from "@/hooks/use-toast";
+import { PageMeta } from "@/components/page-meta";
 import {
   Newspaper, Volume2, Bookmark, BookmarkCheck, Loader2, ChevronDown, ChevronUp,
   User, Settings, Search, ExternalLink, X, Briefcase, SlidersHorizontal, MapPin,
@@ -234,7 +235,7 @@ function JobCard({
         <Button
           variant={saved ? "secondary" : "outline"}
           size="sm"
-          className={`h-9 w-9 p-0 rounded-lg shrink-0 ${saved ? "text-primary" : ""}`}
+          className={`min-h-11 min-w-11 p-0 rounded-lg shrink-0 ${saved ? "text-primary" : ""}`}
           onClick={e => {
             e.preventDefault();
             if (saved) onUnsave(item.jobId);
@@ -247,7 +248,7 @@ function JobCard({
         <Button
           variant="outline"
           size="sm"
-          className="h-9 w-9 p-0 rounded-lg shrink-0"
+          className="min-h-11 min-w-11 p-0 rounded-lg shrink-0"
           onClick={e => {
             e.preventDefault();
             onShare(item);
@@ -259,7 +260,7 @@ function JobCard({
         <Button
           variant="outline"
           size="sm"
-          className="h-9 w-9 p-0 rounded-lg shrink-0"
+          className="min-h-11 min-w-11 p-0 rounded-lg shrink-0"
           onClick={e => {
             e.preventDefault();
             onHide(item.jobId);
@@ -450,7 +451,7 @@ function SavedJobCard({ job, onUnsave }: { job: SavedJob; onUnsave: (id: string)
         </div>
         <button
           onClick={() => onUnsave(job.jobId)}
-          className="shrink-0 p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
+          className="shrink-0 p-2 min-h-11 min-w-11 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors flex items-center justify-center"
           title="Remove"
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -552,6 +553,18 @@ function FilterPanel({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function RozgarSamachar() {
+  return (
+    <>
+      <PageMeta
+        title="Rozgar Samachar"
+        description="Your daily career newspaper with live jobs, government updates, salary insights, and English learning tips for Indian professionals."
+      />
+      <RozgarSamacharContent />
+    </>
+  );
+}
+
+function RozgarSamacharContent() {
   const synth = useSpeechSynthesis();
   const { toast } = useToast();
   const { profile: studentProfile } = useStudentProfile();

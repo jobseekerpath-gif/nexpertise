@@ -15,6 +15,7 @@ import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
 import { useStudentProfile } from "@/lib/use-student-profile";
 import { AnimatedAvatar } from "@/components/avatar";
 import { TUTORS, getTutorById } from "@/lib/tutors";
+import { PageMeta } from "@/components/page-meta";
 import {
   Mic, MicOff, Volume2, VolumeX, BookOpen, PenLine, Languages,
   SpellCheck, MessageCircle, Bookmark, BookmarkCheck, GraduationCap,
@@ -69,7 +70,7 @@ function MicButton({ isListening, isSupported, onStart, onStop }: {
   return (
     <Button type="button" variant={isListening ? "destructive" : "outline"} size="icon"
       onClick={isListening ? onStop : onStart} disabled={!isSupported}
-      title={!isSupported ? "Voice not supported in this browser" : isListening ? "Stop" : "Speak"} className="shrink-0">
+      title={!isSupported ? "Voice not supported in this browser" : isListening ? "Stop" : "Speak"} className="shrink-0 min-h-11 min-w-11">
       {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
     </Button>
   );
@@ -209,6 +210,8 @@ function TutorSelector({
                   src={tutor.imageSrc}
                   alt=""
                   aria-hidden="true"
+                  width={64}
+                  height={64}
                   className="w-16 h-16 rounded-full object-cover object-top border-2 shrink-0"
                   style={{ borderColor: isActive ? tutor.accentColor : "#e2e8f0" }}
                   loading="lazy"
@@ -237,6 +240,18 @@ function TutorSelector({
 }
 
 export default function EnglishGuru() {
+  return (
+    <>
+      <PageMeta
+        title="English Guru"
+        description="Practice English with AI teachers. Speak, listen, fix grammar, and build vocabulary in Hindi and 11 Indian languages."
+      />
+      <EnglishGuruContent />
+    </>
+  );
+}
+
+function EnglishGuruContent() {
   const { user } = useAuth();
   const { save } = useHistory();
   const { track } = useProgress();

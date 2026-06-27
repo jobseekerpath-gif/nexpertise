@@ -13,6 +13,7 @@ import {
   BookOpen, Briefcase, GraduationCap, User, AlertCircle,
   ChevronDown, ChevronUp, X,
 } from "lucide-react";
+import { PageMeta } from "@/components/page-meta";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -130,6 +131,18 @@ function SectionCard({ sec, items }: { sec: SectionDef; items: string[] }) {
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ResumeIntelligence() {
+  return (
+    <>
+      <PageMeta
+        title="Resume Intelligence"
+        description="Upload or paste your resume and get AI-powered feedback, ATS scores, and targeted improvements for Indian job seekers."
+      />
+      <ResumeIntelligenceContent />
+    </>
+  );
+}
+
+function ResumeIntelligenceContent() {
   const { save } = useHistory();
   const { track } = useProgress();
   const { profile, updateProfile, isLoading: profileLoading } = useStudentProfile();

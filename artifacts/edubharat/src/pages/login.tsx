@@ -5,8 +5,18 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useAuth } from "@/lib/use-auth";
 import { Loader2, Mail, ArrowRight, ShieldCheck } from "lucide-react";
+import { PageMeta } from "@/components/page-meta";
 
 export default function Login() {
+  return (
+    <>
+      <PageMeta title="Sign In" description="Sign in to EduBharat to sync your progress across devices and save jobs, sessions, and insights." noindex />
+      <LoginContent />
+    </>
+  );
+}
+
+function LoginContent() {
   const [, navigate] = useLocation();
   const { loginWithGoogle, sendOtp, verifyOtp } = useAuth();
 

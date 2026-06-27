@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/use-auth";
 import { AnimatedAvatar } from "@/components/avatar";
 import { INTERVIEW_COACHES } from "@/lib/tutors";
 import { useToast } from "@/hooks/use-toast";
+import { PageMeta } from "@/components/page-meta";
 import {
   Loader2, Mic, MicOff, PlayCircle, ChevronRight, Download, Volume2,
   LogOut, CheckCircle2, ChevronDown, MessageCircle, Pencil, Flame, Brain,
@@ -224,6 +225,18 @@ function RingChart({ value, label, color }: { value: number; label: string; colo
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function InterviewAce() {
+  return (
+    <>
+      <PageMeta
+        title="Interview Ace"
+        description="Practice mock interviews with AI. Get voice feedback, detailed scores, and personalised improvement tips for Indian roles."
+      />
+      <InterviewAceContent />
+    </>
+  );
+}
+
+function InterviewAceContent() {
   const { save } = useHistory();
   const { text: streamText, isStreaming, stream, reset: resetStream } = useGeminiStream();
   const synth = useSpeechSynthesis();
@@ -932,7 +945,7 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
           <div className="flex items-center gap-3 mb-4 lg:hidden">
             <Progress value={Math.min(100, (elapsedSeconds / (duration * 60)) * 100)} className="h-1.5 flex-1" />
             <TimerDisplay elapsedSeconds={elapsedSeconds} durationMinutes={duration} />
-            <Button variant="ghost" size="sm" className="text-xs shrink-0 h-7 px-2" onClick={endEarly}>
+            <Button variant="ghost" size="sm" className="text-xs shrink-0 min-h-9 px-2" onClick={endEarly}>
               <LogOut className="w-3 h-3 mr-1" />End
             </Button>
           </div>
@@ -940,7 +953,7 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
           <Card className="shadow-lg border-none min-h-[72vh] overflow-hidden">
             <CardContent className="p-5 md:p-7 h-full min-h-0 flex flex-col">
               <div className="flex items-start gap-3 mb-6">
-                <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 mt-0.5 text-muted-foreground hover:text-primary"
+                <Button variant="ghost" size="icon" className="shrink-0 min-h-11 min-w-11 mt-0.5 text-muted-foreground hover:text-primary"
                   onClick={() => currentQ && synth.speak(currentQ.question, "English")}>
                   <Volume2 className="w-4 h-4" />
                 </Button>

@@ -81,7 +81,7 @@ export function Navbar() {
               <div className="flex items-center gap-2">
                 <Link href="/profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                   {user.picture ? (
-                    <img src={user.picture} alt={user.name ?? user.email} className="w-8 h-8 rounded-full border-2 border-primary/20" />
+                    <img src={user.picture} alt={user.name ?? user.email} width={32} height={32} className="w-8 h-8 rounded-full border-2 border-primary/20" />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                       <User className="w-4 h-4 text-primary" />
@@ -89,7 +89,7 @@ export function Navbar() {
                   )}
                   <span className="text-sm font-medium text-secondary max-w-[120px] truncate">{user.name ?? user.email}</span>
                 </Link>
-                <Button variant="ghost" size="icon" className="w-8 h-8" onClick={logout} title="Sign out">
+                <Button variant="ghost" size="icon" className="min-h-11 min-w-11" onClick={logout} title="Sign out">
                   <LogOut className="w-4 h-4 text-muted-foreground" />
                 </Button>
               </div>
@@ -106,7 +106,7 @@ export function Navbar() {
           <div className="flex md:hidden items-center gap-3">
             {/* Saved badge */}
             {items.length > 0 && (
-              <Link href="/history" className="relative">
+              <Link href="/history" className="relative p-2 min-h-11 min-w-11 flex items-center justify-center">
                 <Bookmark className="w-5 h-5 text-muted-foreground" />
                 <span className="absolute -top-1.5 -right-1.5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
                   {items.length > 9 ? "9+" : items.length}
@@ -116,7 +116,7 @@ export function Navbar() {
             {/* User avatar shortcut */}
             {user && (
               user.picture
-                ? <img src={user.picture} alt="" className="w-7 h-7 rounded-full border border-primary/20" />
+                ? <img src={user.picture} alt="" width={28} height={28} className="w-7 h-7 rounded-full border border-primary/20" />
                 : <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
                     <User className="w-4 h-4 text-primary" />
                   </div>
@@ -124,7 +124,7 @@ export function Navbar() {
             {/* Hamburger */}
             <button
               onClick={() => setOpen(o => !o)}
-              className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+              className="p-2 min-h-11 min-w-11 rounded-lg hover:bg-muted transition-colors flex items-center justify-center"
               aria-label={open ? "Close menu" : "Open menu"}
             >
               {open ? <X className="w-6 h-6 text-secondary" /> : <Menu className="w-6 h-6 text-secondary" />}
@@ -151,7 +151,7 @@ export function Navbar() {
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 h-16 border-b">
           <span className="font-display font-extrabold text-xl text-primary">EduBharat</span>
-          <button onClick={() => setOpen(false)} className="p-1.5 rounded-lg hover:bg-muted">
+          <button onClick={() => setOpen(false)} className="p-2 min-h-11 min-w-11 rounded-lg hover:bg-muted flex items-center justify-center">
             <X className="w-5 h-5 text-secondary" />
           </button>
         </div>
@@ -219,7 +219,7 @@ export function Navbar() {
           {user ? (
             <div className="flex items-center gap-3">
               {user.picture ? (
-                <img src={user.picture} alt="" className="w-9 h-9 rounded-full border-2 border-primary/20 shrink-0" />
+                <img src={user.picture} alt="" width={36} height={36} className="w-9 h-9 rounded-full border-2 border-primary/20 shrink-0" />
               ) : (
                 <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                   <User className="w-5 h-5 text-primary" />
@@ -229,7 +229,7 @@ export function Navbar() {
                 <p className="text-sm font-semibold text-secondary truncate">{user.name ?? "User"}</p>
                 <p className="text-xs text-muted-foreground truncate">{user.email}</p>
               </div>
-              <Button variant="ghost" size="icon" className="w-8 h-8 shrink-0" onClick={logout} title="Sign out">
+              <Button variant="ghost" size="icon" className="min-h-11 min-w-11 shrink-0" onClick={logout} title="Sign out">
                 <LogOut className="w-4 h-4 text-muted-foreground" />
               </Button>
             </div>
