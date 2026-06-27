@@ -11,13 +11,15 @@ import { useHistory } from "@/lib/use-history";
 import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
-import { useSpeechSynthesis, type VoiceGender } from "@/lib/use-speech-synthesis";
+import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
 import { useStudentProfile } from "@/lib/use-student-profile";
 import { AnimatedAvatar } from "@/components/avatar";
+import { TUTORS, getTutorById } from "@/lib/tutors";
 import {
   Mic, MicOff, Volume2, VolumeX, BookOpen, PenLine, Languages,
   SpellCheck, MessageCircle, Bookmark, BookmarkCheck, GraduationCap,
-  Briefcase, Loader2, Map, StopCircle, ChevronRight, Zap,
+  Briefcase, Loader2, Map, StopCircle, ChevronRight, Zap, ChevronDown,
+  Users,
 } from "lucide-react";
 
 const MODES = [
@@ -34,49 +36,32 @@ type Mode = typeof MODES[number]["value"];
 
 const ROADMAP_STAGES = [
   {
-    level: "A1", label: "Foundation", color: "border-slate-300 bg-slate-50 text-slate-700", dot: "bg-slate-400",
+    level: "A1", label: "Foundation", color: "border-slate-300 bg-slate-50 text-slate-700",
     topics: ["Greetings & introductions", "Numbers, days, months", "Simple sentences: I am, You are", "Colors, family members", "Basic questions: What, Who, Where", "Common objects vocabulary"],
   },
   {
-    level: "A2", label: "Basics", color: "border-blue-300 bg-blue-50 text-blue-700", dot: "bg-blue-400",
+    level: "A2", label: "Basics", color: "border-blue-300 bg-blue-50 text-blue-700",
     topics: ["Present & past tense basics", "Shopping & food vocabulary", "Giving directions", "Daily routine descriptions", "Simple workplace phrases", "Writing short messages"],
   },
   {
-    level: "B1", label: "Intermediate", color: "border-green-300 bg-green-50 text-green-700", dot: "bg-green-500",
+    level: "B1", label: "Intermediate", color: "border-green-300 bg-green-50 text-green-700",
     topics: ["All English tenses", "Expressing opinions clearly", "Job interview basics", "Email writing", "Telephone conversations", "Narrating events & stories"],
   },
   {
-    level: "B2", label: "Upper-Intermediate", color: "border-yellow-300 bg-yellow-50 text-yellow-700", dot: "bg-yellow-500",
+    level: "B2", label: "Upper-Intermediate", color: "border-yellow-300 bg-yellow-50 text-yellow-700",
     topics: ["Complex grammar: conditionals, passive voice", "Professional communication", "Idioms & phrasal verbs", "Formal reports & letters", "Debate & argumentation", "Business meeting language"],
   },
   {
-    level: "C1", label: "Advanced", color: "border-orange-300 bg-orange-50 text-orange-700", dot: "bg-orange-500",
+    level: "C1", label: "Advanced", color: "border-orange-300 bg-orange-50 text-orange-700",
     topics: ["Nuanced vocabulary & tone", "Presentations & public speaking", "Negotiation & persuasion", "Academic & technical writing", "Complex comprehension", "Networking & leadership language"],
   },
   {
-    level: "C2", label: "Mastery", color: "border-purple-300 bg-purple-50 text-purple-700", dot: "bg-purple-500",
+    level: "C2", label: "Mastery", color: "border-purple-300 bg-purple-50 text-purple-700",
     topics: ["Native-level fluency", "Subtle tone & register shifts", "Creative & persuasive writing", "Cultural references & humour", "Executive communication", "Language for leadership"],
   },
 ];
 
 const LEVEL_TO_STAGE: Record<string, string> = { Beginner: "A1", Intermediate: "B1", Advanced: "C1" };
-const VOICE_PRESETS = [
-  { value: "priya", label: "Female — Priya" },
-  { value: "neerja", label: "Female — Neerja" },
-  { value: "meera", label: "Female — Meera" },
-  { value: "rohit", label: "Male — Rohit" },
-  { value: "arjun", label: "Male — Arjun" },
-  { value: "rahul", label: "Male — Rahul" },
-] as const;
-
-const VOICE_META: Record<(typeof VOICE_PRESETS)[number]["value"], { gender: "male" | "female"; teacherName: string }> = {
-  priya: { gender: "female", teacherName: "Priya Ma'am" },
-  neerja: { gender: "female", teacherName: "Neerja Ma'am" },
-  meera: { gender: "female", teacherName: "Meera Ma'am" },
-  rohit: { gender: "male", teacherName: "Rohit Sir" },
-  arjun: { gender: "male", teacherName: "Arjun Sir" },
-  rahul: { gender: "male", teacherName: "Rahul Sir" },
-};
 
 function MicButton({ isListening, isSupported, onStart, onStop }: {
   isListening: boolean; isSupported: boolean; onStart: () => void; onStop: () => void;
@@ -136,9 +121,119 @@ function detectSpokenLanguage(text: string, fallback: string) {
   if (/[\u0D00-\u0D7F]/.test(text)) return "Malayalam";
   if (/[\u0C80-\u0CFF]/.test(text)) return "Kannada";
   if (/[\u0A80-\u0AFF]/.test(text)) return "Gujarati";
-  if (/[\u0980-\u09FF]/.test(text)) return "Bengali";
   if (/[\u0600-\u06FF]/.test(text)) return "Urdu";
   return fallback;
+}
+
+/** Tutor selector — accessible modal dialog for choosing a teacher */
+function TutorSelector({
+  currentId,
+  onSelect,
+  onClose,
+}: {
+  currentId: string;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  // Initial focus — move to close button when dialog opens
+  useEffect(() => { closeBtnRef.current?.focus(); }, []);
+
+  // Focus trap inside the panel
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const focusable = panel.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    if (!focusable.length) return;
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+    const trapFocus = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+      } else {
+        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+    panel.addEventListener("keydown", trapFocus);
+    return () => panel.removeEventListener("keydown", trapFocus);
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tutor-dialog-title"
+        className="bg-card rounded-2xl border shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 id="tutor-dialog-title" className="text-xl font-display font-bold text-secondary">Choose Your AI Guru</h2>
+            <p className="text-sm text-muted-foreground">Each teacher has a unique specialization and style</p>
+          </div>
+          <Button ref={closeBtnRef} variant="ghost" size="sm" onClick={onClose} aria-label="Close">✕</Button>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {TUTORS.map(tutor => {
+            const isActive = tutor.id === currentId;
+            return (
+              <button
+                key={tutor.id}
+                onClick={() => { onSelect(tutor.id); onClose(); }}
+                aria-pressed={isActive}
+                className={`flex items-start gap-4 p-4 rounded-xl border-2 text-left transition-all hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${
+                  isActive
+                    ? "border-primary bg-primary/5 shadow-sm"
+                    : "border-border hover:border-primary/40 bg-muted/20 hover:bg-muted/40"
+                }`}
+              >
+                <img
+                  src={tutor.imageSrc}
+                  alt=""
+                  aria-hidden="true"
+                  className="w-16 h-16 rounded-full object-cover object-top border-2 shrink-0"
+                  style={{ borderColor: isActive ? tutor.accentColor : "#e2e8f0" }}
+                  loading="lazy"
+                  decoding="async"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-bold text-secondary text-sm">{tutor.name}</p>
+                    {isActive && <Badge className="text-[10px] h-4 px-1.5">Active</Badge>}
+                  </div>
+                  <p className="text-xs font-medium text-primary mt-0.5">{tutor.role}</p>
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{tutor.specialization}</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {tutor.languages.slice(0, 2).map(l => (
+                      <span key={l} className="text-[10px] rounded-full border bg-background px-2 py-0.5">{l}</span>
+                    ))}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function EnglishGuru() {
@@ -156,6 +251,15 @@ export default function EnglishGuru() {
   });
   const [uiLang, setUiLang] = useState(profile.preferredLanguage);
   const [level, setLevel] = useState("Beginner");
+  const [tutorId, setTutorId] = useState(() => {
+    // derive from saved voiceStyle
+    const vs = profile.voiceStyle;
+    const match = TUTORS.find(t => t.voiceStyle === vs);
+    return match?.id ?? "priya";
+  });
+  const [showTutorPicker, setShowTutorPicker] = useState(false);
+
+  const tutor = getTutorById(tutorId) ?? TUTORS[0]!;
 
   const [grammarInput, setGrammarInput] = useState("");
   const [writeInput, setWriteInput] = useState("");
@@ -174,14 +278,10 @@ export default function EnglishGuru() {
   const convHistoryRef = useRef(convHistory);
 
   useEffect(() => {
-    if (user?.name && !profile.name) {
-      updateProfile({ name: user.name });
-    }
+    if (user?.name && !profile.name) updateProfile({ name: user.name });
   }, [user?.name, profile.name, updateProfile]);
 
-  useEffect(() => {
-    setUiLang(profile.preferredLanguage);
-  }, [profile.preferredLanguage]);
+  useEffect(() => { setUiLang(profile.preferredLanguage); }, [profile.preferredLanguage]);
 
   useEffect(() => {
     const el = convInputRef.current;
@@ -190,9 +290,7 @@ export default function EnglishGuru() {
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   }, [convInput]);
 
-  useEffect(() => {
-    convHistoryRef.current = convHistory;
-  }, [convHistory]);
+  useEffect(() => { convHistoryRef.current = convHistory; }, [convHistory]);
 
   useEffect(() => {
     const el = convScrollRef.current;
@@ -200,12 +298,26 @@ export default function EnglishGuru() {
     el.scrollTop = 0;
   }, [mode, convHistory, aiText, isStreaming]);
 
+  // Sync tutor to profile voice when profile changes externally
+  useEffect(() => {
+    const match = TUTORS.find(t => t.voiceStyle === profile.voiceStyle);
+    if (match && match.id !== tutorId) setTutorId(match.id);
+  }, [profile.voiceStyle]);
+
   const speak = useCallback((text: string, language = uiLang, onEnd?: () => void) => {
     synth.speak(stripMarkdownForSpeech(text), language, onEnd, {
-      voiceGender: profile.voiceGender,
-      voiceStyle: profile.voiceStyle,
+      voiceGender: tutor.voiceGender,
+      voiceStyle: tutor.voiceStyle,
     });
-  }, [synth, uiLang, profile.voiceGender, profile.voiceStyle]);
+  }, [synth, uiLang, tutor.voiceGender, tutor.voiceStyle]);
+
+  const handleSelectTutor = useCallback((id: string) => {
+    const t = getTutorById(id);
+    if (!t) return;
+    synth.stop();
+    setTutorId(id);
+    updateProfile({ voiceStyle: t.voiceStyle as typeof profile.voiceStyle, voiceGender: t.voiceGender });
+  }, [synth, updateProfile]);
 
   // Live chat: restart mic after AI finishes speaking
   useEffect(() => {
@@ -223,9 +335,7 @@ export default function EnglishGuru() {
   // When streaming ends in live chat, switch to speaking state
   useEffect(() => {
     if (!liveChat) return;
-    if (convFlowState === "ai-thinking" && !isStreaming) {
-      setConvFlowState("ai-speaking");
-    }
+    if (convFlowState === "ai-thinking" && !isStreaming) setConvFlowState("ai-speaking");
   }, [liveChat, isStreaming, convFlowState]);
 
   const handleStream = useCallback(async (prompt: string, system: string, saveTitle: string) => {
@@ -249,44 +359,37 @@ export default function EnglishGuru() {
   const currentMode = MODES.find(m => m.value === mode)!;
   const Icon = currentMode.icon;
   const displayed = isStreaming ? aiText : result;
-
-  // Teacher persona — changes with voice gender selection
-  const teacherVoice = VOICE_META[profile.voiceStyle as keyof typeof VOICE_META] ?? VOICE_META.priya;
-  const teacherName = teacherVoice.teacherName;
-  const teacherShort = teacherName.replace(/\s+(Ma'am|Sir)$/i, "");
-  const teacherGender = teacherVoice.gender;
+  const teacherShort = tutor.name.replace(/\s+(Ma'am|Sir)$/i, "");
+  const currentStage = LEVEL_TO_STAGE[level] ?? "A1";
 
   // Live chat phrase handler
   const handleConvPhrase = useCallback((phrase: string) => {
     if (!phrase.trim() || isStreaming) return;
-    speech.stop(); // pause continuous while AI responds
+    speech.stop();
     setConvFlowState("ai-thinking");
     void (async () => {
-
-    const userMsg = phrase.trim();
-    setConvHistory(h => [...h, { role: "user", text: userMsg }]);
-
-    const recentHistory = [...convHistoryRef.current.slice(-4), { role: "user" as const, text: userMsg }]
-      .map(m => `${m.role === "user" ? "Student" : teacherShort}: ${m.text}`).join("\n");
-
-    resetAI();
-    const response = await stream(
-      `${recentHistory}\n${teacherShort}:`,
-      `You are ${teacherShort}, a warm Indian English tutor for ${profile.name || "the student"}. Reply in the same language the student used. If English, respond with gentle corrections. If a regional language is used, answer naturally in that language and explain the English meaning simply. Never use markdown, bullets, numbering, or symbols. Keep replies to 1-2 short lines.`,
-      undefined,
-      { maxTokens: 120 }
-    );
-    if (response) {
-      const cleanResponse = stripMarkdownForSpeech(response);
-      setConvHistory(h => [...h, { role: "ai", text: cleanResponse }]);
-      track("English Guru", "Live Conversation");
-      const spokenLanguage = detectSpokenLanguage(cleanResponse, uiLang);
-      speak(cleanResponse, spokenLanguage, () => {
-        if (liveChat) setConvFlowState("ai-speaking");
-      });
-    }
+      const userMsg = phrase.trim();
+      setConvHistory(h => [...h, { role: "user", text: userMsg }]);
+      const recentHistory = [...convHistoryRef.current.slice(-4), { role: "user" as const, text: userMsg }]
+        .map(m => `${m.role === "user" ? "Student" : teacherShort}: ${m.text}`).join("\n");
+      resetAI();
+      const response = await stream(
+        `${recentHistory}\n${teacherShort}:`,
+        `You are ${teacherShort}, a warm Indian English tutor for ${profile.name || "the student"}. ${tutor.teachingStyle}. Reply in the same language the student used. If English, respond with gentle corrections. If a regional language is used, answer naturally in that language and explain the English meaning simply. Never use markdown, bullets, numbering, or symbols. Keep replies to 1-2 short lines.`,
+        undefined,
+        { maxTokens: 120 }
+      );
+      if (response) {
+        const cleanResponse = stripMarkdownForSpeech(response);
+        setConvHistory(h => [...h, { role: "ai", text: cleanResponse }]);
+        track("English Guru", "Live Conversation");
+        const spokenLanguage = detectSpokenLanguage(cleanResponse, uiLang);
+        speak(cleanResponse, spokenLanguage, () => {
+          if (liveChat) setConvFlowState("ai-speaking");
+        });
+      }
     })();
-  }, [level, stream, resetAI, speak, track, isStreaming, speech, liveChat, profile.name, profile.voiceGender, profile.voiceStyle, uiLang]);
+  }, [stream, resetAI, speak, track, isStreaming, speech, liveChat, profile.name, tutor.teachingStyle, uiLang, teacherShort]);
 
   const toggleLiveChat = useCallback(() => {
     if (liveChat) {
@@ -308,33 +411,70 @@ export default function EnglishGuru() {
     await handleConvPhrase(userMsg);
   }, [convInput, handleConvPhrase]);
 
-  const currentStage = LEVEL_TO_STAGE[level] ?? "A1";
-
   return (
     <div className="min-h-full overflow-y-auto container mx-auto px-3 sm:px-4 py-4 sm:py-8 max-w-6xl">
-      <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
+      {showTutorPicker && (
+        <TutorSelector currentId={tutorId} onSelect={handleSelectTutor} onClose={() => setShowTutorPicker(false)} />
+      )}
 
+      <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
         {/* Sidebar */}
         <aside className="order-2 lg:order-1 space-y-4 lg:sticky lg:top-20 self-start">
-          {/* Avatar — compact strip on mobile, card on desktop */}
-            <div className="hidden lg:flex flex-col items-center py-6 px-4 bg-card rounded-2xl border shadow-sm">
-            <AnimatedAvatar name={teacherName} role="English Teacher"
-              isSpeaking={synth.isSpeaking} isThinking={isStreaming} gender={teacherGender} size="lg" />
-            <Badge variant="secondary" className="mt-3 text-xs">{level} Level</Badge>
+          {/* Desktop avatar card */}
+          <div className="hidden lg:flex flex-col items-center py-6 px-4 bg-card rounded-2xl border shadow-sm">
+            <AnimatedAvatar
+              name={tutor.name}
+              role={tutor.role}
+              isSpeaking={synth.isSpeaking}
+              isThinking={isStreaming}
+              gender={tutor.gender}
+              size="xl"
+              imageSrc={tutor.imageSrc}
+            />
+            <div className="mt-4 text-center px-2">
+              <p className="text-xs text-muted-foreground leading-relaxed italic">"{tutor.intro}"</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4 w-full font-semibold rounded-full text-xs"
+              onClick={() => setShowTutorPicker(true)}
+            >
+              <Users className="w-3.5 h-3.5 mr-1.5" />
+              Change Teacher
+            </Button>
+            <div className="mt-3 flex flex-wrap justify-center gap-1">
+              {tutor.languages.map(l => (
+                <span key={l} className="text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground">{l}</span>
+              ))}
+            </div>
             {liveChat && (
               <div className="mt-2 flex items-center gap-1.5 text-xs text-green-600 font-semibold animate-pulse">
                 <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Live Chat ON
               </div>
             )}
           </div>
+
           {/* Mobile avatar bar */}
           <div className="flex lg:hidden items-center gap-3 p-3 bg-card rounded-xl border shadow-sm">
-            <AnimatedAvatar name={teacherName} role="English Teacher" isSpeaking={synth.isSpeaking} isThinking={isStreaming} gender={teacherGender} size="sm" />
-            <div>
-              <p className="font-bold text-sm">{teacherName}</p>
+            <AnimatedAvatar
+              name={tutor.name}
+              role={tutor.role}
+              isSpeaking={synth.isSpeaking}
+              isThinking={isStreaming}
+              gender={tutor.gender}
+              size="md"
+              imageSrc={tutor.imageSrc}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm">{tutor.name}</p>
+              <p className="text-xs text-muted-foreground">{tutor.role}</p>
               <Badge variant="secondary" className="text-xs mt-0.5">{level}</Badge>
               {liveChat && <div className="text-xs text-green-600 font-semibold mt-0.5 animate-pulse">● Live Chat</div>}
             </div>
+            <Button variant="ghost" size="sm" className="text-xs shrink-0" onClick={() => setShowTutorPicker(true)}>
+              <Users className="w-3.5 h-3.5" />
+            </Button>
           </div>
 
           <Card className="border shadow-sm">
@@ -351,9 +491,7 @@ export default function EnglishGuru() {
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mode</label>
                 <Select value={mode} onValueChange={(v) => { setMode(v as Mode); setResult(""); resetAI(); setLiveChat(false); speech.stop(); setConvFlowState("idle"); }}>
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {MODES.map(m => (
                       <SelectItem key={m.value} value={m.value}>
@@ -370,24 +508,6 @@ export default function EnglishGuru() {
                   <SelectContent>
                     <SelectItem value="English">English</SelectItem>
                     {INDIAN_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Voice</label>
-                <Select value={profile.voiceStyle} onValueChange={(value) => {
-                  const nextStyle = value as typeof profile.voiceStyle;
-                  synth.stop();
-                  updateProfile({
-                    voiceStyle: nextStyle,
-                    voiceGender: VOICE_META[nextStyle].gender,
-                  });
-                }}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {VOICE_PRESETS.map(v => (
-                      <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
-                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -424,7 +544,6 @@ export default function EnglishGuru() {
               <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl text-sm text-orange-900">
                 <strong>Your current level:</strong> {level} ({currentStage}) — stages below show your full path to English mastery.
               </div>
-
               <div className="relative space-y-3">
                 {ROADMAP_STAGES.map((stage, idx) => {
                   const isCurrent = stage.level === currentStage;
@@ -457,14 +576,13 @@ export default function EnglishGuru() {
                   );
                 })}
               </div>
-
               <Card className="border-primary/30 bg-primary/5">
                 <CardContent className="pt-5 space-y-3">
                   <p className="text-sm font-semibold text-secondary">Want a personalised 30-day plan for your level?</p>
                   <Button className="w-full font-bold" disabled={isStreaming}
                     onClick={() => handleStream(
                       `Create a 30-day English learning plan for an Indian ${level} learner (${currentStage} level) aiming to improve for job interviews. Week 1: day-by-day tasks. Week 2-4: weekly themes with activities. Include time per day, resources, and milestones. Keep it practical and achievable.`,
-                      `Experienced English teacher. Practical, India-specific learning advice.`,
+                      `Experienced English teacher named ${teacherShort}. Practical, India-specific learning advice. ${tutor.teachingStyle}.`,
                       `30-Day Learning Plan: ${level}`
                     )}>
                     {isStreaming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
@@ -482,10 +600,9 @@ export default function EnglishGuru() {
           {mode === "conversation" && (
             <Card className="flex min-h-[72vh] flex-col overflow-hidden">
               <CardContent className="pt-5 space-y-4 flex min-h-0 flex-1 flex-col">
-                {/* Live chat toggle */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-muted/50 rounded-xl">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-secondary">Live Voice Chat</p>
+                    <p className="text-sm font-semibold text-secondary">Live Voice Chat with {tutor.name}</p>
                     <p className="text-xs text-muted-foreground">Press mic once — speak naturally — AI responds, mic restarts automatically</p>
                   </div>
                   <Button
@@ -498,21 +615,18 @@ export default function EnglishGuru() {
                   </Button>
                 </div>
 
-                {/* Live status indicator */}
                 {liveChat && (
                   <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${convFlowState === "user-speaking" ? "bg-green-50 text-green-700 border border-green-200" : convFlowState === "ai-thinking" || convFlowState === "ai-speaking" ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-muted text-muted-foreground"}`}>
                     <span className={`w-2.5 h-2.5 rounded-full ${convFlowState === "user-speaking" ? "bg-green-500 animate-pulse" : convFlowState === "ai-thinking" ? "bg-yellow-500 animate-pulse" : convFlowState === "ai-speaking" ? "bg-blue-500 animate-pulse" : "bg-muted-foreground"}`} />
                     {convFlowState === "user-speaking" && (speech.interimTranscript ? `"${speech.interimTranscript}"` : "Listening for you...")}
-                    {convFlowState === "ai-thinking" && `${teacherName} is thinking...`}
-                    {convFlowState === "ai-speaking" && `${teacherName} is speaking... (mic restarts when done)`}
+                    {convFlowState === "ai-thinking" && `${tutor.name} is thinking...`}
+                    {convFlowState === "ai-speaking" && `${tutor.name} is speaking... (mic restarts when done)`}
                     {convFlowState === "idle" && "Live chat off"}
                   </div>
                 )}
 
-                {/* Conversation history — newest message at the top */}
                 {(convHistory.length > 0 || isStreaming) && (
                   <div ref={convScrollRef} className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto pr-1 pt-1">
-                    {/* Streaming reply at the top (newest) */}
                     {isStreaming && !aiText && (
                       <div className="flex gap-2 justify-start">
                         <div className="px-4 py-2.5 bg-muted rounded-2xl">
@@ -525,7 +639,6 @@ export default function EnglishGuru() {
                         <div className="max-w-[90%] rounded-2xl px-4 py-2.5 text-sm bg-muted text-secondary whitespace-pre-wrap break-words">{stripMarkdownForSpeech(aiText)}</div>
                       </div>
                     )}
-                    {/* Reversed history — newest bubble just below streaming, oldest at bottom */}
                     {[...convHistory].reverse().map((msg, i) => (
                       <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-secondary"}`}>
@@ -536,7 +649,6 @@ export default function EnglishGuru() {
                   </div>
                 )}
 
-                {/* Manual input (always available) */}
                 {!liveChat && (
                   <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
                     <Textarea
@@ -551,7 +663,7 @@ export default function EnglishGuru() {
                       <MicButton isListening={speech.isListening} isSupported={speech.isSupported}
                         onStart={() => speech.start(t => setConvInput(p => p + t))} onStop={speech.stop} />
                       <Button className="font-bold px-4 w-full sm:w-auto" disabled={isStreaming || !convInput.trim()} onClick={handleConvSend}>
-                      {isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+                        {isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
                       </Button>
                     </div>
                   </div>
@@ -563,7 +675,6 @@ export default function EnglishGuru() {
                     Clear & Start Over
                   </Button>
                 )}
-
                 {!speech.isSupported && (
                   <p className="text-xs text-muted-foreground text-center">Voice requires Chrome or Edge browser</p>
                 )}
@@ -584,7 +695,7 @@ export default function EnglishGuru() {
                   <Button className="ml-auto font-bold" disabled={isStreaming || !grammarInput.trim()}
                     onClick={() => handleStream(
                       `Fix grammar: "${grammarInput}". List each correction with brief ${uiLang} explanation.`,
-                      `Encouraging English teacher for Indian ${level} learners. Clear, practical corrections.`,
+                      `Encouraging English teacher named ${teacherShort} for Indian ${level} learners. ${tutor.teachingStyle}.`,
                       "Grammar Fix"
                     )}>
                     {isStreaming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <SpellCheck className="w-4 h-4 mr-2" />}
@@ -611,7 +722,7 @@ export default function EnglishGuru() {
                   <Button className="ml-auto font-bold" disabled={isStreaming || !writeInput.trim()}
                     onClick={() => handleStream(
                       `Improve this to sound professional: "${writeInput}". Show improved version + 3 key changes made.`,
-                      `Writing coach for Indian ${level} English learners. Practical, professional advice.`,
+                      `Writing coach named ${teacherShort} for Indian ${level} English learners. ${tutor.teachingStyle}.`,
                       "Write Better"
                     )}>
                     {isStreaming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenLine className="w-4 h-4 mr-2" />}
@@ -634,7 +745,7 @@ export default function EnglishGuru() {
                 <Button className="font-bold w-full" disabled={isStreaming || !vocabTopic.trim()}
                   onClick={() => handleStream(
                     `8 English words for "${vocabTopic}" (${level} level). Format: word — ${uiLang} meaning — example sentence.`,
-                    `English teacher for Indian job seekers. Practical, commonly-used vocabulary.`,
+                    `English teacher named ${teacherShort} for Indian job seekers. Practical, commonly-used vocabulary.`,
                     `Vocabulary: ${vocabTopic}`
                   )}>
                   {isStreaming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <BookOpen className="w-4 h-4 mr-2" />}
@@ -663,7 +774,7 @@ export default function EnglishGuru() {
                 <Button className="font-bold w-full" disabled={isStreaming || !pronounceWord.trim()}
                   onClick={() => handleStream(
                     `Pronunciation guide for "${pronounceWord}": phonetic spelling, syllable breakdown, ${uiLang} guide, common Indian mistakes, 3 example sentences.`,
-                    `Pronunciation coach for Indian ${level} learners. Simple phonetics.`,
+                    `Pronunciation coach named ${teacherShort} for Indian ${level} learners. Simple phonetics.`,
                     `Pronunciation: ${pronounceWord}`
                   )}>
                   {isStreaming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Volume2 className="w-4 h-4 mr-2" />}
@@ -684,7 +795,7 @@ export default function EnglishGuru() {
                 <Button className="font-bold w-full h-12" disabled={isStreaming}
                   onClick={() => handleStream(
                     `${level} English lesson: 1) Today's topic & why it matters 2) Key grammar rule + examples 3) 5 vocabulary words (${uiLang} meaning) 4) Practice exercise 5) Homework task.`,
-                    `Structured English teacher for Indian ${level} students. Engaging, practical, job-focused.`,
+                    `Structured English teacher named ${teacherShort} for Indian ${level} students. ${tutor.teachingStyle}.`,
                     `Daily Lesson: ${level}`
                   )}>
                   {isStreaming ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <GraduationCap className="w-5 h-5 mr-2" />}
@@ -705,7 +816,7 @@ export default function EnglishGuru() {
                 <Button className="font-bold w-full h-12" disabled={isStreaming}
                   onClick={() => handleStream(
                     `10 essential interview phrases for Indian ${level} learners. Each: the phrase — when to use it — ${uiLang} meaning — example in context.`,
-                    `Career English coach for Indian job seekers. Practical, interview-ready expressions.`,
+                    `Career English coach named ${teacherShort} for Indian job seekers. Practical, interview-ready expressions. ${tutor.teachingStyle}.`,
                     "Interview English"
                   )}>
                   {isStreaming ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Briefcase className="w-5 h-5 mr-2" />}

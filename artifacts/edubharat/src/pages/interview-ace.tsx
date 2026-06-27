@@ -11,6 +11,7 @@ import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
 import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
 import { AnimatedAvatar } from "@/components/avatar";
+import { INTERVIEW_COACHES } from "@/lib/tutors";
 import { Loader2, Mic, MicOff, PlayCircle, ChevronRight, Download, Volume2, StopCircle, LogOut } from "lucide-react";
 
 const INTERVIEW_TYPES = [
@@ -30,6 +31,8 @@ const INTERVIEW_TYPES = [
 
 const EXPERIENCE_LEVELS = ["Fresher", "1-2 years", "3-5 years", "5+ years"];
 
+const RAJ = INTERVIEW_COACHES[0]!;
+
 type QA = {
   question: string;
   answer?: string;
@@ -42,15 +45,23 @@ function ScoreBadge({ score }: { score: number }) {
   return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold ${color}`}>{score}/10</span>;
 }
 
-function AvatarBar({ name, role, isSpeaking, isThinking, className = "" }: {
-  name: string; role: string; isSpeaking: boolean; isThinking: boolean; className?: string;
+function AvatarBar({ isSpeaking, isThinking, className = "" }: {
+  isSpeaking: boolean; isThinking: boolean; className?: string;
 }) {
   return (
     <div className={`flex items-center gap-3 p-3 bg-card rounded-xl border shadow-sm ${className}`}>
-      <AnimatedAvatar name={name} role={role} isSpeaking={isSpeaking} isThinking={isThinking} gender="male" size="sm" />
+      <AnimatedAvatar
+        name={RAJ.name}
+        role={RAJ.role}
+        isSpeaking={isSpeaking}
+        isThinking={isThinking}
+        gender="male"
+        size="md"
+        imageSrc={RAJ.imageSrc}
+      />
       <div className="min-w-0">
-        <p className="font-bold text-sm text-secondary">{name}</p>
-        <p className="text-xs text-muted-foreground">{role}</p>
+        <p className="font-bold text-sm text-secondary">{RAJ.name}</p>
+        <p className="text-xs text-muted-foreground">{RAJ.role}</p>
         {isThinking && <span className="text-xs text-primary animate-pulse">Thinking...</span>}
         {isSpeaking && !isThinking && <span className="text-xs text-primary animate-pulse">Speaking...</span>}
       </div>
@@ -83,40 +94,28 @@ export default function InterviewAce() {
   const avgScore = questions.filter(q => q.score !== undefined).reduce((a, b, _, arr) =>
     a + (b.score ?? 0) / arr.length, 0);
 
-  useEffect(() => {
-    answerRef.current = answer;
-  }, [answer]);
+  useEffect(() => { answerRef.current = answer; }, [answer]);
 
   const clearAutoSubmitTimer = useCallback(() => {
     if (autoSubmitRef.current) clearTimeout(autoSubmitRef.current);
     autoSubmitRef.current = null;
   }, []);
 
-  // Stop recording when phase changes or feedback arrives
   useEffect(() => {
     if (currentQ?.feedback || phase !== "interview" || isStreaming || synth.isSpeaking) {
       clearAutoSubmitTimer();
-      if (isRecording) {
-        setIsRecording(false);
-        speech.stop();
-      }
+      if (isRecording) { setIsRecording(false); speech.stop(); }
     }
   }, [currentQ?.feedback, phase, isStreaming, synth.isSpeaking, isRecording, speech, clearAutoSubmitTimer]);
 
-  useEffect(() => {
-    return () => clearAutoSubmitTimer();
-  }, [clearAutoSubmitTimer]);
+  useEffect(() => { return () => clearAutoSubmitTimer(); }, [clearAutoSubmitTimer]);
 
-  // Auto-advance countdown after feedback
   useEffect(() => {
     if (currentQ?.feedback && phase === "interview") {
       setAutoAdvanceCount(5);
       autoAdvanceRef.current = setInterval(() => {
         setAutoAdvanceCount(prev => {
-          if (prev === null || prev <= 1) {
-            clearInterval(autoAdvanceRef.current!);
-            return null;
-          }
+          if (prev === null || prev <= 1) { clearInterval(autoAdvanceRef.current!); return null; }
           return prev - 1;
         });
       }, 1000);
@@ -127,10 +126,7 @@ export default function InterviewAce() {
     return () => { if (autoAdvanceRef.current) clearInterval(autoAdvanceRef.current); };
   }, [currentQ?.feedback]);
 
-  // Trigger next question when countdown hits 0
-  useEffect(() => {
-    if (autoAdvanceCount === 0) nextQuestion();
-  }, [autoAdvanceCount]);
+  useEffect(() => { if (autoAdvanceCount === 0) nextQuestion(); }, [autoAdvanceCount]);
 
   const startSession = useCallback(async () => {
     resetStream();
@@ -146,7 +142,7 @@ export default function InterviewAce() {
       - keep them conversational and specific
       - if appropriate, include a light follow-up cue inside the question itself
       `,
-      `You are a warm, sharp, realistic ${label} interviewer in India. Keep the flow natural, polite, and human. Avoid fixed-script language.`
+      `You are a warm, sharp, realistic ${label} interviewer in India. Keep the flow natural, polite, and human.`
     );
     const lines = full.split("\n").map(l => l.trim()).filter(Boolean);
     const parsed: QA[] = lines.slice(0, 8).map(l => ({ question: l.replace(/^\d+[.)]\s*/, "").trim() }));
@@ -169,7 +165,6 @@ export default function InterviewAce() {
       speech.stop();
       return;
     }
-
     setAutoListenEnabled(true);
   }, [autoListenEnabled, clearAutoSubmitTimer, speech]);
 
@@ -194,8 +189,7 @@ Improvements: 2 short bullets
 Ideal Answer: 2-3 line model answer
 Follow-up: one realistic next question
 
-Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic phrasing and generic praise.`
-      ,
+Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic phrasing and generic praise.`,
       `You are a seasoned ${label} interviewer giving natural, practical feedback to an Indian candidate. Sound like a real human interviewer.`
     );
     const scoreMatch = feedback.match(/score[:\s]+(\d+)/i) ?? feedback.match(/(\d+)\s*\/\s*10/i);
@@ -234,19 +228,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
   }, [speech, clearAutoSubmitTimer]);
 
   useEffect(() => {
-    if (
-      phase !== "interview" ||
-      !autoListenEnabled ||
-      !speech.isSupported ||
-      !currentQ ||
-      currentQ.feedback ||
-      isStreaming ||
-      synth.isSpeaking ||
-      isRecording
-    ) {
-      return;
-    }
-
+    if (phase !== "interview" || !autoListenEnabled || !speech.isSupported || !currentQ || currentQ.feedback || isStreaming || synth.isSpeaking || isRecording) return;
     setIsRecording(true);
     speech.startContinuous(text => {
       const chunk = text.trim();
@@ -262,21 +244,8 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
         if (latest) void submitCurrentAnswer(latest);
       }, 1500);
     });
-
-    return () => {
-      clearAutoSubmitTimer();
-    };
-  }, [
-    phase,
-    currentQ,
-    autoListenEnabled,
-    speech,
-    isStreaming,
-    synth.isSpeaking,
-    isRecording,
-    submitCurrentAnswer,
-    clearAutoSubmitTimer,
-  ]);
+    return () => { clearAutoSubmitTimer(); };
+  }, [phase, currentQ, autoListenEnabled, speech, isStreaming, synth.isSpeaking, isRecording, submitCurrentAnswer, clearAutoSubmitTimer]);
 
   const downloadReport = useCallback(() => {
     const label = typeMeta.label;
@@ -304,13 +273,22 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
   if (phase === "setup") {
     return (
       <div className="min-h-full overflow-y-auto container mx-auto px-4 py-8 max-w-4xl">
+        {/* Hero */}
         <div className="text-center mb-10">
-          <div className="flex justify-center mb-4">
-            <AnimatedAvatar name="Raj Sir" role="Interview Coach" isSpeaking={false} gender="male" size="lg" />
+          <div className="flex justify-center mb-5">
+            <AnimatedAvatar
+              name={RAJ.name}
+              role={RAJ.role}
+              isSpeaking={false}
+              gender="male"
+              size="xl"
+              imageSrc={RAJ.imageSrc}
+            />
           </div>
           <h1 className="text-4xl font-display font-bold text-secondary mb-2">Interview Ace</h1>
-          <p className="text-muted-foreground">AI mock interviews with real-time feedback and voice practice</p>
+          <p className="text-muted-foreground max-w-md mx-auto">{RAJ.intro}</p>
         </div>
+
         <Card className="max-w-lg mx-auto shadow-xl border-none">
           <CardHeader>
             <CardTitle>Start Your Mock Interview</CardTitle>
@@ -320,7 +298,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
             <div className="space-y-2">
               <label className="text-sm font-semibold">Interview Type</label>
               <Select value={type} onValueChange={setType}>
-                <SelectTrigger className="h-12" data-testid="select-type"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {INTERVIEW_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.icon} {t.label}</SelectItem>)}
                 </SelectContent>
@@ -352,8 +330,17 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
     return (
       <div className="min-h-full overflow-y-auto container mx-auto px-4 py-8 max-w-4xl">
         <div className="text-center mb-8">
-          <AnimatedAvatar name="Raj Sir" role="Interview Coach" isSpeaking={false} gender="male" size="md" />
-          <h1 className="text-3xl font-display font-bold text-secondary mt-4 mb-2">Interview Complete!</h1>
+          <div className="flex justify-center mb-4">
+            <AnimatedAvatar
+              name={RAJ.name}
+              role={RAJ.role}
+              isSpeaking={false}
+              gender="male"
+              size="lg"
+              imageSrc={RAJ.imageSrc}
+            />
+          </div>
+          <h1 className="text-3xl font-display font-bold text-secondary mt-2 mb-2">Interview Complete!</h1>
           <div className="flex items-center justify-center gap-2 mt-3">
             <span className="text-5xl font-extrabold text-primary">{avgScore.toFixed(1)}</span>
             <span className="text-2xl text-muted-foreground">/10</span>
@@ -391,9 +378,17 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
   return (
     <div className="min-h-full overflow-y-auto container mx-auto px-4 py-4 max-w-[1400px]">
       <div className="grid min-h-full lg:grid-cols-[260px_1fr] gap-5">
-        {/* Desktop sidebar avatar */}
+        {/* Desktop sidebar */}
         <aside className="hidden lg:flex flex-col items-center gap-4 min-h-0 overflow-hidden">
-          <AnimatedAvatar name="Raj Sir" role={`${typeMeta.label} Interviewer`} isSpeaking={synth.isSpeaking} isThinking={isStreaming} gender="male" size="lg" />
+          <AnimatedAvatar
+            name={RAJ.name}
+            role={`${typeMeta.label} Interviewer`}
+            isSpeaking={synth.isSpeaking}
+            isThinking={isStreaming}
+            gender="male"
+            size="xl"
+            imageSrc={RAJ.imageSrc}
+          />
           <div className="w-full space-y-2 min-h-0 overflow-hidden flex flex-col">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>Progress</span>
@@ -419,10 +414,8 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
 
         {/* Main interview area */}
         <main className="min-w-0 min-h-0 flex flex-col">
-          {/* Mobile avatar bar */}
-          <AvatarBar name="Raj Sir" role={`${typeMeta.icon} ${typeMeta.label}`} isSpeaking={synth.isSpeaking} isThinking={isStreaming} className="lg:hidden mb-4" />
+          <AvatarBar isSpeaking={synth.isSpeaking} isThinking={isStreaming} className="lg:hidden mb-4" />
 
-          {/* Mobile progress */}
           <div className="flex items-center gap-3 mb-4 lg:hidden">
             <Progress value={((currentIdx + 1) / questions.length) * 100} className="h-1.5 flex-1" />
             <span className="text-xs text-muted-foreground shrink-0">Q{currentIdx + 1}/{questions.length}</span>
@@ -435,7 +428,6 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
 
           <Card className="shadow-lg border-none min-h-[72vh] overflow-hidden">
             <CardContent className="p-5 md:p-7 h-full min-h-0 flex flex-col">
-              {/* Question */}
               <div className="flex items-start gap-3 mb-6">
                 <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 mt-0.5 text-muted-foreground hover:text-primary"
                   onClick={() => currentQ && synth.speak(currentQ.question, "English")}>
@@ -456,34 +448,24 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
                     className={`min-h-[180px] text-base transition-colors flex-1 ${isRecording ? "bg-red-50/50 border-red-300 focus-visible:ring-red-300" : "bg-muted/40 border-muted-foreground/20"}`}
                     value={isRecording && speech.interimTranscript ? answer + " " + speech.interimTranscript : answer}
                     onChange={e => !isRecording && setAnswer(e.target.value)}
-                    data-testid="input-answer"
                   />
-
                   <div className="flex flex-wrap items-center gap-3">
                     <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${isRecording ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
                       {isRecording ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5" />}
-                      {speech.isSupported ? (
-                        isRecording ? "Mic on — speak freely" : "Mic paused"
-                      ) : "Microphone not supported in this browser"}
+                      {speech.isSupported ? (isRecording ? "Mic on — speak freely" : "Mic paused") : "Microphone not supported in this browser"}
                     </div>
                     {speech.interimTranscript && (
                       <span className="text-xs text-muted-foreground italic flex-1 min-w-[220px] truncate">
                         {speech.interimTranscript}
                       </span>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={toggleRecording}
-                      disabled={!speech.isSupported}
-                    >
+                    <Button variant="outline" size="sm" onClick={toggleRecording} disabled={!speech.isSupported}>
                       {autoListenEnabled ? "Pause mic" : "Resume mic"}
                     </Button>
                     <Button className="font-bold" disabled={!answer.trim() || isStreaming} onClick={submitAnswer}>
                       {isStreaming ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analysing...</> : "Submit Written Answer"}
                     </Button>
                   </div>
-
                   {isStreaming && streamText && (
                     <div className="p-4 bg-muted/50 rounded-xl text-sm text-secondary animate-in fade-in">
                       {streamText}

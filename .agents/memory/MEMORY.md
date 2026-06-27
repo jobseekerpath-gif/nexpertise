@@ -1,4 +1,5 @@
 - [EduBharat project](edubharat.md) — India AI Career Ecosystem; Gemini 2.5 Flash, SSE streaming, Indian voice TTS, Google OAuth + Email OTP, PostgreSQL, 3 products + progress dashboard.
+- [Tutor portrait system](tutor-portraits.md) — real AI-generated photos replace cartoon SVG; SVG is fallback only; imgFailed resets on imageSrc change; TUTORS array in lib/tutors.ts.
 - [Speech voice fallback](speech-voice-fallback.md) — browser voice lists vary; match by locale/name, then shape pitch/rate when a perfect Indian voice is missing.
 - [Claude live-chat budgeting](claude-live-chat-budgeting.md) — live tutoring should use compact history and low token caps; minimize cost, never promise a fixed per-response price.
 - [English Guru compact layout](english-guru-compact-layout.md) — live conversation uses a footer-free full-viewport shell; only the chat panel scrolls.

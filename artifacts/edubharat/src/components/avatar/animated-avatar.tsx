@@ -1,20 +1,31 @@
 import { useEffect, useState } from "react";
 import type { AvatarProps } from "./types";
 
-const MOUTH_FRAMES = [
-  "M 72 128 Q 100 132 128 128",
-  "M 72 128 Q 100 140 128 128",
-  "M 72 128 Q 100 146 128 128",
-  "M 72 128 Q 100 140 128 128",
-];
+const sizeClasses: Record<string, { container: string; image: string; ring: string }> = {
+  sm: { container: "w-16 h-16", image: "w-16 h-16", ring: "w-16 h-16" },
+  md: { container: "w-24 h-24", image: "w-24 h-24", ring: "w-24 h-24" },
+  lg: { container: "w-32 h-32", image: "w-32 h-32", ring: "w-32 h-32" },
+  xl: { container: "w-40 h-40", image: "w-40 h-40", ring: "w-40 h-40" },
+};
 
-export function AnimatedAvatar({ name, role, isSpeaking, isThinking, gender = "female", size = "md" }: AvatarProps) {
-  const [mouthFrame, setMouthFrame] = useState(0);
+/** Fallback cartoon SVG when no real image is available */
+function FallbackSVG({
+  gender,
+  isSpeaking,
+  isThinking,
+  size,
+}: {
+  gender: "male" | "female";
+  isSpeaking: boolean;
+  isThinking: boolean;
+  size: string;
+}) {
+  const [mouthOpen, setMouthOpen] = useState(false);
   const [blink, setBlink] = useState(false);
 
   useEffect(() => {
-    if (!isSpeaking) { setMouthFrame(0); return; }
-    const id = setInterval(() => setMouthFrame(f => (f + 1) % MOUTH_FRAMES.length), 140);
+    if (!isSpeaking) { setMouthOpen(false); return; }
+    const id = setInterval(() => setMouthOpen(f => !f), 160);
     return () => clearInterval(id);
   }, [isSpeaking]);
 
@@ -28,93 +39,141 @@ export function AnimatedAvatar({ name, role, isSpeaking, isThinking, gender = "f
 
   const hairColor = gender === "female" ? "#7A4BCB" : "#3F2510";
   const accentColor = gender === "female" ? "#F472B6" : "#60A5FA";
-  const eyeHeight = blink ? 2 : 14;
-
-  const sizeClasses: Record<string, string> = {
-    sm: "w-16 h-16",
-    md: "w-24 h-24",
-    lg: "w-32 h-32",
-  };
+  const sz = sizeClasses[size] ?? sizeClasses.md;
 
   return (
-    <div className="flex flex-col items-center gap-1">
-      <div className={`${sizeClasses[size] ?? sizeClasses.md} relative rounded-full overflow-hidden bg-gradient-to-b from-orange-50 via-white to-primary/10 shadow-lg border-2 border-primary/20`}>
-        <svg viewBox="0 0 200 200" className="w-full h-full">
-          <defs>
-            <radialGradient id="skin" cx="50%" cy="40%" r="60%">
-              <stop offset="0%" stopColor="#FFE1C2" />
-              <stop offset="100%" stopColor="#E8AA78" />
-            </radialGradient>
-            <linearGradient id="shirt" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#FFF7ED" />
-              <stop offset="100%" stopColor="#FFE4C7" />
-            </linearGradient>
-          </defs>
-          {/* Shirt / collar */}
-          <path d="M 38 195 Q 100 160 162 195 L 162 200 L 38 200 Z" fill="url(#shirt)" />
-          <path d="M 82 158 L 100 178 L 118 158 L 100 154 Z" fill={accentColor} opacity="0.85" />
-          {/* Hair back */}
-          <ellipse cx="100" cy="76" rx="79" ry="82" fill={hairColor} />
-          {/* Head */}
-          <ellipse cx="100" cy="100" rx="70" ry="78" fill="url(#skin)" />
-          {/* Hair front */}
-          <path d={`M 24 78 Q 32 16 100 16 Q 168 16 176 78 Q 160 34 100 36 Q 40 34 24 78`} fill={hairColor} />
-          {gender === "female" && (
-            <path d="M 26 76 Q 18 108 28 138 Q 14 102 26 76" fill={hairColor} />
-          )}
-          {gender === "male" && (
-            <path d="M 174 76 Q 182 108 172 138 Q 186 102 174 76" fill={hairColor} />
-          )}
-          {/* Eyebrows */}
-          <path d="M 61 74 Q 78 67 90 72" stroke={hairColor} strokeWidth="4" fill="none" strokeLinecap="round" />
-          <path d="M 110 72 Q 122 67 139 74" stroke={hairColor} strokeWidth="4" fill="none" strokeLinecap="round" />
-          {/* Eyes */}
-          <ellipse cx="75" cy="90" rx="11" ry={eyeHeight} fill="#243043" />
-          <ellipse cx="125" cy="90" rx="11" ry={eyeHeight} fill="#243043" />
-          {/* Eye highlights */}
-          {!blink && <>
-            <circle cx="79" cy="85" r="3.5" fill="white" />
-            <circle cx="129" cy="85" r="3.5" fill="white" />
-          </>}
-          {/* Nose */}
-          <path d="M 97 108 Q 100 116 103 108" stroke="#C68642" strokeWidth="2" fill="none" strokeLinecap="round" />
-          {/* Cheeks */}
-          <ellipse cx="65" cy="118" rx="14" ry="9" fill="#F4A261" opacity="0.18" />
-          <ellipse cx="135" cy="118" rx="14" ry="9" fill="#F4A261" opacity="0.18" />
-          {/* Mouth */}
-          <path d={MOUTH_FRAMES[mouthFrame]} stroke="#B91C1C" strokeWidth="3" fill="none" strokeLinecap="round" />
-          {/* Lips */}
-          <path d={`M 72 128 Q 100 ${isSpeaking ? "124" : "126"} 128 128`} stroke="#F59E9E" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-          {/* Thinking dots */}
-          {isThinking && (
-            <g>
-              <circle cx="80" cy="170" r="5" fill={hairColor} opacity="0.7">
-                <animate attributeName="opacity" values="0.7;0.2;0.7" dur="1.2s" repeatCount="indefinite" begin="0s" />
+    <div className={`${sz.container} relative rounded-full overflow-hidden bg-gradient-to-b from-orange-50 via-white to-primary/10 border-2 border-primary/20`}>
+      <svg viewBox="0 0 200 200" className="w-full h-full">
+        <defs>
+          <radialGradient id="skin-fb" cx="50%" cy="40%" r="60%">
+            <stop offset="0%" stopColor="#FFE1C2" />
+            <stop offset="100%" stopColor="#E8AA78" />
+          </radialGradient>
+        </defs>
+        <path d="M 38 195 Q 100 160 162 195 L 162 200 L 38 200 Z" fill="url(#skin-fb)" />
+        <path d="M 82 158 L 100 178 L 118 158 L 100 154 Z" fill={accentColor} opacity="0.85" />
+        <ellipse cx="100" cy="76" rx="79" ry="82" fill={hairColor} />
+        <ellipse cx="100" cy="100" rx="70" ry="78" fill="url(#skin-fb)" />
+        <path d={`M 24 78 Q 32 16 100 16 Q 168 16 176 78 Q 160 34 100 36 Q 40 34 24 78`} fill={hairColor} />
+        <path d="M 61 74 Q 78 67 90 72" stroke={hairColor} strokeWidth="4" fill="none" strokeLinecap="round" />
+        <path d="M 110 72 Q 122 67 139 74" stroke={hairColor} strokeWidth="4" fill="none" strokeLinecap="round" />
+        <ellipse cx="75" cy="90" rx="11" ry={blink ? 2 : 14} fill="#243043" />
+        <ellipse cx="125" cy="90" rx="11" ry={blink ? 2 : 14} fill="#243043" />
+        {!blink && <>
+          <circle cx="79" cy="85" r="3.5" fill="white" />
+          <circle cx="129" cy="85" r="3.5" fill="white" />
+        </>}
+        <path d="M 97 108 Q 100 116 103 108" stroke="#C68642" strokeWidth="2" fill="none" strokeLinecap="round" />
+        <ellipse cx="65" cy="118" rx="14" ry="9" fill="#F4A261" opacity="0.18" />
+        <ellipse cx="135" cy="118" rx="14" ry="9" fill="#F4A261" opacity="0.18" />
+        <path
+          d={mouthOpen ? "M 72 128 Q 100 146 128 128" : "M 72 128 Q 100 132 128 128"}
+          stroke="#B91C1C" strokeWidth="3" fill="none" strokeLinecap="round"
+        />
+        {isThinking && (
+          <g>
+            {[80, 100, 120].map((cx, i) => (
+              <circle key={cx} cx={cx} cy="170" r="5" fill={hairColor} opacity="0.7">
+                <animate attributeName="opacity" values="0.7;0.2;0.7" dur="1.2s" repeatCount="indefinite" begin={`${i * 0.4}s`} />
               </circle>
-              <circle cx="100" cy="170" r="5" fill={hairColor} opacity="0.7">
-                <animate attributeName="opacity" values="0.7;0.2;0.7" dur="1.2s" repeatCount="indefinite" begin="0.4s" />
-              </circle>
-              <circle cx="120" cy="170" r="5" fill={hairColor} opacity="0.7">
-                <animate attributeName="opacity" values="0.7;0.2;0.7" dur="1.2s" repeatCount="indefinite" begin="0.8s" />
-              </circle>
-            </g>
-          )}
-        </svg>
-        {isSpeaking && (
-          <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-0.5 pb-1">
-            {[0, 1, 2].map(i => (
-              <span
-                key={i}
-                className="w-1 bg-primary rounded-full animate-pulse"
-                style={{ height: `${6 + (i % 2) * 4}px`, animationDelay: `${i * 0.15}s` }}
-              />
             ))}
-          </div>
+          </g>
         )}
+      </svg>
+    </div>
+  );
+}
+
+export function AnimatedAvatar({
+  name,
+  role,
+  isSpeaking,
+  isThinking = false,
+  gender = "female",
+  size = "md",
+  imageSrc,
+}: AvatarProps) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  // Reset failure state whenever the source changes so switching tutors works correctly
+  useEffect(() => { setImgFailed(false); }, [imageSrc]);
+
+  const sz = sizeClasses[size] ?? sizeClasses.md;
+  const hasImage = imageSrc && !imgFailed;
+
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <div className="relative">
+        {/* Speaking ring */}
+        {isSpeaking && (
+          <span
+            className="absolute inset-0 rounded-full border-4 border-primary animate-ping opacity-30 pointer-events-none"
+          />
+        )}
+        {/* Thinking ring */}
+        {isThinking && !isSpeaking && (
+          <span
+            className="absolute inset-0 rounded-full border-2 border-dashed border-primary/50 animate-spin pointer-events-none"
+            style={{ animationDuration: "3s" }}
+          />
+        )}
+
+        {hasImage ? (
+          <div
+            className={`${sz.container} rounded-full overflow-hidden border-3 shadow-lg relative`}
+            style={{
+              border: isSpeaking
+                ? "3px solid #F97316"
+                : isThinking
+                  ? "3px solid #94a3b8"
+                  : "3px solid #e2e8f0",
+            }}
+          >
+            <img
+              src={imageSrc}
+              alt={name}
+              className="w-full h-full object-cover object-top"
+              onError={() => setImgFailed(true)}
+              draggable={false}
+            />
+            {/* Status overlay */}
+            {(isSpeaking || isThinking) && (
+              <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-0.5 pb-1.5">
+                {isSpeaking
+                  ? [0, 1, 2].map(i => (
+                      <span
+                        key={i}
+                        className="w-1 rounded-full bg-primary animate-pulse"
+                        style={{ height: `${6 + (i % 2) * 4}px`, animationDelay: `${i * 0.15}s` }}
+                      />
+                    ))
+                  : (
+                    <span className="text-[8px] font-bold text-white bg-black/40 rounded-full px-2 py-0.5">
+                      thinking…
+                    </span>
+                  )
+                }
+              </div>
+            )}
+          </div>
+        ) : (
+          <FallbackSVG
+            gender={gender}
+            isSpeaking={isSpeaking}
+            isThinking={isThinking}
+            size={size}
+          />
+        )}
+
+        {/* AI badge */}
+        <span className="absolute -bottom-1 -right-1 bg-primary text-primary-foreground text-[9px] font-extrabold rounded-full px-1.5 py-0.5 leading-none shadow-md border border-white">
+          AI
+        </span>
       </div>
+
       <div className="text-center">
-        <p className="text-xs font-bold text-secondary">{name}</p>
-        <p className="text-[10px] text-muted-foreground">{role}</p>
+        <p className="text-xs font-bold text-secondary leading-tight">{name}</p>
+        <p className="text-[10px] text-muted-foreground leading-tight">{role}</p>
       </div>
     </div>
   );

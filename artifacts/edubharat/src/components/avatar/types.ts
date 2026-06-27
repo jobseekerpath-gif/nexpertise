@@ -10,6 +10,24 @@ export interface AvatarProps {
   isSpeaking: boolean;
   isThinking?: boolean;
   gender?: "male" | "female";
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
+  imageSrc?: string;
   providerConfig?: AvatarProviderConfig;
+}
+
+export interface TutorPersona {
+  id: string;
+  name: string;
+  title: string;
+  role: string;
+  gender: "male" | "female";
+  voiceStyle: string;
+  voiceGender: "male" | "female";
+  specialization: string;
+  teachingStyle: string;
+  languages: string[];
+  accent: string;
+  intro: string;
+  imageSrc: string;
+  accentColor: string;
 }
