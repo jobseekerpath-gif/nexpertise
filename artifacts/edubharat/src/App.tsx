@@ -7,9 +7,11 @@ import Home from "@/pages/home";
 import EnglishGuru from "@/pages/english-guru";
 import InterviewAce from "@/pages/interview-ace";
 import RozgarSamachar from "@/pages/rozgar-samachar";
+import ResumeIntelligence from "@/pages/resume-intelligence";
 import History from "@/pages/history";
 import Login from "@/pages/login";
 import Progress from "@/pages/progress";
+import ProfilePage from "@/pages/profile";
 import { Layout } from "@/components/layout";
 
 const queryClient = new QueryClient();
@@ -32,6 +34,11 @@ function Router() {
           <RozgarSamachar />
         </Layout>
       </Route>
+      <Route path="/resume-intelligence">
+        <Layout compact showFooter={false}>
+          <ResumeIntelligence />
+        </Layout>
+      </Route>
       <Route>
         <Layout>
           <Switch>
@@ -39,6 +46,7 @@ function Router() {
             <Route path="/history" component={History} />
             <Route path="/login" component={Login} />
             <Route path="/progress" component={Progress} />
+            <Route path="/profile" component={ProfilePage} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

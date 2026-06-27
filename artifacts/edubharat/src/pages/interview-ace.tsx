@@ -10,9 +10,16 @@ import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
 import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
+import { useStudentProfile } from "@/lib/use-student-profile";
 import { AnimatedAvatar } from "@/components/avatar";
 import { INTERVIEW_COACHES } from "@/lib/tutors";
-import { Loader2, Mic, MicOff, PlayCircle, ChevronRight, Download, Volume2, StopCircle, LogOut } from "lucide-react";
+import {
+  Loader2, Mic, MicOff, PlayCircle, ChevronRight, Download, Volume2,
+  LogOut, CheckCircle2, ChevronDown, MessageCircle, Pencil, Flame, Brain,
+  Star, Trophy,
+} from "lucide-react";
+
+// ─── Constants ─────────────────────────────────────────────────────────────────
 
 const INTERVIEW_TYPES = [
   { value: "hr", label: "HR Interview", icon: "🤝" },
@@ -31,37 +38,96 @@ const INTERVIEW_TYPES = [
 
 const EXPERIENCE_LEVELS = ["Fresher", "1-2 years", "3-5 years", "5+ years"];
 
-const RAJ = INTERVIEW_COACHES[0]!;
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
+type SubScores = {
+  communication?: number;
+  grammar?: number;
+  confidence?: number;
+  technical?: number;
+};
 
 type QA = {
   question: string;
   answer?: string;
   feedback?: string;
   score?: number;
-};
+} & SubScores;
 
-function ScoreBadge({ score }: { score: number }) {
-  const color = score >= 8 ? "bg-green-100 text-green-700" : score >= 6 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700";
-  return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold ${color}`}>{score}/10</span>;
+type Coach = typeof INTERVIEW_COACHES[number];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Extract a sub-score from AI feedback — handles colon, dash, slash, markdown, and /10 suffixes */
+function parseSubScore(text: string, key: string): number | undefined {
+  // Match patterns like "Communication: 7", "Communication - 7/10", "**Communication**: 8/10", "communication – 7"
+  const pattern = new RegExp(
+    `\\b${key}\\b[^\\d]{0,10}(\\d{1,2})(?:\\s*\\/\\s*10)?`,
+    "i"
+  );
+  const m = text.match(pattern);
+  if (!m) return undefined;
+  const n = parseInt(m[1]!);
+  return n >= 1 && n <= 10 ? n : undefined;
 }
 
-function AvatarBar({ isSpeaking, isThinking, className = "" }: {
-  isSpeaking: boolean; isThinking: boolean; className?: string;
+function avgOf(nums: (number | undefined)[]): number {
+  const valid = nums.filter((n): n is number => n !== undefined);
+  return valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : 0;
+}
+
+function grade(score: number): { label: string; color: string; bg: string } {
+  if (score >= 9) return { label: "Outstanding", color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200" };
+  if (score >= 8) return { label: "Excellent", color: "text-green-700", bg: "bg-green-50 border-green-200" };
+  if (score >= 7) return { label: "Good", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" };
+  if (score >= 6) return { label: "Average", color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200" };
+  return { label: "Needs Work", color: "text-red-700", bg: "bg-red-50 border-red-200" };
+}
+
+// ─── Small components ─────────────────────────────────────────────────────────
+
+function ScoreBadge({ score }: { score: number }) {
+  const g = grade(score);
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold border ${g.bg} ${g.color}`}>
+      {score}/10
+    </span>
+  );
+}
+
+function SkillBar({ icon: Icon, label, value, color }: {
+  icon: React.ElementType; label: string; value: number; color: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <div className={`flex items-center gap-1.5 text-xs font-bold ${color}`}>
+          <Icon className="w-3 h-3" />{label}
+        </div>
+        <span className={`text-xs font-bold ${color}`}>{value}/10</span>
+      </div>
+      <Progress value={value * 10} className="h-2" />
+    </div>
+  );
+}
+
+function AvatarBar({ coach, isSpeaking, isThinking, className = "" }: {
+  coach: Coach; isSpeaking: boolean; isThinking: boolean; className?: string;
 }) {
   return (
     <div className={`flex items-center gap-3 p-3 bg-card rounded-xl border shadow-sm ${className}`}>
       <AnimatedAvatar
-        name={RAJ.name}
-        role={RAJ.role}
+        name={coach.name}
+        role={coach.role}
         isSpeaking={isSpeaking}
         isThinking={isThinking}
-        gender="male"
+        gender={coach.gender}
         size="md"
-        imageSrc={RAJ.imageSrc}
+        imageSrc={coach.imageSrc}
       />
       <div className="min-w-0">
-        <p className="font-bold text-sm text-secondary">{RAJ.name}</p>
-        <p className="text-xs text-muted-foreground">{RAJ.role}</p>
+        <p className="font-bold text-sm text-secondary">{coach.name}</p>
+        <p className="text-xs text-muted-foreground">{coach.role}</p>
         {isThinking && <span className="text-xs text-primary animate-pulse">Thinking...</span>}
         {isSpeaking && !isThinking && <span className="text-xs text-primary animate-pulse">Speaking...</span>}
       </div>
@@ -69,15 +135,42 @@ function AvatarBar({ isSpeaking, isThinking, className = "" }: {
   );
 }
 
+// ─── Main page ─────────────────────────────────────────────────────────────────
+
 export default function InterviewAce() {
   const { save } = useHistory();
   const { track } = useProgress();
   const { text: streamText, isStreaming, stream, reset: resetStream } = useGeminiStream();
   const synth = useSpeechSynthesis();
   const speech = useSpeechRecognition("English");
+  const { profile } = useStudentProfile();
 
-  const [type, setType] = useState(INTERVIEW_TYPES[0]!.value);
-  const [experience, setExperience] = useState(EXPERIENCE_LEVELS[0]!);
+  const mapExperience = (raw: string): string => {
+    // Check most specific patterns first to avoid substring collisions
+    if (/5\+|senior|6|7|8|9|10/i.test(raw)) return "5+ years";
+    if (/3|4|5\s*year/i.test(raw)) return "3-5 years";
+    if (/1|2/i.test(raw)) return "1-2 years";
+    return "Fresher";
+  };
+
+  const mapPreferredRoleToType = (role: string): string => {
+    const r = role.toLowerCase();
+    if (r.includes("software") || r.includes("developer") || r.includes("engineer") || r.includes("tech")) return "software";
+    if (r.includes("sales")) return "sales";
+    if (r.includes("market")) return "marketing";
+    if (r.includes("customer") || r.includes("support")) return "customer_service";
+    if (r.includes("bank") || r.includes("finance") || r.includes("bfsi")) return "banking";
+    if (r.includes("data") || r.includes("analytic")) return "data_analytics";
+    if (r.includes("insurance")) return "insurance";
+    if (r.includes("operation")) return "operations";
+    if (r.includes("government") || r.includes("ssc") || r.includes("upsc")) return "government";
+    if (r.includes("fresher") || r.includes("campus")) return "freshers";
+    return INTERVIEW_TYPES[0]!.value;
+  };
+
+  const [type, setType] = useState(() => mapPreferredRoleToType(profile.preferredRole));
+  const [experience, setExperience] = useState(() => mapExperience(profile.experienceLevel));
+  const [coach, setCoach] = useState<Coach>(INTERVIEW_COACHES[0]!);
   const [phase, setPhase] = useState<"setup" | "interview" | "report">("setup");
   const [questions, setQuestions] = useState<QA[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -85,6 +178,7 @@ export default function InterviewAce() {
   const [isRecording, setIsRecording] = useState(false);
   const [autoListenEnabled, setAutoListenEnabled] = useState(true);
   const [autoAdvanceCount, setAutoAdvanceCount] = useState<number | null>(null);
+  const [sessionStart, setSessionStart] = useState(() => Date.now());
   const autoAdvanceRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSubmitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const answerRef = useRef("");
@@ -133,16 +227,15 @@ export default function InterviewAce() {
     const label = typeMeta.label;
     const full = await stream(
       `Generate 8 natural interview questions for a ${label} role in India for a ${experience} candidate.
-      Rules:
-      - sound like a real HR interviewer, not a robot
-      - ask one question per line
-      - mix opening, competency, scenario, and behavioral prompts
-      - vary the tone slightly across the list
-      - no numbering, no intro, no closing text
-      - keep them conversational and specific
-      - if appropriate, include a light follow-up cue inside the question itself
-      `,
-      `You are a warm, sharp, realistic ${label} interviewer in India. Keep the flow natural, polite, and human.`
+Rules:
+- sound like a real ${coach.role}, not a robot
+- one question per line
+- mix opening, competency, scenario, and behavioral prompts
+- vary the tone slightly across the list
+- no numbering, no intro, no closing text
+- keep them conversational and specific
+- if appropriate, include a light follow-up cue inside the question itself`,
+      `You are ${coach.name}, ${coach.role}. Style: ${coach.style}. Keep the flow natural, polite, and human.`
     );
     const lines = full.split("\n").map(l => l.trim()).filter(Boolean);
     const parsed: QA[] = lines.slice(0, 8).map(l => ({ question: l.replace(/^\d+[.)]\s*/, "").trim() }));
@@ -153,9 +246,10 @@ export default function InterviewAce() {
     setAnswer("");
     setIsRecording(false);
     setAutoListenEnabled(true);
+    setSessionStart(Date.now()); // reset duration timer for each new session
     setPhase("interview");
     setTimeout(() => synth.speak(parsed[0]!.question, "English"), 300);
-  }, [type, experience, stream, resetStream, synth, typeMeta, clearAutoSubmitTimer]);
+  }, [type, experience, coach, stream, resetStream, synth, typeMeta, clearAutoSubmitTimer]);
 
   const toggleRecording = useCallback(() => {
     if (autoListenEnabled) {
@@ -179,26 +273,49 @@ export default function InterviewAce() {
     const feedback = await stream(
       `Q: "${currentQ.question}"
 Answer: "${userAnswer}"
-Role: ${label}, ${experience}.
+Role: ${label}, ${experience}. Interviewer: ${coach.name} (${coach.style}).
 
-Return exactly these sections:
+Return EXACTLY these sections (no extras):
 Reaction: a brief natural interviewer reaction in one sentence.
 Score: X/10
+Communication: X/10
+Grammar: X/10
+Confidence: X/10
+Technical: X/10
 Strengths: 2 short bullets
 Improvements: 2 short bullets
 Ideal Answer: 2-3 line model answer
 Follow-up: one realistic next question
 
 Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic phrasing and generic praise.`,
-      `You are a seasoned ${label} interviewer giving natural, practical feedback to an Indian candidate. Sound like a real human interviewer.`
+      `You are ${coach.name}, ${coach.role}. ${coach.style}. Give natural, practical feedback to an Indian candidate.`
     );
-    const scoreMatch = feedback.match(/score[:\s]+(\d+)/i) ?? feedback.match(/(\d+)\s*\/\s*10/i);
+
+    const scoreMatch = feedback.match(/^score[:\s]+(\d+)/im) ?? feedback.match(/(\d+)\s*\/\s*10/i);
     const score = scoreMatch ? Math.min(10, Math.max(1, parseInt(scoreMatch[1]!))) : 6;
-    setQuestions(prev => prev.map((q, i) => i === currentIdx ? { ...q, answer: userAnswer, feedback, score } : q));
-    track("Interview Ace", `${label} — Q${currentIdx + 1}`, score * 10);
+    const communication = parseSubScore(feedback, "Communication");
+    const grammar = parseSubScore(feedback, "Grammar");
+    const confidence = parseSubScore(feedback, "Confidence");
+    const technical = parseSubScore(feedback, "Technical");
+
+    setQuestions(prev => prev.map((q, i) => i === currentIdx
+      ? { ...q, answer: userAnswer, feedback, score, communication, grammar, confidence, technical }
+      : q
+    ));
+
+    // Track with sub-scores
+    track("Interview Ace", `${label} — Q${currentIdx + 1}`, score * 10, undefined, {
+      interviewType: type,
+      experienceLevel: experience,
+      communicationScore: communication !== undefined ? communication * 10 : undefined,
+      grammarScore: grammar !== undefined ? grammar * 10 : undefined,
+      confidenceScore: confidence !== undefined ? confidence * 10 : undefined,
+      technicalScore: technical !== undefined ? technical * 10 : undefined,
+    });
+
     const opening = feedback.split("\n")[0]?.replace(/^Reaction:\s*/i, "") ?? feedback.slice(0, 140);
     void synth.speak(opening, "English");
-  }, [currentQ, currentIdx, type, experience, stream, resetStream, synth, track, typeMeta, clearAutoSubmitTimer, speech]);
+  }, [currentQ, currentIdx, type, experience, coach, stream, resetStream, synth, track, typeMeta, clearAutoSubmitTimer, speech]);
 
   const submitAnswer = useCallback(() => {
     if (!answer.trim()) return;
@@ -249,49 +366,101 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
 
   const downloadReport = useCallback(() => {
     const label = typeMeta.label;
+    const answered = questions.filter(q => q.feedback);
+    const duration = Math.round((Date.now() - sessionStart) / 60000);
+    const subAvg = (key: keyof SubScores) => avgOf(answered.map(q => q[key]));
     const lines = [
       `EDUBHARAT — INTERVIEW ACE REPORT`,
+      `Coach: ${coach.name} (${coach.role})`,
       `Role: ${label} | Experience: ${experience}`,
-      `Date: ${new Date().toLocaleDateString("en-IN")}`,
-      `Overall Score: ${avgScore.toFixed(1)}/10`,
+      `Date: ${new Date().toLocaleDateString("en-IN")} | Duration: ~${duration} min`,
+      `Overall Score: ${avgScore.toFixed(1)}/10 — ${grade(avgScore).label}`,
       ``,
-      ...questions.filter(q => q.feedback).map((q, i) => [
+      `SKILL BREAKDOWN`,
+      `Communication: ${subAvg("communication") || "N/A"}/10`,
+      `Grammar:       ${subAvg("grammar") || "N/A"}/10`,
+      `Confidence:    ${subAvg("confidence") || "N/A"}/10`,
+      `Technical:     ${subAvg("technical") || "N/A"}/10`,
+      ``,
+      `QUESTION-BY-QUESTION`,
+      ...answered.map((q, i) => [
         `Q${i + 1}: ${q.question}`,
         `Your Answer: ${q.answer ?? ""}`,
         `Score: ${q.score ?? "N/A"}/10`,
-        `Feedback: ${q.feedback ?? ""}`,
+        ...(q.communication !== undefined ? [`  Communication: ${q.communication}/10 | Grammar: ${q.grammar}/10 | Confidence: ${q.confidence}/10 | Technical: ${q.technical}/10`] : []),
+        `Feedback:\n${q.feedback ?? ""}`,
         ``,
       ].join("\n")),
     ].join("\n");
     const blob = new Blob([lines], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `interview-${label.toLowerCase().replace(/ /g, "-")}.txt`; a.click();
+    a.href = url;
+    a.download = `interview-${label.toLowerCase().replace(/ /g, "-")}-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
     URL.revokeObjectURL(url);
-  }, [questions, type, experience, avgScore, typeMeta]);
+  }, [questions, type, experience, avgScore, typeMeta, coach, sessionStart]);
 
+  // ── Setup ──────────────────────────────────────────────────────────────────
   if (phase === "setup") {
     return (
       <div className="min-h-full overflow-y-auto container mx-auto px-4 py-8 max-w-4xl">
-        {/* Hero */}
-        <div className="text-center mb-10">
-          <div className="flex justify-center mb-5">
-            <AnimatedAvatar
-              name={RAJ.name}
-              role={RAJ.role}
-              isSpeaking={false}
-              gender="male"
-              size="xl"
-              imageSrc={RAJ.imageSrc}
-            />
-          </div>
+        <div className="text-center mb-8">
           <h1 className="text-4xl font-display font-bold text-secondary mb-2">Interview Ace</h1>
-          <p className="text-muted-foreground max-w-md mx-auto">{RAJ.intro}</p>
+          <p className="text-muted-foreground">AI mock interviews with instant feedback · Voice-powered · India-focused</p>
+        </div>
+
+        {/* Coach selection */}
+        <div className="mb-8">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">
+            Choose Your Interviewer
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {INTERVIEW_COACHES.map(c => (
+              <button
+                key={c.id}
+                onClick={() => setCoach(c)}
+                className={`text-left rounded-2xl border-2 p-4 transition-all hover:shadow-md ${
+                  coach.id === c.id
+                    ? "border-primary shadow-md bg-primary/5"
+                    : "border-border bg-card hover:border-primary/40"
+                }`}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <AnimatedAvatar
+                    name={c.name}
+                    role={c.role}
+                    isSpeaking={false}
+                    gender={c.gender}
+                    size="sm"
+                    imageSrc={c.imageSrc}
+                  />
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm text-secondary truncate">{c.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{c.role}</p>
+                  </div>
+                  {coach.id === c.id && (
+                    <CheckCircle2 className="w-4 h-4 text-primary ml-auto shrink-0" />
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{c.icon}</span>
+                  <span className="text-xs font-semibold text-secondary">{c.specialty}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{c.style}</p>
+              </button>
+            ))}
+          </div>
+
+          {/* Selected coach intro */}
+          <div className="mt-4 p-4 rounded-2xl bg-muted/40 border text-sm text-secondary italic">
+            "{coach.intro}"
+          </div>
         </div>
 
         <Card className="max-w-lg mx-auto shadow-xl border-none">
           <CardHeader>
-            <CardTitle>Start Your Mock Interview</CardTitle>
+            <CardTitle>Configure Your Session</CardTitle>
             <CardDescription>8 questions · Voice-powered · Instant AI feedback</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -317,7 +486,9 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
           <CardFooter>
             <Button className="w-full h-12 font-bold text-base shadow-md shadow-primary/20"
               onClick={startSession} disabled={isStreaming}>
-              {isStreaming ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Preparing questions...</> : <><PlayCircle className="w-5 h-5 mr-2" />Begin Mock Interview</>}
+              {isStreaming
+                ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Preparing questions...</>
+                : <><PlayCircle className="w-5 h-5 mr-2" />Begin with {coach.name}</>}
             </Button>
           </CardFooter>
         </Card>
@@ -325,69 +496,103 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
     );
   }
 
+  // ── Report ─────────────────────────────────────────────────────────────────
   if (phase === "report") {
     const answered = questions.filter(q => q.feedback);
+    const g = grade(avgScore);
+    const hasSubScores = answered.some(q => q.communication !== undefined);
+    const avgComm = avgOf(answered.map(q => q.communication));
+    const avgGram = avgOf(answered.map(q => q.grammar));
+    const avgConf = avgOf(answered.map(q => q.confidence));
+    const avgTech = avgOf(answered.map(q => q.technical));
+
     return (
-      <div className="min-h-full overflow-y-auto container mx-auto px-4 py-8 max-w-4xl">
-        <div className="text-center mb-8">
+      <div className="min-h-full overflow-y-auto container mx-auto px-4 py-8 max-w-4xl space-y-6">
+        {/* Hero */}
+        <div className="text-center">
           <div className="flex justify-center mb-4">
-            <AnimatedAvatar
-              name={RAJ.name}
-              role={RAJ.role}
-              isSpeaking={false}
-              gender="male"
-              size="lg"
-              imageSrc={RAJ.imageSrc}
-            />
+            <AnimatedAvatar name={coach.name} role={coach.role} isSpeaking={false} gender={coach.gender} size="lg" imageSrc={coach.imageSrc} />
           </div>
-          <h1 className="text-3xl font-display font-bold text-secondary mt-2 mb-2">Interview Complete!</h1>
-          <div className="flex items-center justify-center gap-2 mt-3">
-            <span className="text-5xl font-extrabold text-primary">{avgScore.toFixed(1)}</span>
-            <span className="text-2xl text-muted-foreground">/10</span>
+          <h1 className="text-3xl font-display font-bold text-secondary mt-2 mb-3">Interview Complete!</h1>
+          <div className={`inline-flex items-center gap-3 px-6 py-3 rounded-2xl border-2 ${g.bg}`}>
+            <span className={`text-5xl font-extrabold ${g.color}`}>{avgScore.toFixed(1)}</span>
+            <div className="text-left">
+              <div className={`text-xs font-bold uppercase tracking-wider ${g.color}`}>Overall Score</div>
+              <div className={`text-lg font-bold ${g.color}`}>{g.label}</div>
+            </div>
           </div>
-          <p className="text-muted-foreground mt-2">{typeMeta.icon} {typeMeta.label} · {experience} · {answered.length} questions answered</p>
+          <p className="text-muted-foreground mt-3 text-sm">
+            {typeMeta.icon} {typeMeta.label} · {experience} · {answered.length} questions answered · with {coach.name}
+          </p>
         </div>
-        <div className="space-y-4 mb-8">
+
+        {/* Skill breakdown */}
+        {hasSubScores && (
+          <Card className="border shadow-sm">
+            <CardHeader className="pb-2 pt-5 px-5">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-primary" />
+                Skill Breakdown
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 grid sm:grid-cols-2 gap-4">
+              <SkillBar icon={MessageCircle} label="Communication" value={avgComm} color="text-blue-600" />
+              <SkillBar icon={Pencil} label="Grammar & Language" value={avgGram} color="text-green-600" />
+              <SkillBar icon={Flame} label="Confidence & Tone" value={avgConf} color="text-orange-600" />
+              <SkillBar icon={Brain} label="Technical Accuracy" value={avgTech} color="text-purple-600" />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Per-question review */}
+        <div className="space-y-3">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Question-by-Question</h2>
           {answered.map((q, i) => (
-            <Card key={i} className="border">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-secondary mb-1">Q{i + 1}: {q.question}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{q.answer}</p>
-                  </div>
-                  {q.score !== undefined && <ScoreBadge score={q.score} />}
-                </div>
-              </CardContent>
-            </Card>
+            <QuestionReview key={i} q={q} idx={i} coachName={coach.name} hasSubScores={hasSubScores} />
           ))}
         </div>
-        <div className="flex gap-3 justify-center flex-wrap">
-          <Button variant="outline" onClick={downloadReport}><Download className="w-4 h-4 mr-2" />Download Report</Button>
-          <Button onClick={() => { setPhase("setup"); setQuestions([]); }}><PlayCircle className="w-4 h-4 mr-2" />New Session</Button>
+
+        {/* Actions */}
+        <div className="flex gap-3 justify-center flex-wrap pb-6">
+          <Button variant="outline" onClick={downloadReport}>
+            <Download className="w-4 h-4 mr-2" />Download Report
+          </Button>
+          <Button onClick={() => { setPhase("setup"); setQuestions([]); }}>
+            <PlayCircle className="w-4 h-4 mr-2" />New Session
+          </Button>
           <Button variant="secondary"
-            onClick={() => save({ tool: "Interview Ace", title: `${typeMeta.label} — Score: ${avgScore.toFixed(1)}/10`, content: answered.map((q, i) => `Q${i + 1}: ${q.question}\nAnswer: ${q.answer}\nScore: ${q.score}/10\nFeedback: ${q.feedback}`).join("\n\n") })}>
-            <Download className="w-4 h-4 mr-2" />Save to History
+            onClick={() => save({
+              tool: "Interview Ace",
+              title: `${typeMeta.label} with ${coach.name} — ${avgScore.toFixed(1)}/10`,
+              content: answered.map((q, i) => [
+                `Q${i + 1}: ${q.question}`,
+                `Answer: ${q.answer}`,
+                `Score: ${q.score}/10`,
+                ...(q.communication !== undefined ? [`Communication: ${q.communication}/10 | Grammar: ${q.grammar}/10 | Confidence: ${q.confidence}/10 | Technical: ${q.technical}/10`] : []),
+                `Feedback: ${q.feedback}`,
+              ].join("\n")).join("\n\n"),
+            })}>
+            <Star className="w-4 h-4 mr-2" />Save to History
           </Button>
         </div>
       </div>
     );
   }
 
-  // Interview phase
+  // ── Interview ──────────────────────────────────────────────────────────────
   return (
     <div className="min-h-full overflow-y-auto container mx-auto px-4 py-4 max-w-[1400px]">
       <div className="grid min-h-full lg:grid-cols-[260px_1fr] gap-5">
         {/* Desktop sidebar */}
         <aside className="hidden lg:flex flex-col items-center gap-4 min-h-0 overflow-hidden">
           <AnimatedAvatar
-            name={RAJ.name}
+            name={coach.name}
             role={`${typeMeta.label} Interviewer`}
             isSpeaking={synth.isSpeaking}
             isThinking={isStreaming}
-            gender="male"
+            gender={coach.gender}
             size="xl"
-            imageSrc={RAJ.imageSrc}
+            imageSrc={coach.imageSrc}
           />
           <div className="w-full space-y-2 min-h-0 overflow-hidden flex flex-col">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -414,7 +619,7 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
 
         {/* Main interview area */}
         <main className="min-w-0 min-h-0 flex flex-col">
-          <AvatarBar isSpeaking={synth.isSpeaking} isThinking={isStreaming} className="lg:hidden mb-4" />
+          <AvatarBar coach={coach} isSpeaking={synth.isSpeaking} isThinking={isStreaming} className="lg:hidden mb-4" />
 
           <div className="flex items-center gap-3 mb-4 lg:hidden">
             <Progress value={((currentIdx + 1) / questions.length) * 100} className="h-1.5 flex-1" />
@@ -479,9 +684,24 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
                     <p className="text-sm text-secondary mt-1 leading-relaxed">{currentQ.answer}</p>
                   </div>
                   <div className="p-5 bg-green-50 border border-green-200 rounded-xl">
-                    <div className="flex items-center gap-3 mb-3">
-                      <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Raj Sir's Feedback</span>
+                    <div className="flex items-center gap-3 mb-3 flex-wrap">
+                      <span className="text-xs font-bold text-green-700 uppercase tracking-wider">{coach.name}'s Feedback</span>
                       {currentQ.score !== undefined && <ScoreBadge score={currentQ.score} />}
+                      {/* Mini sub-scores */}
+                      {currentQ.communication !== undefined && (
+                        <div className="flex gap-1.5 ml-auto flex-wrap">
+                          {[
+                            { label: "Comm", val: currentQ.communication, color: "bg-blue-100 text-blue-700" },
+                            { label: "Gram", val: currentQ.grammar, color: "bg-green-100 text-green-700" },
+                            { label: "Conf", val: currentQ.confidence, color: "bg-orange-100 text-orange-700" },
+                            { label: "Tech", val: currentQ.technical, color: "bg-purple-100 text-purple-700" },
+                          ].map(s => s.val !== undefined && (
+                            <span key={s.label} className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${s.color}`}>
+                              {s.label} {s.val}/10
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="text-sm text-green-950 whitespace-pre-wrap leading-relaxed">{currentQ.feedback}</div>
                   </div>
@@ -504,5 +724,59 @@ Keep it warm, human, and realistic for an Indian hiring interview. Avoid robotic
         </main>
       </div>
     </div>
+  );
+}
+
+// ─── Question review card ──────────────────────────────────────────────────────
+
+function QuestionReview({ q, idx, coachName, hasSubScores }: {
+  q: QA; idx: number; coachName: string; hasSubScores: boolean;
+}) {
+  const [open, setOpen] = useState(idx === 0);
+  return (
+    <Card className="border shadow-sm overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/40 transition-colors"
+        onClick={() => setOpen(o => !o)}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-sm font-bold text-muted-foreground shrink-0">Q{idx + 1}</span>
+          <span className="text-sm font-semibold text-secondary line-clamp-1">{q.question}</span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 ml-2">
+          {q.score !== undefined && <ScoreBadge score={q.score} />}
+          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        </div>
+      </button>
+      {open && (
+        <div className="border-t px-4 pb-4 pt-3 space-y-3 bg-muted/20 animate-in slide-in-from-top-1">
+          {/* Sub-scores */}
+          {hasSubScores && q.communication !== undefined && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { label: "Communication", val: q.communication, icon: MessageCircle, color: "text-blue-600 bg-blue-50" },
+                { label: "Grammar", val: q.grammar, icon: Pencil, color: "text-green-600 bg-green-50" },
+                { label: "Confidence", val: q.confidence, icon: Flame, color: "text-orange-600 bg-orange-50" },
+                { label: "Technical", val: q.technical, icon: Brain, color: "text-purple-600 bg-purple-50" },
+              ].map(s => s.val !== undefined && (
+                <div key={s.label} className={`rounded-xl p-2.5 ${s.color.split(" ")[1]}`}>
+                  <div className={`text-[10px] font-bold ${s.color.split(" ")[0]} mb-0.5`}>{s.label}</div>
+                  <div className={`text-lg font-display font-bold ${s.color.split(" ")[0]}`}>{s.val}/10</div>
+                  <Progress value={s.val * 10} className="h-1 mt-1" />
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="rounded-xl bg-background border p-3">
+            <p className="text-xs font-bold text-muted-foreground mb-1">Your Answer</p>
+            <p className="text-sm text-secondary leading-relaxed">{q.answer}</p>
+          </div>
+          <div className="rounded-xl bg-green-50 border border-green-100 p-3">
+            <p className="text-xs font-bold text-green-700 mb-1">{coachName}'s Feedback</p>
+            <p className="text-sm text-green-950 whitespace-pre-wrap leading-relaxed">{q.feedback}</p>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

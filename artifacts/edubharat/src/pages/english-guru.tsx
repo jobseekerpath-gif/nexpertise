@@ -250,11 +250,21 @@ export default function EnglishGuru() {
     return (MODES.some(m => m.value === requested) ? requested : "roadmap") as Mode;
   });
   const [uiLang, setUiLang] = useState(profile.preferredLanguage);
-  const [level, setLevel] = useState("Beginner");
+
+  // Map extended englishLevel field ("Beginner (A1)" etc) to UI level
+  const mapEnglishLevel = (raw: string): string => {
+    const l = raw.toLowerCase();
+    if (l.startsWith("adv") || l.includes("c1") || l.includes("c2")) return "Advanced";
+    if (l.startsWith("int") || l.startsWith("upp") || l.includes("b1") || l.includes("b2")) return "Intermediate";
+    return "Beginner";
+  };
+
+  const [level, setLevel] = useState(() => mapEnglishLevel(profile.englishLevel));
   const [tutorId, setTutorId] = useState(() => {
-    // derive from saved voiceStyle
-    const vs = profile.voiceStyle;
-    const match = TUTORS.find(t => t.voiceStyle === vs);
+    // Prefer preferredTutor field; fallback to voiceStyle match
+    const byId = TUTORS.find(t => t.id === profile.preferredTutor);
+    if (byId) return byId.id;
+    const match = TUTORS.find(t => t.voiceStyle === profile.voiceStyle);
     return match?.id ?? "priya";
   });
   const [showTutorPicker, setShowTutorPicker] = useState(false);
@@ -298,11 +308,20 @@ export default function EnglishGuru() {
     el.scrollTop = 0;
   }, [mode, convHistory, aiText, isStreaming]);
 
-  // Sync tutor to profile voice when profile changes externally
+  // Sync level to profile englishLevel when profile changes externally
   useEffect(() => {
-    const match = TUTORS.find(t => t.voiceStyle === profile.voiceStyle);
-    if (match && match.id !== tutorId) setTutorId(match.id);
-  }, [profile.voiceStyle]);
+    setLevel(mapEnglishLevel(profile.englishLevel));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.englishLevel]);
+
+  // Sync tutor to profile when profile changes externally
+  useEffect(() => {
+    const byId = TUTORS.find(t => t.id === profile.preferredTutor);
+    const byStyle = TUTORS.find(t => t.voiceStyle === profile.voiceStyle);
+    const preferred = byId ?? byStyle;
+    if (preferred && preferred.id !== tutorId) setTutorId(preferred.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.preferredTutor, profile.voiceStyle]);
 
   const speak = useCallback((text: string, language = uiLang, onEnd?: () => void) => {
     synth.speak(stripMarkdownForSpeech(text), language, onEnd, {
@@ -316,7 +335,7 @@ export default function EnglishGuru() {
     if (!t) return;
     synth.stop();
     setTutorId(id);
-    updateProfile({ voiceStyle: t.voiceStyle as typeof profile.voiceStyle, voiceGender: t.voiceGender });
+    updateProfile({ voiceStyle: t.voiceStyle as typeof profile.voiceStyle, voiceGender: t.voiceGender, preferredTutor: id });
   }, [synth, updateProfile]);
 
   // Live chat: restart mic after AI finishes speaking

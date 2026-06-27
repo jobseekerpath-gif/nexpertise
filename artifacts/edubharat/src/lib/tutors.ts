@@ -109,12 +109,67 @@ export const INTERVIEW_COACHES = [
   {
     id: "raj",
     name: "Raj Sir",
-    role: "Interview Coach",
+    role: "Senior HR Coach",
     gender: "male" as const,
     imageSrc: "/images/tutor-raj.jpg",
     accentColor: "#1E3A5F",
+    specialty: "Behavioral & HR",
+    icon: "🎯",
+    style: "Warm, sharp, realistic — seasoned HR veteran style",
     intro:
       "I'm Raj Sir, a seasoned interview coach. I'll ask real questions and give you honest, human feedback. Ready when you are.",
+  },
+  {
+    id: "priya_coach",
+    name: "Priya Ma'am",
+    role: "Campus Placement Coach",
+    gender: "female" as const,
+    imageSrc: "/images/tutor-priya.jpg",
+    accentColor: "#F97316",
+    specialty: "Freshers & Campus",
+    icon: "🌱",
+    style: "Encouraging, patient — perfect for first-time interviewees",
+    intro:
+      "Hi! I'm Priya Ma'am, a campus placement specialist. I focus on building confidence for your very first interview. Let's make you job-ready!",
+  },
+  {
+    id: "vikram",
+    name: "Vikram Sir",
+    role: "Technical Interview Coach",
+    gender: "male" as const,
+    imageSrc: "/images/tutor-rohit.jpg",
+    accentColor: "#3B82F6",
+    specialty: "Technical & Engineering",
+    icon: "⚙️",
+    style: "Direct, rigorous — goes deep on technical accuracy",
+    intro:
+      "I'm Vikram Sir. Technical interviews need precision and depth. I'll challenge you hard so the real thing feels easy.",
+  },
+  {
+    id: "ananya",
+    name: "Ananya Ma'am",
+    role: "Sales & Marketing Coach",
+    gender: "female" as const,
+    imageSrc: "/images/tutor-maya.jpg",
+    accentColor: "#A855F7",
+    specialty: "Sales, Marketing & Comm",
+    icon: "📣",
+    style: "Energetic, target-focused — great for client-facing roles",
+    intro:
+      "I'm Ananya Ma'am! Sales and marketing interviews demand energy and storytelling. I'll help you pitch yourself like a pro.",
+  },
+  {
+    id: "aryan",
+    name: "Aryan Sir",
+    role: "Finance & Banking Coach",
+    gender: "male" as const,
+    imageSrc: "/images/tutor-arjun.jpg",
+    accentColor: "#0D9488",
+    specialty: "Finance, Banking & BFSI",
+    icon: "🏦",
+    style: "Formal, analytical — mirrors actual banking panel rounds",
+    intro:
+      "Good day. I'm Aryan Sir, finance and banking interview specialist. I'll run a formal, panel-style session — exactly what awaits you.",
   },
 ];
 

@@ -201,7 +201,12 @@ router.get("/auth/me", async (req, res) => {
   }
   try {
     const users = await db.select().from(usersTable).where(eq(usersTable.id, req.session.userId)).limit(1);
-    res.json({ user: users[0] ?? null });
+    if (!users.length) { res.json({ user: null }); return; }
+    const user = users[0]!;
+    // Parse skills JSON for client convenience
+    let skills: string[] = [];
+    if (user.skills) { try { skills = JSON.parse(user.skills) as string[]; } catch { skills = []; } }
+    res.json({ user: { ...user, skills } });
   } catch {
     res.json({ user: null });
   }

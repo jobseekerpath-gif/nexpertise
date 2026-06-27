@@ -1,24 +1,130 @@
-import { useProgress } from "@/lib/use-progress";
-import { useHistory } from "@/lib/use-history";
+import { useState, useEffect } from "react";
+import {
+  AreaChart, Area, BarChart, Bar, RadialBarChart, RadialBar,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend,
+} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { useProgress } from "@/lib/use-progress";
+import { useHistory } from "@/lib/use-history";
+import { useAuth } from "@/lib/use-auth";
+import { useStudentProfile } from "@/lib/use-student-profile";
 import { useLocation } from "wouter";
 import {
-  TrendingUp, Flame, BookOpen, Mic, Newspaper,
-  Award, Calendar, Target, Trophy, Star, Zap,
+  Flame, Trophy, BookOpen, Mic, Newspaper, Star, Zap, Target,
+  TrendingUp, Calendar, BarChart2, Award, MessageCircle, Pencil,
+  Brain, LogIn, ChevronRight,
 } from "lucide-react";
 
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+type ServerStats = { totalLearning: number; totalInterviews: number; averageScore: number; streak: number };
+type ApiInterviewSession = {
+  id: number;
+  role: string;
+  interviewType: string | null;
+  overallScore: number | null;
+  communicationScore: number | null;
+  grammarScore: number | null;
+  confidenceScore: number | null;
+  technicalScore: number | null;
+  createdAt: string;
+};
+
+// ─── Colour palette ───────────────────────────────────────────────────────────
+const TOOL_COLORS = {
+  "English Guru": "#f97316",
+  "Interview Ace": "#3b82f6",
+  "Rozgar Samachar": "#a855f7",
+};
+
+const SCORE_COLOR = (s: number) =>
+  s >= 80 ? "#22c55e" : s >= 60 ? "#f97316" : "#ef4444";
+
+// ─── XP / level system ───────────────────────────────────────────────────────
+const LEVELS = [
+  { name: "Newcomer", emoji: "🌱", min: 0 },
+  { name: "Learner", emoji: "📚", min: 200 },
+  { name: "Practitioner", emoji: "💡", min: 500 },
+  { name: "Communicator", emoji: "🗣️", min: 1000 },
+  { name: "Fluent Speaker", emoji: "⭐", min: 1800 },
+  { name: "Expert", emoji: "🏆", min: 3000 },
+];
+
+function getLevel(xp: number) {
+  const idx = LEVELS.findIndex((l, i) => i === LEVELS.length - 1 || xp < LEVELS[i + 1]!.min);
+  const current = LEVELS[idx]!;
+  const next = LEVELS[idx + 1];
+  const prevMin = current.min;
+  const nextMin = next?.min ?? prevMin + 1000;
+  const pct = Math.min(100, Math.round(((xp - prevMin) / (nextMin - prevMin)) * 100));
+  return { ...current, xp, pct, next, nextMin };
+}
+
+// ─── Achievements ─────────────────────────────────────────────────────────────
+const ACHIEVEMENTS = [
+  { id: "first_session", title: "First Step", desc: "Complete your first session", icon: Star, check: (s: number) => s >= 1 },
+  { id: "streak_3", title: "3-Day Flame", desc: "3-day learning streak", icon: Flame, check: (_: number, streak: number) => streak >= 3 },
+  { id: "sessions_10", title: "Dedicated", desc: "10 total sessions", icon: BookOpen, check: (s: number) => s >= 10 },
+  { id: "interview_5", title: "Interview Warrior", desc: "5 mock interviews", icon: Mic, check: (_: number, __: number, interviews: number) => interviews >= 5 },
+  { id: "score_80", title: "High Scorer", desc: "Average interview score ≥ 80%", icon: Trophy, check: (_: number, __: number, ___: number, avgScore: number) => avgScore >= 80 },
+  { id: "streak_7", title: "Week Warrior", desc: "7-day streak", icon: Flame, check: (_: number, streak: number) => streak >= 7 },
+  { id: "sessions_50", title: "Power Learner", desc: "50 sessions completed", icon: Zap, check: (s: number) => s >= 50 },
+  { id: "score_90", title: "Interview Pro", desc: "Average score ≥ 90%", icon: Award, check: (_: number, __: number, ___: number, avgScore: number) => avgScore >= 90 },
+];
+
+// ─── 30-day calendar grid ─────────────────────────────────────────────────────
+function ActivityCalendar({ entries }: { entries: { date: string }[] }) {
+  const days = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (29 - i));
+    const dateStr = d.toISOString().slice(0, 10);
+    const count = entries.filter(e => e.date === dateStr).length;
+    return { date: dateStr, count, label: d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) };
+  });
+
+  const max = Math.max(...days.map(d => d.count), 1);
+
+  return (
+    <div
+      className="flex flex-wrap gap-1"
+      role="grid"
+      aria-label="30-day activity calendar"
+    >
+      {days.map(day => {
+        const intensity = day.count === 0 ? 0 : Math.ceil((day.count / max) * 4);
+        const bg = intensity === 0 ? "bg-muted" :
+          intensity === 1 ? "bg-orange-200" :
+          intensity === 2 ? "bg-orange-300" :
+          intensity === 3 ? "bg-orange-400" : "bg-orange-500";
+        return (
+          <div
+            key={day.date}
+            role="gridcell"
+            aria-label={`${day.label}: ${day.count} session${day.count !== 1 ? "s" : ""}`}
+            title={`${day.label}: ${day.count} session${day.count !== 1 ? "s" : ""}`}
+            className={`w-5 h-5 sm:w-6 sm:h-6 rounded-sm cursor-default transition-transform hover:scale-110 ${bg}`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
 function StatCard({ icon: Icon, label, value, sub, color }: {
   icon: React.ElementType; label: string; value: string | number; sub?: string; color: string;
 }) {
   return (
-    <Card className="border shadow-sm hover:shadow-md transition-shadow">
-      <CardContent className="pt-5 pb-4">
+    <Card className="border shadow-sm">
+      <CardContent className="p-5">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${color}`}>
           <Icon className="w-5 h-5" />
         </div>
-        <div className="text-2xl font-extrabold text-secondary">{value}</div>
+        <div className="text-2xl font-display font-bold text-secondary">{value}</div>
         <div className="text-sm font-semibold text-secondary mt-0.5">{label}</div>
         {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
       </CardContent>
@@ -26,312 +132,454 @@ function StatCard({ icon: Icon, label, value, sub, color }: {
   );
 }
 
-function ScoreBar({ score, label, idx }: { score: number; label: string; idx: number }) {
-  const color = score >= 75 ? "bg-green-500" : score >= 55 ? "bg-yellow-500" : "bg-red-400";
+// ─── Custom tooltip for recharts ─────────────────────────────────────────────
+function ScoreTooltip({ active, payload }: { active?: boolean; payload?: { payload: { label: string; score: number } }[] }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]!.payload;
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-muted-foreground w-6 shrink-0">#{idx + 1}</span>
-      <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
-        <div className={`h-full rounded-full flex items-center justify-end pr-2 transition-all duration-700 ${color}`}
-          style={{ width: `${Math.max(score, 5)}%` }}>
-          <span className="text-[10px] font-bold text-white">{score}</span>
-        </div>
-      </div>
-      <span className="text-xs text-muted-foreground w-24 shrink-0 truncate">{label}</span>
+    <div className="bg-card border rounded-xl shadow-lg px-3 py-2 text-sm">
+      <p className="font-bold text-secondary">{d.label}</p>
+      <p style={{ color: SCORE_COLOR(d.score) }} className="font-bold">{d.score}%</p>
     </div>
   );
 }
 
-function StreakDisplay({ streak }: { streak: number }) {
-  if (streak === 0) return (
-    <div className="text-center py-4 text-muted-foreground">
-      <p className="text-sm">Start learning today to build your streak!</p>
-    </div>
-  );
-  const flames = Math.min(streak, 7);
+function ActivityTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
+  if (!active || !payload?.length) return null;
   return (
-    <div className="text-center py-2">
-      <div className="flex items-center justify-center gap-1 mb-2 flex-wrap">
-        {Array.from({ length: flames }).map((_, i) => (
-          <span key={i} className="text-2xl animate-in fade-in" style={{ animationDelay: `${i * 80}ms` }}>🔥</span>
-        ))}
-        {streak > 7 && <span className="text-lg font-bold text-orange-500">+{streak - 7}</span>}
-      </div>
-      <p className="text-sm font-semibold text-secondary">
-        {streak >= 30 ? "Unstoppable! 30+ days!" : streak >= 14 ? "Two weeks strong!" : streak >= 7 ? "One full week! Amazing!" : streak >= 3 ? "You're on a roll!" : "Keep going — day " + streak + "!"}
-      </p>
+    <div className="bg-card border rounded-xl shadow-lg px-3 py-2 text-sm">
+      <p className="font-bold text-secondary">{label}</p>
+      <p className="text-primary font-bold">{payload[0]!.value} session{payload[0]!.value !== 1 ? "s" : ""}</p>
     </div>
   );
 }
 
-function ActivityDot({ count, label }: { count: number; label: string }) {
-  const intensity = count >= 5 ? "bg-primary scale-110" : count >= 3 ? "bg-primary/70" : count >= 1 ? "bg-primary/40" : "bg-muted";
-  return (
-    <div className="flex flex-col items-center gap-1.5">
-      <div className={`w-8 h-8 rounded-lg transition-all ${intensity}`} title={`${count} sessions`} />
-      <span className="text-[10px] text-muted-foreground font-medium">{label}</span>
-    </div>
-  );
-}
-
-type Achievement = {
-  id: string; icon: string; label: string; desc: string; unlocked: boolean; hint?: string;
-};
-
-function AchievementCard({ a }: { a: Achievement }) {
-  return (
-    <div className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${a.unlocked ? "bg-card border-primary/20 shadow-sm" : "bg-muted/30 border-border opacity-50 grayscale"}`}>
-      <span className="text-2xl shrink-0">{a.icon}</span>
-      <div className="min-w-0">
-        <p className={`text-sm font-bold truncate ${a.unlocked ? "text-secondary" : "text-muted-foreground"}`}>{a.label}</p>
-        <p className="text-xs text-muted-foreground truncate">{a.unlocked ? a.desc : a.hint ?? a.desc}</p>
-      </div>
-      {a.unlocked && <span className="text-primary shrink-0 ml-auto"><Star className="w-4 h-4 fill-primary" /></span>}
-    </div>
-  );
-}
-
-function InsightCard({ icon, text, color }: { icon: string; text: string; color: string }) {
-  return (
-    <div className={`flex items-center gap-3 p-3 rounded-xl border ${color}`}>
-      <span className="text-xl shrink-0">{icon}</span>
-      <p className="text-sm font-medium text-secondary">{text}</p>
-    </div>
-  );
-}
-
-const TOOL_COLORS: Record<string, string> = {
-  "English Guru": "bg-orange-100 text-orange-700",
-  "Interview Ace": "bg-blue-100 text-blue-700",
-  "Rozgar Samachar": "bg-purple-100 text-purple-700",
-};
-const TOOL_ICONS: Record<string, React.ElementType> = {
-  "English Guru": BookOpen, "Interview Ace": Mic, "Rozgar Samachar": Newspaper,
-};
-
-export default function Progress() {
-  const [, navigate] = useLocation();
-  const { interviewScores, activityByDay, streak, totalSessions, avgScore, byTool } = useProgress();
+// ─── Main page ────────────────────────────────────────────────────────────────
+export default function ProgressPage() {
+  const { user } = useAuth();
+  const { profile } = useStudentProfile();
+  const { entries, interviewScores, activityByDay, streak, totalSessions, avgScore, byTool } = useProgress();
   const { items: historyItems } = useHistory();
-  const isEmpty = totalSessions === 0 && historyItems.length === 0;
+  const [, navigate] = useLocation();
 
-  if (isEmpty) {
+  // Server-side stats (logged-in only)
+  const [serverStats, setServerStats] = useState<ServerStats | null>(null);
+  const [apiInterviews, setApiInterviews] = useState<ApiInterviewSession[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    fetch(`${BASE}/api/profile/stats`, { credentials: "include" })
+      .then(r => r.json())
+      .then((d: ServerStats) => setServerStats(d))
+      .catch(() => {/* use local */});
+
+    fetch(`${BASE}/api/sessions/interview?limit=20`, { credentials: "include" })
+      .then(r => r.json())
+      .then((d: { sessions?: ApiInterviewSession[] }) => setApiInterviews(d.sessions ?? []))
+      .catch(() => {/* use local */});
+  }, [user]);
+
+  // Merge local + server stats
+  const totalLearning = serverStats?.totalLearning ?? byTool["English Guru"];
+  const totalInterviews = serverStats?.totalInterviews ?? byTool["Interview Ace"];
+  const currentStreak = serverStats?.streak ?? streak;
+  const currentAvgScore = serverStats?.averageScore ?? avgScore;
+
+  // XP calculation
+  const totalSess = serverStats ? (serverStats.totalLearning + serverStats.totalInterviews) : totalSessions;
+  const xp = totalSess * 10 + currentAvgScore * 2 + currentStreak * 25;
+  const level = getLevel(xp);
+
+  // Score trend data from API (richer) or local fallback
+  // DB stores scores as 0-100 (interview-ace tracks score*10 already)
+  const clamp = (v: number | null) => v !== null ? Math.min(100, Math.max(0, v)) : null;
+
+  const scoreTrendData = apiInterviews.length > 0
+    ? apiInterviews
+        .filter(s => s.overallScore !== null)
+        .slice(0, 20)
+        .reverse()
+        .map((s, i) => ({
+          label: `#${i + 1} ${s.interviewType ?? s.role ?? "Interview"}`.slice(0, 20),
+          score: clamp(s.overallScore) ?? 0,
+          communication: clamp(s.communicationScore),
+          grammar: clamp(s.grammarScore),
+          confidence: clamp(s.confidenceScore),
+        }))
+    : interviewScores.slice(0, 20).map((e, i) => ({
+        label: `Session ${i + 1}`,
+        score: e.score ?? 0,
+        communication: null,
+        grammar: null,
+        confidence: null,
+      }));
+
+  // Tool pie data
+  const toolPieData = [
+    { name: "English Guru", value: totalLearning || 0, color: "#f97316" },
+    { name: "Interview Ace", value: totalInterviews || 0, color: "#3b82f6" },
+    { name: "Rozgar Samachar", value: byTool["Rozgar Samachar"], color: "#a855f7" },
+  ].filter(d => d.value > 0);
+
+  // Achievements check
+  const achievements = ACHIEVEMENTS.map(a => ({
+    ...a,
+    unlocked: a.check(totalSess, currentStreak, totalInterviews || 0, currentAvgScore),
+  }));
+
+  // Skill breakdown averages from API interviews
+  // Skill sub-scores are 0-100 in DB (same convention as overallScore)
+  const skillAvg = apiInterviews.length > 0 ? (() => {
+    const hasDetail = apiInterviews.filter(s => s.communicationScore !== null);
+    if (!hasDetail.length) return null;
+    const avg = (key: keyof ApiInterviewSession) =>
+      Math.round(hasDetail.reduce((a, s) => a + Math.min(100, Math.max(0, (s[key] as number | null) ?? 0)), 0) / hasDetail.length);
+    return {
+      communication: avg("communicationScore"),
+      grammar: avg("grammarScore"),
+      confidence: avg("confidenceScore"),
+      technical: avg("technicalScore"),
+    };
+  })() : null;
+
+  const hasData = totalSess > 0 || entries.length > 0;
+
+  // ── Empty state ────────────────────────────────────────────────────────────
+  if (!hasData) {
     return (
-      <div className="container mx-auto px-4 py-20 max-w-2xl text-center">
+      <div className="container mx-auto px-4 py-20 max-w-md text-center">
         <div className="text-6xl mb-6">🚀</div>
-        <h1 className="text-3xl font-display font-bold text-secondary mb-3">Your Journey Awaits</h1>
-        <p className="text-muted-foreground mb-8 leading-relaxed">
-          Complete your first session and watch your progress come alive — streaks, scores, and achievements all tracked here.
-        </p>
-        <div className="flex gap-3 justify-center flex-wrap">
-          <Button onClick={() => navigate("/english-guru")} className="font-bold">Start English Guru</Button>
-          <Button variant="outline" onClick={() => navigate("/interview-ace")} className="font-bold">Try Interview Ace</Button>
+        <h1 className="text-2xl font-display font-bold text-secondary mb-3">Your journey starts here</h1>
+        <p className="text-muted-foreground mb-8">Complete a few sessions to unlock your personalised analytics dashboard.</p>
+        <div className="space-y-3">
+          <Button className="w-full font-bold h-12" onClick={() => navigate("/english-guru")}>
+            <BookOpen className="w-4 h-4 mr-2" />Start English Guru
+          </Button>
+          <Button variant="outline" className="w-full font-bold h-12" onClick={() => navigate("/interview-ace")}>
+            <Mic className="w-4 h-4 mr-2" />Try Interview Ace
+          </Button>
+          {!user && (
+            <div className="pt-4 border-t">
+              <p className="text-sm text-muted-foreground mb-3">Sign in to sync your progress across devices</p>
+              <Button variant="ghost" onClick={() => navigate("/login")} className="text-primary font-semibold">
+                <LogIn className="w-4 h-4 mr-1.5" />Sign In
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
-  const xp = totalSessions * 10 + Math.round((avgScore ?? 0) * 2) + streak * 25;
-  const level = Math.floor(xp / 200) + 1;
-  const xpInLevel = xp % 200;
-
-  // Achievements
-  const achievements: Achievement[] = [
-    { id: "first", icon: "🌟", label: "First Step", desc: "Completed your first session", hint: "Complete any session to unlock", unlocked: totalSessions >= 1 },
-    { id: "streak3", icon: "🔥", label: "On Fire", desc: "3-day learning streak", hint: "Use EduBharat 3 days in a row", unlocked: streak >= 3 },
-    { id: "streak7", icon: "⚡", label: "Week Champion", desc: "7 days straight — incredible!", hint: "7 consecutive days of learning", unlocked: streak >= 7 },
-    { id: "interview5", icon: "🎯", label: "Interview Warrior", desc: "5 mock interviews completed", hint: "Complete 5 Interview Ace sessions", unlocked: (byTool["Interview Ace"] ?? 0) >= 5 },
-    { id: "guru10", icon: "📚", label: "Grammar Pro", desc: "10 English Guru sessions done", hint: "10 English Guru sessions", unlocked: (byTool["English Guru"] ?? 0) >= 10 },
-    { id: "news3", icon: "📰", label: "News Reader", desc: "Read 3 Rozgar Samachar editions", hint: "Open Rozgar Samachar 3 times", unlocked: (byTool["Rozgar Samachar"] ?? 0) >= 3 },
-    { id: "score80", icon: "🏆", label: "High Achiever", desc: "Average interview score 80%+", hint: "Score an average of 80%+ in interviews", unlocked: avgScore >= 80 },
-    { id: "total50", icon: "👑", label: "EduBharat Pro", desc: "50 total sessions — you're dedicated!", hint: "Complete 50 sessions total", unlocked: totalSessions >= 50 },
-  ];
-
-  const unlocked = achievements.filter(a => a.unlocked);
-  const locked = achievements.filter(a => !a.unlocked);
-
-  // Personalised insights
-  const insights: { icon: string; text: string; color: string }[] = [];
-  if (avgScore >= 80) insights.push({ icon: "🎉", text: "You're scoring 80%+ in interviews — you're interview-ready!", color: "bg-green-50 border-green-200" });
-  else if (avgScore >= 60 && avgScore < 80) insights.push({ icon: "📈", text: `Your average is ${avgScore}%. Try giving more specific examples using the STAR method.`, color: "bg-blue-50 border-blue-200" });
-  else if (avgScore > 0 && avgScore < 60) insights.push({ icon: "💡", text: "Focus on structure: Situation → Task → Action → Result in your answers.", color: "bg-yellow-50 border-yellow-200" });
-
-  type ToolKey = "English Guru" | "Interview Ace" | "Rozgar Samachar";
-  const tools: ToolKey[] = ["English Guru", "Interview Ace", "Rozgar Samachar"];
-  const topTool: ToolKey = tools.reduce(
-    (top, t) => (byTool[t] ?? 0) > (byTool[top] ?? 0) ? t : top,
-    "English Guru" as ToolKey
-  );
-  if (totalSessions >= 5) insights.push({ icon: "💪", text: `Your most-used tool is ${topTool} — great focus!`, color: "bg-orange-50 border-orange-200" });
-  if (streak >= 7) insights.push({ icon: "🔥", text: `${streak}-day streak! Consistency is the #1 key to learning.`, color: "bg-red-50 border-red-200" });
-
   return (
-    <div className="container mx-auto px-4 py-10 max-w-5xl">
-      {/* Header with level */}
-      <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
+    <div className="container mx-auto px-4 py-8 max-w-5xl space-y-6">
+      {/* ── Page header ── */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-display font-bold text-secondary">My Progress</h1>
-          <p className="text-muted-foreground text-sm mt-1">Your EduBharat learning journey</p>
+          <p className="text-muted-foreground text-sm mt-1">
+            {profile.name ? `${profile.name}'s` : "Your"} learning journey at a glance
+          </p>
         </div>
-        <div className="bg-card border rounded-2xl px-5 py-3 text-center shadow-sm">
-          <div className="text-xs text-muted-foreground font-medium">Level</div>
-          <div className="text-4xl font-extrabold text-primary leading-none my-1">{level}</div>
-          <div className="w-32 bg-muted rounded-full h-2">
-            <div className="h-2 bg-primary rounded-full transition-all duration-700" style={{ width: `${(xpInLevel / 200) * 100}%` }} />
+        {!user && (
+          <Button variant="outline" onClick={() => navigate("/login")} size="sm">
+            <LogIn className="w-3.5 h-3.5 mr-1.5" />Sign in to sync
+          </Button>
+        )}
+      </div>
+
+      {/* ── Level / XP hero ── */}
+      <Card className="border-2 border-primary/20 bg-gradient-to-br from-orange-50 to-white shadow-sm">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-4xl">{level.emoji}</span>
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Current Level</div>
+                <div className="text-xl font-display font-bold text-secondary">{level.name}</div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-display font-bold text-primary">{xp.toLocaleString("en-IN")} XP</div>
+              {level.next && (
+                <div className="text-xs text-muted-foreground">{(level.nextMin - xp).toLocaleString("en-IN")} XP to {level.next.name}</div>
+              )}
+            </div>
           </div>
-          <div className="text-xs text-muted-foreground mt-1">{xpInLevel}/200 XP</div>
-        </div>
+          <Progress value={level.pct} className="h-3 bg-orange-100" />
+          <div className="flex justify-between mt-1.5 text-xs text-muted-foreground">
+            <span>{level.min.toLocaleString("en-IN")} XP</span>
+            <span className="font-semibold text-primary">{level.pct}%</span>
+            {level.next && <span>{level.nextMin.toLocaleString("en-IN")} XP</span>}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Stat cards ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard icon={Flame} label="Day Streak" value={currentStreak} sub={currentStreak >= 3 ? "🔥 On fire!" : "Keep going!"} color="bg-orange-100 text-orange-600" />
+        <StatCard icon={BarChart2} label="Total Sessions" value={totalSess.toLocaleString("en-IN")} sub="All tools combined" color="bg-blue-100 text-blue-600" />
+        <StatCard icon={Trophy} label="Avg Interview" value={currentAvgScore > 0 ? `${currentAvgScore}%` : "—"} sub={currentAvgScore >= 80 ? "Excellent!" : currentAvgScore >= 60 ? "Good progress" : "Keep practising"} color="bg-green-100 text-green-600" />
+        <StatCard icon={Star} label="Total XP" value={xp.toLocaleString("en-IN")} sub={`Level: ${level.name}`} color="bg-purple-100 text-purple-600" />
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatCard icon={Flame} label="Day Streak" value={streak} sub={streak > 0 ? `${streak} ${streak === 1 ? "day" : "days"} 🔥` : "Start today!"} color="bg-orange-100 text-orange-600" />
-        <StatCard icon={Target} label="Sessions" value={totalSessions} sub="activities completed" color="bg-blue-100 text-blue-600" />
-        <StatCard icon={Award} label="Avg Interview" value={avgScore > 0 ? `${avgScore}%` : "—"} sub={avgScore >= 70 ? "Great work!" : avgScore > 0 ? "Keep practising" : "Try Interview Ace"} color="bg-green-100 text-green-600" />
-        <StatCard icon={Zap} label="Total XP" value={xp} sub={`Level ${level} Learner`} color="bg-purple-100 text-purple-600" />
-      </div>
-
-      {/* Streak + Activity */}
-      <div className="grid md:grid-cols-2 gap-6 mb-6">
+      {/* ── Interview score trend ── */}
+      {scoreTrendData.length > 0 && (
         <Card className="border shadow-sm">
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-2 pt-5 px-5">
             <CardTitle className="text-base flex items-center gap-2">
-              <Flame className="w-4 h-4 text-orange-500" />Learning Streak
+              <TrendingUp className="w-4 h-4 text-primary" />
+              Interview Score Trend
+              <Badge variant="secondary" className="ml-auto text-xs font-normal">Last {scoreTrendData.length} sessions</Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <StreakDisplay streak={streak} />
-          </CardContent>
-        </Card>
+          <CardContent className="px-5 pb-5">
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={scoreTrendData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="scoreGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f97316" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false}
+                  tickFormatter={v => v.slice(0, 8)} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false}
+                  tickFormatter={v => `${v}%`} />
+                <Tooltip content={<ScoreTooltip />} />
+                <Area type="monotone" dataKey="score" stroke="#f97316" strokeWidth={2.5}
+                  fill="url(#scoreGrad)" dot={{ r: 3, fill: "#f97316", strokeWidth: 0 }}
+                  activeDot={{ r: 5 }} />
+              </AreaChart>
+            </ResponsiveContainer>
 
-        <Card className="border shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-primary" />This Week
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-end gap-2 justify-between">
-              {activityByDay.map(day => <ActivityDot key={day.date} count={day.count} label={day.label} />)}
-            </div>
-            <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-muted inline-block" />No activity</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-primary/40 inline-block" />Some</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-primary inline-block" />Active</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Insights */}
-      {insights.length > 0 && (
-        <div className="space-y-2 mb-6">
-          {insights.map((ins, i) => <InsightCard key={i} {...ins} />)}
-        </div>
-      )}
-
-      {/* Tool breakdown */}
-      <Card className="border shadow-sm mb-6">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-primary" />Activity by Tool
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {(["English Guru", "Interview Ace", "Rozgar Samachar"] as const).map(tool => {
-            const count = byTool[tool] ?? 0;
-            const pct = Math.round((count / Math.max(totalSessions, 1)) * 100);
-            const Icon = TOOL_ICONS[tool]!;
-            return (
-              <div key={tool}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-6 h-6 rounded flex items-center justify-center ${TOOL_COLORS[tool]}`}>
-                      <Icon className="w-3.5 h-3.5" />
+            {/* Skill breakdown row */}
+            {skillAvg && (
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { label: "Communication", value: skillAvg.communication, icon: MessageCircle, color: "text-blue-600 bg-blue-50" },
+                  { label: "Grammar", value: skillAvg.grammar, icon: Pencil, color: "text-green-600 bg-green-50" },
+                  { label: "Confidence", value: skillAvg.confidence, icon: Flame, color: "text-orange-600 bg-orange-50" },
+                  { label: "Technical", value: skillAvg.technical, icon: Brain, color: "text-purple-600 bg-purple-50" },
+                ].map(s => (
+                  <div key={s.label} className={`rounded-xl p-3 ${s.color.split(" ")[1]}`}>
+                    <div className={`text-xs font-bold ${s.color.split(" ")[0]} mb-1 flex items-center gap-1`}>
+                      <s.icon className="w-3 h-3" />{s.label}
                     </div>
-                    <span className="text-sm font-medium">{tool}</span>
+                    <div className={`text-lg font-display font-bold ${s.color.split(" ")[0]}`}>{s.value}%</div>
+                    <Progress value={s.value} className="h-1.5 mt-1 bg-white/70" />
                   </div>
-                  <span className="text-sm font-bold text-secondary">{count} sessions</span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2">
-                  <div className="h-2 bg-primary rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
-                </div>
+                ))}
               </div>
-            );
-          })}
-        </CardContent>
-      </Card>
-
-      {/* Interview Score History */}
-      {interviewScores.length > 0 && (
-        <Card className="border shadow-sm mb-6">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Mic className="w-4 h-4 text-primary" />Interview Score History
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {interviewScores.map((entry, i) => (
-              <ScoreBar key={entry.id} score={entry.score ?? 0} label={entry.activity} idx={i} />
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Achievements */}
-      <Card className="border shadow-sm mb-6">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-primary" />
-            Achievements
-            {unlocked.length > 0 && <Badge variant="secondary" className="ml-1">{unlocked.length}/{achievements.length}</Badge>}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {unlocked.length > 0 && (
-            <div className="grid sm:grid-cols-2 gap-2 mb-4">
-              {unlocked.map(a => <AchievementCard key={a.id} a={a} />)}
-            </div>
-          )}
-          {locked.length > 0 && (
-            <>
-              {unlocked.length > 0 && <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Up Next</p>}
-              <div className="grid sm:grid-cols-2 gap-2">
-                {locked.slice(0, 4).map(a => <AchievementCard key={a.id} a={a} />)}
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Recent saved items */}
-      {historyItems.length > 0 && (
-        <Card className="border shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-primary" />Recently Saved
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {historyItems.slice(0, 5).map(item => (
-                <div key={item.id} className="flex items-center justify-between gap-3 py-2 border-b last:border-0">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-secondary truncate">{item.title}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(item.savedAt).toLocaleDateString("en-IN")}</p>
-                  </div>
-                  <Badge variant="secondary" className={`shrink-0 text-xs ${TOOL_COLORS[item.tool] ?? ""}`}>{item.tool}</Badge>
-                </div>
-              ))}
-            </div>
-            {historyItems.length > 5 && (
-              <Button variant="ghost" size="sm" className="mt-3 w-full text-xs" onClick={() => navigate("/history")}>
-                View all {historyItems.length} saved items →
-              </Button>
             )}
           </CardContent>
         </Card>
       )}
+
+      {/* ── Activity grid: bar chart + 30-day calendar ── */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        {/* Weekly bar chart */}
+        <Card className="border shadow-sm">
+          <CardHeader className="pb-2 pt-5 px-5">
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-primary" />
+              This Week's Activity
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-5">
+            <ResponsiveContainer width="100%" height={170}>
+              <BarChart data={activityByDay} margin={{ top: 5, right: 5, left: -25, bottom: 0 }} barSize={24}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip content={<ActivityTooltip />} cursor={{ fill: "#f97316", opacity: 0.08 }} />
+                <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                  {activityByDay.map((d, i) => (
+                    <Cell key={i} fill={d.count > 0 ? "#f97316" : "#e2e8f0"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* 30-day calendar */}
+        <Card className="border shadow-sm">
+          <CardHeader className="pb-2 pt-5 px-5">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-primary" />
+              30-Day Activity
+              <Badge variant="outline" className="ml-auto text-xs font-normal">
+                🔥 {currentStreak} day streak
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-5">
+            <ActivityCalendar entries={entries} />
+            <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
+              <span>Less</span>
+              <div className="flex gap-1">
+                {["bg-muted", "bg-orange-200", "bg-orange-300", "bg-orange-400", "bg-orange-500"].map(c => (
+                  <div key={c} className={`w-4 h-4 rounded-sm ${c}`} />
+                ))}
+              </div>
+              <span>More</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Tool breakdown ── */}
+      {toolPieData.length > 0 && (
+        <Card className="border shadow-sm">
+          <CardHeader className="pb-2 pt-5 px-5">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Target className="w-4 h-4 text-primary" />
+              Tool Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-5">
+            <div className="flex flex-col sm:flex-row items-center gap-6">
+              <div className="w-full sm:w-48 shrink-0">
+                <ResponsiveContainer width="100%" height={200}>
+                  <RadialBarChart
+                    cx="50%" cy="50%"
+                    innerRadius="30%" outerRadius="90%"
+                    data={toolPieData}
+                    startAngle={90} endAngle={-270}
+                  >
+                    <RadialBar dataKey="value" cornerRadius={4} background={{ fill: "#f1f5f9" }}>
+                      {toolPieData.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} />
+                      ))}
+                    </RadialBar>
+                    <Tooltip formatter={(v: number, name: string) => [v, name]} />
+                  </RadialBarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex-1 space-y-3 w-full">
+                {(["English Guru", "Interview Ace", "Rozgar Samachar"] as const).map(tool => {
+                  const count = tool === "English Guru" ? (totalLearning || 0) : tool === "Interview Ace" ? (totalInterviews || 0) : byTool["Rozgar Samachar"];
+                  const total = (totalLearning || 0) + (totalInterviews || 0) + byTool["Rozgar Samachar"];
+                  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                  const Icon = tool === "English Guru" ? BookOpen : tool === "Interview Ace" ? Mic : Newspaper;
+                  const color = TOOL_COLORS[tool];
+                  return (
+                    <div key={tool}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-secondary">
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+                          <Icon className="w-3.5 h-3.5" style={{ color }} />
+                          {tool}
+                        </div>
+                        <div className="text-sm text-muted-foreground">{count} sessions ({pct}%)</div>
+                      </div>
+                      <Progress value={pct} className="h-2" style={{ "--progress-fill": color } as React.CSSProperties} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Achievements ── */}
+      <Card className="border shadow-sm">
+        <CardHeader className="pb-2 pt-5 px-5">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Award className="w-4 h-4 text-primary" />
+            Achievements
+            <Badge variant="secondary" className="ml-auto text-xs">
+              {achievements.filter(a => a.unlocked).length}/{achievements.length} unlocked
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {achievements.map(a => (
+            <div
+              key={a.id}
+              className={`rounded-xl border-2 p-3 text-center transition-all ${
+                a.unlocked
+                  ? "border-primary/30 bg-primary/5 shadow-sm"
+                  : "border-border bg-muted/40 opacity-50 grayscale"
+              }`}
+            >
+              <a.icon className={`w-7 h-7 mx-auto mb-2 ${a.unlocked ? "text-primary" : "text-muted-foreground"}`} />
+              <p className="text-xs font-bold text-secondary leading-snug">{a.title}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{a.desc}</p>
+              {a.unlocked && <Badge className="mt-2 text-[10px] px-1.5 h-4">Unlocked!</Badge>}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* ── Personalised insights ── */}
+      <Card className="border shadow-sm">
+        <CardHeader className="pb-2 pt-5 px-5">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Brain className="w-4 h-4 text-primary" />
+            Personalised Insights
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-5 space-y-3">
+          {currentStreak === 0 && (
+            <InsightCard type="warning" text="You haven't practised today. Even 5 minutes of English Guru keeps your streak alive!" action={{ label: "Go to English Guru", href: "/english-guru" }} />
+          )}
+          {currentStreak >= 7 && (
+            <InsightCard type="success" text={`Amazing! You've maintained a ${currentStreak}-day streak. You're building a genuine habit.`} />
+          )}
+          {currentAvgScore > 0 && currentAvgScore < 60 && (
+            <InsightCard type="tip" text="Your interview scores are below 60%. Focus on the STAR method — Situation, Task, Action, Result — for stronger answers." action={{ label: "Practice Interviews", href: "/interview-ace" }} />
+          )}
+          {currentAvgScore >= 80 && (
+            <InsightCard type="success" text="Great interview scores! Challenge yourself with Technical or Finance interview types to push further." />
+          )}
+          {byTool["Rozgar Samachar"] === 0 && totalSess >= 5 && (
+            <InsightCard type="tip" text="You haven't explored Rozgar Samachar yet. Get live job updates, salary data, and personalised career guidance." action={{ label: "Try Rozgar Samachar", href: "/rozgar-samachar" }} />
+          )}
+          {totalSess < 5 && (
+            <InsightCard type="info" text="Complete 5 sessions to unlock detailed personalised insights and achievement badges." />
+          )}
+          {historyItems.length > 0 && (
+            <InsightCard type="info" text={`You have ${historyItems.length} saved lesson${historyItems.length > 1 ? "s" : ""} in your library. Review them to reinforce what you've learned.`} action={{ label: "View Saved", href: "/history" }} />
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Insight card ─────────────────────────────────────────────────────────────
+function InsightCard({ type, text, action }: {
+  type: "tip" | "success" | "warning" | "info";
+  text: string;
+  action?: { label: string; href: string };
+}) {
+  const [, navigate] = useLocation();
+  const styles = {
+    tip: "bg-blue-50 border-blue-200 text-blue-800",
+    success: "bg-green-50 border-green-200 text-green-800",
+    warning: "bg-yellow-50 border-yellow-200 text-yellow-800",
+    info: "bg-muted border-border text-secondary",
+  };
+  const icons = { tip: "💡", success: "✅", warning: "⚠️", info: "ℹ️" };
+
+  return (
+    <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${styles[type]}`}>
+      <span className="text-base shrink-0 mt-0.5">{icons[type]}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm leading-relaxed">{text}</p>
+        {action && (
+          <button
+            onClick={() => navigate(action.href)}
+            className="mt-2 text-xs font-bold flex items-center gap-1 hover:underline"
+          >
+            {action.label} <ChevronRight className="w-3 h-3" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

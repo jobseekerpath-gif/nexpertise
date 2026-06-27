@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Bookmark, LogIn, LogOut, User, BarChart2, Menu, X, BookOpen, Mic, Newspaper } from "lucide-react";
+import { Bookmark, LogIn, LogOut, User, BarChart2, Menu, X, BookOpen, Mic, Newspaper, Settings, FileText } from "lucide-react";
 import { useHistory } from "@/lib/use-history";
 import { useAuth } from "@/lib/use-auth";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { href: "/english-guru", label: "English Guru", icon: BookOpen },
   { href: "/interview-ace", label: "Interview Ace", icon: Mic },
   { href: "/rozgar-samachar", label: "Rozgar Samachar", icon: Newspaper },
+  { href: "/resume-intelligence", label: "Resume", icon: FileText },
 ];
 
 export function Navbar() {
@@ -78,14 +79,16 @@ export function Navbar() {
 
             {user ? (
               <div className="flex items-center gap-2">
-                {user.picture ? (
-                  <img src={user.picture} alt={user.name ?? user.email} className="w-8 h-8 rounded-full border-2 border-primary/20" />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                    <User className="w-4 h-4 text-primary" />
-                  </div>
-                )}
-                <span className="text-sm font-medium text-secondary max-w-[120px] truncate">{user.name ?? user.email}</span>
+                <Link href="/profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                  {user.picture ? (
+                    <img src={user.picture} alt={user.name ?? user.email} className="w-8 h-8 rounded-full border-2 border-primary/20" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <User className="w-4 h-4 text-primary" />
+                    </div>
+                  )}
+                  <span className="text-sm font-medium text-secondary max-w-[120px] truncate">{user.name ?? user.email}</span>
+                </Link>
                 <Button variant="ghost" size="icon" className="w-8 h-8" onClick={logout} title="Sign out">
                   <LogOut className="w-4 h-4 text-muted-foreground" />
                 </Button>
@@ -198,6 +201,16 @@ export function Navbar() {
                 {items.length}
               </span>
             )}
+          </Link>
+
+          <Link
+            href="/profile"
+            className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-colors ${
+              isActive("/profile") ? "bg-primary/10 text-primary" : "text-secondary hover:bg-muted"
+            }`}
+          >
+            <Settings className="w-4 h-4 shrink-0" />
+            My Profile
           </Link>
         </div>
 

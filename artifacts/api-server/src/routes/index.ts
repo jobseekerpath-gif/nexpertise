@@ -1,8 +1,12 @@
 import { Router, type IRouter } from "express";
-import healthRouter from "./health";
-import aiRouter from "./ai";
-import authRouter from "./auth";
-import rozgarRouter from "./rozgar";
+import healthRouter from "./health.js";
+import aiRouter from "./ai.js";
+import authRouter from "./auth.js";
+import rozgarRouter from "./rozgar.js";
+import profileRouter from "./profile.js";
+import sessionsRouter from "./sessions.js";
+import savedJobsRouter from "./saved-jobs.js";
+import historyItemsRouter from "./history-items.js";
 
 const router: IRouter = Router();
 
@@ -10,5 +14,9 @@ router.use(healthRouter);
 router.use(aiRouter);
 router.use(authRouter);
 router.use(rozgarRouter);
+router.use(profileRouter);
+router.use(sessionsRouter);
+router.use(savedJobsRouter);
+router.use(historyItemsRouter);
 
 export default router;
