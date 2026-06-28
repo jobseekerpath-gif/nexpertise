@@ -41,8 +41,10 @@ async function extractText(buffer: Buffer, mimetype: string): Promise<string> {
   return result.value ?? "";
 }
 
-// POST /api/resume/upload
-router.post("/resume/upload", requireAuth, upload.single("resume"), async (req, res) => {
+// POST /api/resume/upload — works for guests AND authenticated users
+// Guests: text is extracted and returned in the response (not saved to DB)
+// Auth users: text is extracted, saved to DB, and returned
+router.post("/resume/upload", upload.single("resume"), async (req, res) => {
   try {
     const file = req.file;
     if (!file) {
@@ -56,22 +58,26 @@ router.post("/resume/upload", requireAuth, upload.single("resume"), async (req, 
       return;
     }
 
-    const userId = req.session.userId!;
-    await db
-      .update(usersTable)
-      .set({
-        resumeText: text,
-        resumeFileName: file.originalname,
-        resumeAnalysis: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(usersTable.id, userId));
+    // For authenticated users, persist to DB
+    if (req.session.userId) {
+      await db
+        .update(usersTable)
+        .set({
+          resumeText: text,
+          resumeFileName: file.originalname,
+          resumeAnalysis: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(usersTable.id, req.session.userId));
+    }
 
     res.json({
       success: true,
       fileName: file.originalname,
       wordCount: text.split(/\s+/).filter(Boolean).length,
       charCount: text.length,
+      // Return extracted text so guests can use it for analysis without saving to DB
+      extractedText: !req.session.userId ? text : undefined,
     });
   } catch (err) {
     req.log.error({ err }, "Resume upload error");

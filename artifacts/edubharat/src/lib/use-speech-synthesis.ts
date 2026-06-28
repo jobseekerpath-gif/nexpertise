@@ -102,23 +102,27 @@ function pickEnglishVoice(voices: SpeechSynthesisVoice[], gender: VoiceGender, s
   const allEnglish = voices.filter(v => v.lang.startsWith("en-"));
   if (allEnglish.length === 0) return undefined;
 
-  // Priority 1 — native-sounding English (en-GB / en-US / en-AU) with gender/style match.
-  // These voices are usually higher quality and less "synthetic accent" than en-IN voices.
+  // When gender is explicitly specified, prioritise a keyword match from ALL English voices first.
+  // This ensures "male" picks a male-named voice (Daniel, George, David, James…) rather than
+  // silently falling back to whatever the first native English voice happens to be (often female).
+  if (gender !== "auto") {
+    // 1a — exact name/style + gender match across all English voices
+    const allStyleGender = allEnglish.filter(v => styleMatch(v, style) && genderMatch(v, gender));
+    if (allStyleGender.length > 0) return allStyleGender[0];
+
+    // 1b — gender keyword match across ALL English variants
+    const allGenderMatch = allEnglish.filter(v => genderMatch(v, gender));
+    if (allGenderMatch.length > 0) return allGenderMatch[0];
+  }
+
+  // Priority 2 — native-sounding English (en-GB / en-US / en-AU) with style match.
   const nativeEnglish = allEnglish.filter(v => /^en-(GB|US|AU|CA|IE|NZ|ZA)$/i.test(v.lang));
-  const nativeStyle = nativeEnglish.filter(v => styleMatch(v, style) && genderMatch(v, gender));
+  const nativeStyle = nativeEnglish.filter(v => styleMatch(v, style));
   if (nativeStyle.length > 0) return nativeStyle[0];
-  const nativeGender = nativeEnglish.filter(v => genderMatch(v, gender));
-  if (nativeGender.length > 0) return nativeGender[0];
   if (nativeEnglish.length > 0) return nativeEnglish[0];
 
-  // Priority 2 — any English voice matching gender keyword
-  const genMatch = allEnglish.filter(v => styleMatch(v, style) && genderMatch(v, gender));
-  if (genMatch.length > 0) return genMatch[0];
-  const genFallback = allEnglish.filter(v => genderMatch(v, gender));
-  if (genFallback.length > 0) return genFallback[0];
-
-  // Priority 3 — en-GB as closest to a neutral Indian cadence without being synthetic
-  return allEnglish.find(v => v.lang === "en-GB") ?? allEnglish[0];
+  // Priority 3 — any English voice
+  return allEnglish[0];
 }
 
 function pickVoice(
@@ -220,9 +224,10 @@ export function useSpeechSynthesis() {
         (langPitch.male + langPitch.female) / 2
       );
 
-      // Hard cap so speech never becomes robotic; English stays slower, other languages are natural but capped
-      utterance.rate = Math.min(language === "English" ? Math.min(baseRate, 0.82) : baseRate, 0.88);
-      utterance.pitch = language === "English" ? Math.min(basePitch, 1.0) : basePitch;
+      // Cap rate so speech sounds natural — English at 0.88 max (not 0.82 which sounds robotic)
+      utterance.rate = Math.min(baseRate, 0.90);
+      // Allow full pitch range — capping at 1.0 for English kills male (deep) voices
+      utterance.pitch = basePitch;
       utterance.volume = 1.0;
 
       utterance.onstart = () => setIsSpeaking(true);

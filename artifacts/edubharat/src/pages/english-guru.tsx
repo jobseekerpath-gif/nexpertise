@@ -644,10 +644,23 @@ function EnglishGuruContent() {
                   <div className="w-8 h-8 bg-green-100 text-green-700 rounded-lg flex items-center justify-center shrink-0">
                     <MessageCircle className="w-4 h-4" />
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-secondary">Live Conversation with {tutor.name}</p>
-                    <p className="text-xs text-muted-foreground">Mic starts automatically — speak in {uiLang}, AI responds naturally</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-secondary">Live Conversation</p>
+                    <p className="text-xs text-muted-foreground">Speak in {uiLang}, AI responds naturally</p>
                   </div>
+                  {/* Inline teacher/voice selector — compact scrollable dropdown */}
+                  <Select value={tutorId} onValueChange={id => { handleSelectTutor(id); }}>
+                    <SelectTrigger className="h-8 text-xs max-w-[140px] rounded-full border-green-300 bg-green-50 shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TUTORS.map(t => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <Button
                   onClick={toggleLiveChat}

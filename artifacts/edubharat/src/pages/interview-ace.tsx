@@ -393,19 +393,27 @@ function InterviewAceContent() {
 
   const startSession = useCallback(async () => {
     resetStream();
+    const candidateName = profile.name || "there";
     const full = await stream(
-      `You are starting a ${duration}-minute mock interview for a ${typeMeta.label} role in India for a ${experience} candidate.
+      `You are ${coach.name} starting a real ${duration}-minute job interview for ${typeMeta.label} in India.
 
-Candidate profile: ${buildProfileSummary()}
+Candidate you are interviewing: ${buildProfileSummary()}
 
-Generate ONLY the first opening question. Make it natural, warm, and specific to the role and candidate level. Do not include any intro, numbering, or explanation — just the question itself.`,
-      `You are ${coach.name}, ${coach.role}. ${coach.style}. Conduct a realistic Indian hiring interview. Be warm but professional. Ask one question at a time. Do not add filler text.`,
+Open the interview naturally — like a real interviewer would. In 1-2 warm sentences:
+- Greet them by their first name (${candidateName.split(" ")[0]})
+- Briefly introduce yourself
+- Then ask your first real interview question (relevant to their background and the role)
+
+Do NOT say "Welcome to this mock interview" or anything that breaks the realism. Speak as if this is a real interview.
+Return just the spoken text — no labels, no formatting.`,
+      `You are ${coach.name}, ${coach.role}. ${coach.style}. You are conducting a real-feeling Indian job interview. Sound warm, natural, and professional — like an actual interviewer, never robotic or scripted.`,
       undefined,
-      { maxTokens: 250 }
+      { maxTokens: 300 }
     );
-    const question = full.replace(/^\s*["']?|["']?\s*$/g, "").trim();
-    if (!question) return;
-    setQuestions([{ question }]);
+    const opening = full.replace(/^\s*["']?|["']?\s*$/g, "").trim();
+    if (!opening) return;
+    // The opening combines greeting + first question — store as first QA entry
+    setQuestions([{ question: opening }]);
     setCurrentIdx(0);
     setAnswer("");
     setIsRecording(false);
@@ -416,8 +424,9 @@ Generate ONLY the first opening question. Make it natural, warm, and specific to
     setSaved(false);
     setPhase("interview");
     // Camera does NOT start automatically — user must enable it via the button
-    setTimeout(() => synth.speak(question, "English", undefined, { voiceGender: coach.gender }), 300);
-  }, [typeMeta, experience, duration, coach, stream, resetStream, synth, buildProfileSummary, startWebcam]);
+    const pitchVariation = coach.gender === "male" ? 0.88 : 1.08;
+    setTimeout(() => synth.speak(opening, "English", undefined, { voiceGender: coach.gender, pitch: pitchVariation, rate: 0.90 }), 300);
+  }, [typeMeta, experience, duration, coach, stream, resetStream, synth, buildProfileSummary, profile.name]);
 
   const toggleRecording = useCallback(() => {
     if (autoListenEnabled) {
@@ -450,7 +459,7 @@ Generate ONLY the first opening question. Make it natural, warm, and specific to
     ));
 
     if (isFinalQuestion) {
-      void synth.speak("Thank you. That completes our session. Generating your full report now.", "English", undefined, { voiceGender: coach.gender });
+      void synth.speak("Thank you for that. It was great speaking with you — we'll wrap up here and put together your report.", "English", undefined, { voiceGender: coach.gender, rate: 0.90 });
       setTimeout(() => setPhase("report"), 1500);
       return;
     }
@@ -487,9 +496,10 @@ Next: <interview question>`,
       setCurrentIdx(prev => prev + 1);
       setAnswer("");
       setIsRecording(false);
-      void synth.speak(`${acknowledgment} ${nextQuestion}`, "English", undefined, { voiceGender: coach.gender });
+      const pitchVariation = coach.gender === "male" ? 0.88 + Math.random() * 0.06 : 1.06 + Math.random() * 0.06;
+      void synth.speak(`${acknowledgment} ${nextQuestion}`, "English", undefined, { voiceGender: coach.gender, pitch: pitchVariation, rate: 0.90 });
     } else {
-      void synth.speak("Thank you. Generating your full interview report now.", "English", undefined, { voiceGender: coach.gender });
+      void synth.speak("Thank you. That was a great session. Generating your full report now.", "English", undefined, { voiceGender: coach.gender, rate: 0.90 });
       setTimeout(() => setPhase("report"), 1200);
     }
   }, [currentQ, currentIdx, experience, duration, elapsedSeconds, coach, stream, resetStream, synth, typeMeta, buildProfileSummary, buildTranscript, clearAutoSubmitTimer, speech]);
@@ -507,7 +517,7 @@ Next: <interview question>`,
     setIsRecording(false);
     clearAutoSubmitTimer();
     resetStream();
-    setTimeout(() => synth.speak(questions[nextIdx]!.question, "English", undefined, { voiceGender: coach.gender }), 300);
+    setTimeout(() => synth.speak(questions[nextIdx]!.question, "English", undefined, { voiceGender: coach.gender, rate: 0.90 }), 300);
   }, [currentIdx, questions, resetStream, synth, clearAutoSubmitTimer]);
 
   const endEarly = useCallback(() => {
@@ -1047,7 +1057,7 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
               <p className="text-white text-sm sm:text-base font-semibold leading-snug">{currentQ.question}</p>
               <button
                 className="mt-2 text-primary/70 hover:text-primary text-xs flex items-center gap-1 mx-auto"
-                onClick={() => synth.speak(currentQ.question, "English", undefined, { voiceGender: coach.gender })}
+                onClick={() => synth.speak(currentQ.question, "English", undefined, { voiceGender: coach.gender, pitch: coach.gender === "male" ? 0.88 : 1.08, rate: 0.90 })}
               >
                 <Volume2 className="w-3 h-3" /> Repeat question
               </button>

@@ -35,8 +35,20 @@ export const DEFAULT_FILTERS: FilterState = {
   employmentType: "all",
   salaryMin: "",
   salaryMax: "",
-  sort: "relevance",
+  sort: "match",
 };
+
+// Common Indian state/city keywords for location matching
+// Note: keep tokens ≥5 chars to avoid false positives (e.g. "up", "mp" would match unrelated words)
+const INDIAN_STATES_KEYWORDS = [
+  "mumbai", "delhi", "bangalore", "bengaluru", "hyderabad", "chennai", "pune", "kolkata",
+  "ahmedabad", "jaipur", "surat", "lucknow", "kanpur", "nagpur", "visakhapatnam",
+  "bhopal", "patna", "vadodara", "ghaziabad", "ludhiana", "agra", "nashik",
+  "maharashtra", "gujarat", "rajasthan", "karnataka", "tamil", "telangana", "andhra",
+  "uttar pradesh", "west bengal", "bihar", "kerala", "odisha", "assam",
+  "chandigarh", "noida", "gurgaon", "gurugram", "coimbatore", "indore", "kochi",
+  "remote india", "anywhere india", "pan india", "pan-india",
+];
 
 // FNV-1a 32-bit hash — stable job ID from link
 export function makeJobId(link: string): string {
@@ -152,10 +164,15 @@ export function computeMatchScore(job: EnrichedJob, profile: StudentProfile): nu
   const profileCity = (profile.preferredCity || profile.location || "").toLowerCase().trim();
   const jobLocation = (job.location || "").toLowerCase();
   const jobRemote = job.workMode === "remote" || job.workMode === "hybrid";
-  if (jobRemote || (profileCity && jobLocation.includes(profileCity)) || (profileCity && jobLocation.includes("india"))) {
+  const isIndianJob = !jobLocation || jobLocation.includes("india") || INDIAN_STATES_KEYWORDS.some(k => jobLocation.includes(k));
+  if (jobRemote || (profileCity && jobLocation.includes(profileCity))) {
     score += weights.location;
+  } else if (isIndianJob) {
+    // Any Indian job is a reasonable location match for Indian candidates
+    score += weights.location * 0.7;
   } else if (jobLocation && profileCity) {
-    score += weights.location * 0.3;
+    // Foreign location — very low match for Indian fresher/junior candidates
+    score += weights.location * 0.1;
   }
 
   // Skills (30%)

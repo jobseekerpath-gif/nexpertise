@@ -120,7 +120,7 @@ export function AnimatedAvatar({
 
         {hasImage ? (
           <div
-            className={`${sz.container} rounded-full overflow-hidden border-3 shadow-lg relative`}
+            className={`${sz.container} rounded-full overflow-hidden shadow-lg relative`}
             style={{
               border: isSpeaking
                 ? "3px solid #F97316"
@@ -134,28 +134,33 @@ export function AnimatedAvatar({
               alt={name}
               width={sz.px}
               height={sz.px}
-              className={`w-full h-full object-cover object-top transition-all duration-100 ${isSpeaking ? "animate-pulse brightness-105 scale-[1.02]" : ""}`}
-              style={isSpeaking ? { animationDuration: "0.5s" } : undefined}
+              className={`w-full h-full object-cover object-top transition-all duration-75 ${isSpeaking ? "brightness-105" : ""}`}
               onError={() => setImgFailed(true)}
               draggable={false}
             />
-            {/* Status overlay */}
-            {(isSpeaking || isThinking) && (
-              <div className="absolute bottom-0 left-0 right-0 flex justify-center gap-0.5 pb-1.5">
-                {isSpeaking
-                  ? [0, 1, 2].map(i => (
-                      <span
-                        key={i}
-                        className="w-1 rounded-full bg-primary animate-pulse"
-                        style={{ height: `${6 + (i % 2) * 4}px`, animationDelay: `${i * 0.15}s` }}
-                      />
-                    ))
-                  : (
-                    <span className="text-[8px] font-bold text-white bg-black/40 rounded-full px-2 py-0.5">
-                      thinking…
-                    </span>
-                  )
-                }
+            {/* Lip-sync overlay — animated bars mimicking mouth movement when speaking */}
+            {isSpeaking && (
+              <div className="absolute bottom-0 left-0 right-0 flex items-end justify-center gap-[3px] pb-2 px-3">
+                {[5, 9, 12, 9, 7, 11, 8, 5].map((h, i) => (
+                  <span
+                    key={i}
+                    className="rounded-full bg-orange-400/90"
+                    style={{
+                      width: "3px",
+                      height: `${h}px`,
+                      animation: `lipBar 0.${3 + (i % 4)}s ease-in-out infinite alternate`,
+                      animationDelay: `${i * 0.06}s`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            {/* Thinking indicator */}
+            {isThinking && !isSpeaking && (
+              <div className="absolute bottom-0 left-0 right-0 flex justify-center pb-1.5">
+                <span className="text-[8px] font-bold text-white bg-black/40 rounded-full px-2 py-0.5">
+                  thinking…
+                </span>
               </div>
             )}
           </div>

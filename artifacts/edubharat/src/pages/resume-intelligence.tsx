@@ -225,18 +225,18 @@ function ResumeIntelligenceContent() {
         body: form,
         credentials: "include",
       });
-      const data = await res.json() as { success?: boolean; error?: string; wordCount?: number; charCount?: number };
+      const data = await res.json() as { success?: boolean; error?: string; wordCount?: number; charCount?: number; extractedText?: string };
       if (!res.ok || !data.success) throw new Error(data.error || "Upload failed");
       setFileName(file.name);
       setHasResume(true);
-      // We don't have the text yet; analysis will fetch it server-side
-      setResumeText("");
-    } catch (err) {
-      if (err instanceof Error && err.message.toLowerCase().includes("authentication")) {
-        setError("Sign in to upload files. You can paste resume text below to analyse without signing in.");
+      // For guests, server returns extracted text so analysis works without DB persistence
+      if (data.extractedText) {
+        setResumeText(data.extractedText);
       } else {
-        setError(err instanceof Error ? err.message : "Upload failed");
+        setResumeText("");
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setIsUploading(false);
     }

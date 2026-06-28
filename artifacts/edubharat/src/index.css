@@ -151,3 +151,9 @@
   --primary-foreground: 0 0% 100%;
   --ring: 174 72% 39%;
 }
+
+/* Lip-sync animation bars on speaking avatar */
+@keyframes lipBar {
+  from { transform: scaleY(0.4); opacity: 0.7; }
+  to   { transform: scaleY(1.0); opacity: 1; }
+}
