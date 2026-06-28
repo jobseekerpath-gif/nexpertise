@@ -764,7 +764,7 @@ function RozgarSamacharContent() {
       void reload();
     };
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 via-white to-indigo-50 p-4">
+      <div className="rozgar-theme min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 via-white to-indigo-50 p-4">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-teal-100 text-teal-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
@@ -776,27 +776,27 @@ function RozgarSamacharContent() {
           <Card className="border-teal-100 shadow-md rounded-2xl">
             <CardContent className="pt-6 space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-secondary">Your Name <span className="text-red-500">*</span></label>
-                <Input value={gateName} onChange={e => setGateName(e.target.value)} placeholder="e.g. Rahul Sharma" className="h-11 rounded-xl" />
+                <label htmlFor="gate-name" className="text-xs font-bold text-secondary">Your Name <span className="text-red-500">*</span></label>
+                <Input id="gate-name" value={gateName} onChange={e => setGateName(e.target.value)} placeholder="e.g. Rahul Sharma" className="h-11 rounded-xl" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-secondary">State / City <span className="text-red-500">*</span></label>
+                <label htmlFor="gate-city" className="text-xs font-bold text-secondary">State / City <span className="text-red-500">*</span></label>
                 <Select value={gateCity} onValueChange={setGateCity}>
-                  <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select your state or city" /></SelectTrigger>
+                  <SelectTrigger id="gate-city" className="h-11 rounded-xl"><SelectValue placeholder="Select your state or city" /></SelectTrigger>
                   <SelectContent>{INDIAN_STATES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-secondary">Career Goal</label>
+                <label htmlFor="gate-goal" className="text-xs font-bold text-secondary">Career Goal</label>
                 <Select value={gateGoal} onValueChange={setGateGoal}>
-                  <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="gate-goal" className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>{["Government Job", "Private Job", "IT / Tech", "Startup", "Business", "Higher Education", "Foreign Opportunity"].map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-secondary">Experience Level</label>
+                <label htmlFor="gate-exp" className="text-xs font-bold text-secondary">Experience Level</label>
                 <Select value={gateExp} onValueChange={setGateExp}>
-                  <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="gate-exp" className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>{["Student", "Fresher", "Working Professional (1-3 yrs)", "Working Professional (3-6 yrs)", "Senior Professional (6+ yrs)"].map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
@@ -817,7 +817,7 @@ function RozgarSamacharContent() {
   }
 
   return (
-    <div className="min-h-full overflow-y-auto container mx-auto px-4 py-4 max-w-[1400px]">
+    <div className="rozgar-theme min-h-full overflow-y-auto container mx-auto px-4 py-4 max-w-[1400px] bg-gradient-to-br from-teal-50/50 via-white to-indigo-50/50">
       <div className="flex min-h-full flex-col gap-4">
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b">

@@ -144,3 +144,10 @@
     font-family: var(--app-font-display);
   }
 }
+
+/* Rozgar Samachar teal/indigo brand override */
+.rozgar-theme {
+  --primary: 174 72% 39%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 174 72% 39%;
+}

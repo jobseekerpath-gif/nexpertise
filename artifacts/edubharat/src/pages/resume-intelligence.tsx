@@ -232,7 +232,11 @@ function ResumeIntelligenceContent() {
       // We don't have the text yet; analysis will fetch it server-side
       setResumeText("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      if (err instanceof Error && err.message.toLowerCase().includes("authentication")) {
+        setError("Sign in to upload files. You can paste resume text below to analyse without signing in.");
+      } else {
+        setError(err instanceof Error ? err.message : "Upload failed");
+      }
     } finally {
       setIsUploading(false);
     }
@@ -299,7 +303,7 @@ function ResumeIntelligenceContent() {
     } finally {
       setIsAnalysing(false);
     }
-  }, [hasResume, base, targetRoleMeta, experienceLevel, track, updateProfile]);
+  }, [hasResume, resumeText, base, targetRoleMeta, experienceLevel, track, updateProfile]);
 
   const downloadImprovedResume = useCallback(async () => {
     if (!resumeText && !analysis) return;

@@ -40,9 +40,9 @@ const INTERVIEW_TYPES = [
 
 const EXPERIENCE_LEVELS = ["Fresher", "1-2 years", "3-5 years", "5+ years"];
 const DURATIONS = [
-  { value: 10, label: "10 minutes", questions: "~3-4 questions" },
-  { value: 15, label: "15 minutes", questions: "~4-5 questions" },
-  { value: 25, label: "25 minutes", questions: "~7-8 questions" },
+  { value: 10, label: "10 minutes" },
+  { value: 15, label: "15 minutes" },
+  { value: 25, label: "25 minutes" },
 ];
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -814,7 +814,7 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
                       <Clock className="w-4 h-4" />
                       {d.label}
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">{d.questions}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">{d.value} minutes</p>
                   </button>
                 ))}
               </div>

@@ -17,3 +17,21 @@ id = "5ZSm4iveCYRHd0RUI_iBJ"
 uri = "file://EduBharat_Checklist.csv"
 type = "table"
 title = "EduBharat Fix Checklist (28 Items)"
+
+[[outputs]]
+id = "X9wF6pfSt-UmZK3aoxd7K"
+uri = "file://screenshots/rozgar-fixed.jpg"
+type = "image"
+title = "Rozgar Samachar — teal theme"
+
+[[outputs]]
+id = "6uK3B15xf7xBnqv7tioKL"
+uri = "file://screenshots/resume-fixed.jpg"
+type = "image"
+title = "Resume Intelligence — paste works without login"
+
+[[outputs]]
+id = "50V4OXkqgWvHHFeAydJ50"
+uri = "file://screenshots/interview-fixed.jpg"
+type = "image"
+title = "Interview Ace — no question counts"
