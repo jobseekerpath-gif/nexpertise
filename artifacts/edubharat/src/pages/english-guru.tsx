@@ -718,7 +718,6 @@ function EnglishGuruContent() {
               </div>
               <div>
                 <h1 className="text-xl font-display font-bold text-secondary">{currentMode.label}</h1>
-                <p className="text-sm text-muted-foreground">{currentMode.desc}</p>
               </div>
             </div>
           </div>
