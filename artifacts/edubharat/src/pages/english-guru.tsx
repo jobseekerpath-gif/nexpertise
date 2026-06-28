@@ -626,6 +626,28 @@ function EnglishGuruContent() {
 
         {/* Main content */}
         <main className="order-1 lg:order-2 min-w-0">
+          {/* ── MODE SELECTOR STRIP — always visible above Live Chat ── */}
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            {MODES.map(m => {
+              const MIcon = m.icon;
+              const active = mode === m.value;
+              return (
+                <button
+                  key={m.value}
+                  onClick={() => { setMode(m.value as Mode); setResult(""); resetAI(); setLiveChat(false); speech.stop(); setConvFlowState("idle"); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all
+                    ${active
+                      ? "bg-orange-500 text-white border-orange-500 shadow-sm"
+                      : "bg-white text-muted-foreground border-border hover:border-orange-300 hover:text-orange-600"
+                    }`}
+                >
+                  <MIcon className="w-3 h-3 shrink-0" />
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+
           {/* ── LIVE CONVERSATION TILE — always visible, not mode-gated ── */}
           <Card className={`flex flex-col overflow-hidden border-2 mb-5 transition-all ${liveChat ? "border-green-400 bg-green-50/30 min-h-[58vh]" : "border-green-200/70 bg-green-50/10"}`}>
             <CardContent className="pt-4 pb-4 space-y-3 flex min-h-0 flex-1 flex-col">
