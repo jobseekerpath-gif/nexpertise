@@ -107,9 +107,13 @@ router.post("/resume/text", async (req, res) => {
   }
 });
 
-// GET /api/resume/current
-router.get("/resume/current", requireAuth, async (req, res) => {
+// GET /api/resume/current — no auth required; guests get empty response
+router.get("/resume/current", async (req, res) => {
   try {
+    if (!req.session.userId) {
+      res.json({ hasResume: false });
+      return;
+    }
     const users = await db
       .select({
         resumeText: usersTable.resumeText,
@@ -118,7 +122,7 @@ router.get("/resume/current", requireAuth, async (req, res) => {
         experienceSummary: usersTable.experienceSummary,
       })
       .from(usersTable)
-      .where(eq(usersTable.id, req.session.userId!))
+      .where(eq(usersTable.id, req.session.userId))
       .limit(1);
 
     const user = users[0];
@@ -337,6 +341,74 @@ Ensure the response is valid JSON and can be parsed with JSON.parse().`;
     req.log.error({ err }, "Resume analysis error");
     res.write(`data: ${JSON.stringify({ error: "Failed to analyse resume" }) }\n\n`);
     res.end();
+  }
+});
+
+// POST /api/resume/improved — generate ATS-optimised improved resume text
+router.post("/resume/improved", async (req, res) => {
+  try {
+    const { targetRole, experienceLevel, guestText } = req.body as Record<string, string>;
+
+    let resumeTextToImprove = "";
+    if (req.session.userId) {
+      const users = await db
+        .select({ resumeText: usersTable.resumeText })
+        .from(usersTable)
+        .where(eq(usersTable.id, req.session.userId))
+        .limit(1);
+      resumeTextToImprove = users[0]?.resumeText || guestText || "";
+    } else {
+      resumeTextToImprove = guestText?.trim() || "";
+    }
+
+    if (!resumeTextToImprove.trim()) {
+      res.status(400).json({ error: "No resume text found. Please upload or paste your resume first." });
+      return;
+    }
+
+    const prompt = `You are an expert resume writer for India's job market. Rewrite the following resume to be ATS-optimised for a "${targetRole || "General"}" role (${experienceLevel || "Fresher"} level).
+
+ORIGINAL RESUME:
+${resumeTextToImprove}
+
+RULES:
+1. Keep ALL real information — do not invent experience or qualifications
+2. Fix grammar, punctuation, and phrasing
+3. Use strong action verbs (Developed, Led, Achieved, Implemented...)
+4. Add relevant keywords for "${targetRole || "General"}" that ATS scanners look for
+5. Structure clearly: Contact | Summary | Skills | Experience | Education | Certifications
+6. Keep bullet points crisp (one achievement per line, start with verb)
+7. Remove irrelevant personal info (religion, caste, date of birth, photo note)
+8. Write only plain text — no markdown, no *, no #, no ---
+
+Return ONLY the improved resume text. Nothing else.`;
+
+    const ai = getAI();
+    const contents = [
+      { role: "user", parts: [{ text: prompt }] },
+    ];
+
+    let improvedText = "";
+    for (const model of ["gemini-2.5-flash", "gemini-2.0-flash-lite"]) {
+      try {
+        const result = await ai.models.generateContent({ model, contents, config: { maxOutputTokens: 2000 } });
+        improvedText = result.text ?? "";
+        if (improvedText.trim()) break;
+      } catch (err) {
+        req.log.warn({ err, model }, "Improved resume model failed, trying next");
+        continue;
+      }
+    }
+
+    if (!improvedText.trim()) {
+      res.status(500).json({ error: "Could not generate improved resume. Please try again." });
+      return;
+    }
+
+    res.json({ improvedText });
+  } catch (err) {
+    req.log.error({ err }, "Improved resume error");
+    res.status(500).json({ error: "Failed to generate improved resume" });
   }
 });
 

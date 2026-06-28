@@ -589,25 +589,13 @@ function EnglishGuruContent() {
                 />
               </label>
               <label className="block space-y-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mode</span>
-                <Select value={mode} onValueChange={(v) => { setMode(v as Mode); setResult(""); resetAI(); setLiveChat(false); speech.stop(); setConvFlowState("idle"); }}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {MODES.map(m => (
-                      <SelectItem key={m.value} value={m.value}>
-                        <span className="flex items-center gap-2"><m.icon className="w-3.5 h-3.5" />{m.label}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </label>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Conversation Language</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Native Language</span>
                 <Select value={uiLang} onValueChange={(value) => { setUiLang(value); updateProfile({ preferredLanguage: value }); }}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="English">English</SelectItem>
-                    {INDIAN_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                    <SelectItem value="English">🇬🇧 English</SelectItem>
+                    <SelectItem value="Hindi">🇮🇳 Hindi</SelectItem>
+                    {INDIAN_LANGUAGES.filter(l => l !== "Hindi").map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </label>
@@ -750,6 +738,7 @@ function EnglishGuruContent() {
               <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl text-sm text-orange-900">
                 <strong>Your current level:</strong> {level} ({currentStage}) — your personalised CEFR path to professional English fluency. Each stage shows what to learn, how long it takes, and what resources to use.
               </div>
+              <div className="max-h-[68vh] overflow-y-auto pr-1 space-y-0">
               <div className="relative space-y-4">
                 {ROADMAP_STAGES.map((stage, idx) => {
                   const isCurrent = stage.level === currentStage;
@@ -764,7 +753,7 @@ function EnglishGuruContent() {
                           <div className={`w-0.5 flex-1 my-1 min-h-[16px] ${isPast ? "bg-primary/40" : "bg-border"}`} />
                         )}
                       </div>
-                      <div className={`flex-1 p-4 rounded-xl border-2 mb-1 transition-all ${isCurrent ? "border-primary bg-orange-50/80 shadow-sm" : isPast ? "border-primary/30 bg-muted/40 opacity-75" : `${stage.color}`}`}>
+                      <div className={`flex-1 p-4 rounded-xl border-2 mb-1 transition-all ${isCurrent ? "border-primary bg-orange-50/80 shadow-sm" : isPast ? "border-primary/20 bg-green-50/40" : `${stage.color}`}`}>
                         <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-secondary text-sm">{stage.level} — {stage.label}</span>
@@ -796,6 +785,7 @@ function EnglishGuruContent() {
                     </div>
                   );
                 })}
+              </div>
               </div>
               <Card className="border-primary/30 bg-primary/5">
                 <CardContent className="pt-5 space-y-3">
@@ -927,18 +917,49 @@ function EnglishGuruContent() {
           {mode === "lesson" && (
             <Card>
               <CardContent className="pt-5 space-y-4">
-                <CardDescription>A complete structured lesson tailored to your level and language.</CardDescription>
+                <CardDescription>A fresh research-based lesson every day — tailored to your level and native language.</CardDescription>
                 <Button className="font-bold w-full h-12" disabled={isStreaming}
-                  onClick={() => handleStream(
-                    `${level} English lesson: 1) Today's topic & why it matters 2) Key grammar rule + examples 3) 5 vocabulary words (${uiLang} meaning) 4) Practice exercise 5) Homework task.`,
-                    `Structured English teacher named ${teacherShort} for Indian ${level} students. ${tutor.teachingStyle}.`,
-                    `Daily Lesson: ${level}`
-                  )}>
+                  onClick={() => {
+                    const today = new Date();
+                    const dayOfYear = Math.ceil((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / 86400000);
+                    const LESSON_TOPICS = [
+                      "Greetings and Professional Introductions","Workplace Emails and Messages","Telephone Etiquette","Presenting Ideas in Meetings","Job Interview Phrases","Describing Your Work Experience","Polite Disagreement at Work","Asking and Giving Directions","Numbers, Dates and Time","Shopping and Negotiating","Expressing Opinions Clearly","Talking About Health and Wellbeing","Travel and Transportation","Banking and Financial Terms","Media and Current Events","Sports and Recreation Vocabulary","Technology and Social Media","Family and Relationships","Food and Restaurant English","Education and Learning Terms","Describing People and Personalities","Office Small Talk","Following Instructions","Making and Refusing Requests","Apologies and Reconciliation","Reports and Data Language","Leadership and Teamwork Phrases","Problem-Solving Language","Celebrations and Social Events","Environmental and Science Terms",
+                    ];
+                    const topic = LESSON_TOPICS[dayOfYear % LESSON_TOPICS.length]!;
+                    handleStream(
+                      `Today is ${today.toLocaleDateString("en-IN")} (Day ${dayOfYear}).
+
+Generate a UNIQUE ${level}-level English lesson on: "${topic}"
+
+IMPORTANT: Write ONLY plain sentences. Do NOT use *, **, #, ##, ---, bullets, or any markdown.
+
+Use exactly this structure:
+
+1. TODAY'S TOPIC
+Write 2 clear sentences about "${topic}" and why it matters for Indian job seekers.
+
+2. WHY IT MATTERS
+Give 2 examples of real career or daily life situations where this topic helps.
+
+3. KEY WORDS
+List 5 useful English words from this topic. For each word write: the word, then its ${uiLang} meaning, then one example sentence. Separate each with a line break.
+
+4. PRACTICE SENTENCES
+Give 2 fill-in-the-blank exercises. Then show the correct answers below each.
+
+5. TODAY'S TASK
+Give one specific 10-minute activity the student can do right now to practise this topic.
+
+Write warmly as a teacher. Use simple, clear language. No markdown symbols at all.`,
+                      `You are ${teacherShort}, a warm and experienced English teacher for Indian ${level} students. ${tutor.teachingStyle}. The student's native language is ${uiLang}. Respond entirely in plain text with numbered sections only. Never use *, **, #, ---, or bullets. Write as if speaking to a student directly.`,
+                      `Daily Lesson: ${topic}`
+                    );
+                  }}>
                   {isStreaming ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <GraduationCap className="w-5 h-5 mr-2" />}
                   Generate Today's Lesson
                 </Button>
                 {displayed && <ResultPanel title={`${level} English Lesson:`} content={displayed} isSpeaking={synth.isSpeaking}
-                  onSpeak={() => speak(displayed)} onStop={synth.stop}
+                  onSpeak={() => speak(stripMarkdownForSpeech(displayed))} onStop={synth.stop}
                   onSave={() => saveResult("lesson", `Daily Lesson: ${level}`, displayed)} saved={!!savedMap["lesson"]} />}
               </CardContent>
             </Card>

@@ -597,8 +597,12 @@ function RozgarSamacharContent() {
   const [gateCity, setGateCity] = useState("");
   const [gateGoal, setGateGoal] = useState("Private Job");
   const [gateExp, setGateExp] = useState("Fresher");
-  // Gate is required when name OR location is missing (either one missing = show gate)
-  const needsGate = !gateComplete && (!profile.name || !profile.location);
+  // Gate shows whenever real profile is incomplete — ignore localStorage flag
+  const hasValidProfile = !!(
+    profile.name && profile.name.trim().length > 1 && profile.name !== "Anonymous" &&
+    profile.location && profile.location.trim().length > 1
+  );
+  const needsGate = !hasValidProfile;
   const [activeTab, setActiveTab] = useState<"jobs" | "feed" | "saved">("jobs");
   const [activeFilterTab, setActiveFilterTab] = useState<FilterTabId>("all");
   const [hiddenJobIds, setHiddenJobIds] = useState<Set<string>>(new Set());
@@ -760,16 +764,16 @@ function RozgarSamacharContent() {
       void reload();
     };
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-white to-orange-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 via-white to-indigo-50 p-4">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <div className="w-16 h-16 bg-teal-100 text-teal-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
               <Newspaper className="w-8 h-8" />
             </div>
             <h1 className="text-2xl font-display font-extrabold text-secondary mb-2">Welcome to Rozgar Samachar</h1>
             <p className="text-muted-foreground text-sm">Tell us a bit about yourself so we can show you <strong>personalised</strong> jobs and opportunities across India.</p>
           </div>
-          <Card className="border-purple-100 shadow-md rounded-2xl">
+          <Card className="border-teal-100 shadow-md rounded-2xl">
             <CardContent className="pt-6 space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-secondary">Your Name <span className="text-red-500">*</span></label>
@@ -818,7 +822,7 @@ function RozgarSamacharContent() {
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center shadow-sm">
+            <div className="w-14 h-14 bg-teal-100 text-teal-700 rounded-2xl flex items-center justify-center shadow-sm">
               <Newspaper className="w-7 h-7" />
             </div>
             <div>

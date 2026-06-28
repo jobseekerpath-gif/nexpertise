@@ -40,9 +40,9 @@ const INTERVIEW_TYPES = [
 
 const EXPERIENCE_LEVELS = ["Fresher", "1-2 years", "3-5 years", "5+ years"];
 const DURATIONS = [
+  { value: 10, label: "10 minutes", questions: "~3-4 questions" },
   { value: 15, label: "15 minutes", questions: "~4-5 questions" },
-  { value: 30, label: "30 minutes", questions: "~8-10 questions" },
-  { value: 45, label: "45 minutes", questions: "~12-15 questions" },
+  { value: 25, label: "25 minutes", questions: "~7-8 questions" },
 ];
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -415,7 +415,7 @@ Generate ONLY the first opening question. Make it natural, warm, and specific to
     setReport(null);
     setSaved(false);
     setPhase("interview");
-    void startWebcam();
+    // Camera does NOT start automatically — user must enable it via the button
     setTimeout(() => synth.speak(question, "English", undefined, { voiceGender: coach.gender }), 300);
   }, [typeMeta, experience, duration, coach, stream, resetStream, synth, buildProfileSummary, startWebcam]);
 
@@ -613,10 +613,15 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
           if (!qs) return q;
           return { ...q, feedback: qs.feedback, score: qs.score, communication: qs.communication, grammar: qs.grammar, confidence: qs.confidence, technical: qs.technical };
         });
-        setQuestions(prev => prev.map(q => {
-          const updated = updatedAnswered.find(uq => uq.question === q.question);
-          return updated ?? q;
-        }));
+        // Use index-based mapping so text-match failures don't drop feedback
+        setQuestions(prev => {
+          let feedbackIdx = 0;
+          return prev.map(q => {
+            if (!q.answer) return q;
+            const updated = updatedAnswered[feedbackIdx++];
+            return updated ?? q;
+          });
+        });
       }
 
       setReport(parsed);
@@ -945,7 +950,7 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
         {/* Per-question review */}
         <div className="space-y-3">
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Question-by-Question</h2>
-          {answered.map((q, i) => <QuestionReview key={i} q={q} idx={i} coachName={coach.name} />)}
+          {answered.map((q, i) => <QuestionReview key={i} q={q} idx={i} coachName={coach.name} hasReport={!!report} />)}
         </div>
 
         {/* Actions */}
@@ -1071,15 +1076,15 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
           <div className="absolute bottom-1 right-1.5 text-[9px] text-white/50 font-bold">You</div>
         </div>
 
-        {/* Camera toggle */}
+        {/* Camera permission toggle — always visible */}
         <button
-          className="absolute top-14 right-3 w-24 sm:w-32 h-5 -mt-5 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
-          style={{ top: "calc(3.5rem + 72px + 4px)" }}
+          className="absolute top-14 right-3 w-24 sm:w-32 flex items-center justify-center"
+          style={{ top: "calc(3.5rem + 76px + 4px)" }}
           onClick={cameraOn ? stopWebcam : () => void startWebcam()}
-          title={cameraOn ? "Turn off camera" : "Turn on camera"}
+          title={cameraOn ? "Turn off camera" : "Enable camera (optional)"}
         >
-          <span className="bg-black/60 text-white/60 text-[9px] px-2 py-0.5 rounded-full">
-            {cameraOn ? "Turn off" : "Turn on"}
+          <span className="bg-black/70 text-white/80 text-[9px] px-2 py-0.5 rounded-full hover:bg-black/90 transition-colors">
+            {cameraOn ? "📷 Off" : "📷 Enable"}
           </span>
         </button>
       </div>
@@ -1151,7 +1156,7 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
 
 // ─── Question review card ──────────────────────────────────────────────────────
 
-function QuestionReview({ q, idx, coachName }: { q: QA; idx: number; coachName: string }) {
+function QuestionReview({ q, idx, coachName, hasReport }: { q: QA; idx: number; coachName: string; hasReport: boolean }) {
   const [open, setOpen] = useState(idx === 0);
   return (
     <Card className="border shadow-sm overflow-hidden">
@@ -1192,7 +1197,7 @@ function QuestionReview({ q, idx, coachName }: { q: QA; idx: number; coachName: 
           </div>
           <div className="rounded-xl bg-green-50 border border-green-100 p-3">
             <p className="text-xs font-bold text-green-700 mb-1">{coachName}'s Feedback</p>
-            <p className="text-sm text-green-950 whitespace-pre-wrap leading-relaxed">{q.feedback ?? "Detailed feedback is included in the overall report above."}</p>
+            <p className="text-sm text-green-950 whitespace-pre-wrap leading-relaxed">{q.feedback ?? (hasReport ? "See overall analysis above for feedback on this answer." : "Generating your personalised feedback…")}</p>
           </div>
         </div>
       )}

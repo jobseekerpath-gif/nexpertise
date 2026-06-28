@@ -32,6 +32,10 @@ const TARGET_ROLES = [
   { value: "content_writer", label: "Content Writer / Editor" },
   { value: "customer_service", label: "Customer Service" },
   { value: "mechanical_engineer", label: "Mechanical / Civil Engineer" },
+  { value: "teacher_education", label: "Teacher / Education Sector" },
+  { value: "healthcare_nursing", label: "Healthcare / Nursing / Paramedic" },
+  { value: "mba_management", label: "MBA / Management Trainee" },
+  { value: "legal_professional", label: "Legal / Law / Compliance" },
 ];
 
 const EXPERIENCE_LEVELS = [
@@ -167,6 +171,7 @@ function ResumeIntelligenceContent() {
 
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalysing, setIsAnalysing] = useState(false);
+  const [isDownloadingImproved, setIsDownloadingImproved] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [savedToHistory, setSavedToHistory] = useState(false);
@@ -296,6 +301,41 @@ function ResumeIntelligenceContent() {
     }
   }, [hasResume, base, targetRoleMeta, experienceLevel, track, updateProfile]);
 
+  const downloadImprovedResume = useCallback(async () => {
+    if (!resumeText && !analysis) return;
+    setIsDownloadingImproved(true);
+    try {
+      const res = await fetch(`${base}/api/resume/improved`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resumeText: resumeText || "",
+          targetRole: targetRoleMeta.label,
+          experienceLevel,
+          guestText: resumeText || "",
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to generate improved resume" }));
+        setError((err as { error: string }).error || "Failed to generate improved resume");
+        return;
+      }
+      const { improvedText } = await res.json() as { improvedText: string };
+      const blob = new Blob([improvedText], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `improved-resume-${targetRole}-${new Date().toISOString().slice(0, 10)}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Could not generate improved resume. Please try again.");
+    } finally {
+      setIsDownloadingImproved(false);
+    }
+  }, [resumeText, analysis, base, targetRoleMeta, targetRole, experienceLevel]);
+
   const handleSave = useCallback(() => {
     if (!analysis) return;
     save({
@@ -422,7 +462,10 @@ function ResumeIntelligenceContent() {
         </Button>
         {analysis && (
           <>
-            <Button variant="outline" onClick={downloadReport}><Download className="w-4 h-4 mr-2" />Download</Button>
+            <Button variant="outline" onClick={downloadReport}><Download className="w-4 h-4 mr-2" />Download Report</Button>
+            <Button variant="outline" onClick={downloadImprovedResume} disabled={isDownloadingImproved}>
+              {isDownloadingImproved ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating…</> : <><Zap className="w-4 h-4 mr-2" />Download Improved Resume</>}
+            </Button>
             <Button variant={savedToHistory ? "secondary" : "outline"} onClick={handleSave} disabled={savedToHistory}>
               {savedToHistory ? <><CheckCircle2 className="w-4 h-4 mr-2" />Saved</> : <><Bookmark className="w-4 h-4 mr-2" />Save</>}
             </Button>

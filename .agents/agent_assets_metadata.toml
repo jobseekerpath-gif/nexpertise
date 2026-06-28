@@ -11,3 +11,9 @@ id = "ySrQQ2mLIZSvKwSi_pRvk"
 uri = "file://reports/edubharat_issue_actions.xlsx"
 type = "table"
 title = "EduBharat — Downloadable Excel Checklist"
+
+[[outputs]]
+id = "5ZSm4iveCYRHd0RUI_iBJ"
+uri = "file://EduBharat_Checklist.csv"
+type = "table"
+title = "EduBharat Fix Checklist (28 Items)"
