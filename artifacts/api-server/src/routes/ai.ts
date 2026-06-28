@@ -170,12 +170,15 @@ router.post("/ai/stream", async (req, res) => {
   const hasClaudeKey = Boolean(process.env["ANTHROPIC_API_KEY"]);
 
   try {
-    if (hasClaudeKey) {
-      await streamAnthropic(req, res, prompt, system, maxTokens ?? 8192);
+    // Always try Gemini first; Claude is the fallback when all Gemini models fail
+    try {
+      await streamGemini(req, res, prompt, system, maxTokens ?? 8192);
       return;
+    } catch (geminiErr) {
+      if (!hasClaudeKey) throw geminiErr;
+      req.log.warn({ err: geminiErr }, "All Gemini models failed — falling back to Claude");
+      await streamAnthropic(req, res, prompt, system, maxTokens ?? 8192);
     }
-
-    await streamGemini(req, res, prompt, system, maxTokens ?? 8192);
   } catch (err) {
     req.log.error({ err }, "AI streaming error");
     res.write(`data: ${JSON.stringify({ error: userFriendlyError(err) })}\n\n`);

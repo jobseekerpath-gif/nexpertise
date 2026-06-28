@@ -349,6 +349,36 @@ function mergeItems(items: LiveItem[]) {
   });
 }
 
+/**
+ * Returns true if a job is relevant to an India-based candidate.
+ * Filters out jobs with explicit non-India locations (Australia, USA, Germany, etc.)
+ * unless the job is explicitly marked remote.
+ */
+function isIndiaRelevantJob(item: LiveItem): boolean {
+  // Explicitly remote jobs are universally applicable
+  if (item.remote === true) return true;
+  // Unknown location — allow through
+  if (!item.location) return true;
+  const loc = item.location.toLowerCase().trim();
+  if (!loc || loc === "remote" || loc === "worldwide" || loc.includes("india")) return true;
+  // Exclude jobs with clearly non-India locations
+  // Word-boundary match so "uk" inside "kolkata" doesn't false-positive
+  const tokens = loc.split(/[\s,\/\-]+/).map(t => t.trim()).filter(Boolean);
+  const nonIndiaTokens = new Set([
+    "australia", "aus", "usa", "us", "united", "states", "canada", "ca",
+    "uk", "germany", "de", "france", "netherlands", "nl", "zealand",
+    "brazil", "mexico", "japan", "jp", "china", "cn", "korea", "kr",
+    "dubai", "uae", "hongkong", "taiwan", "tw", "sweden", "norway",
+    "denmark", "finland", "switzerland", "austria", "spain", "italy",
+    "portugal", "poland", "czech", "singapore", "sg", "malaysia", "my",
+    "thailand", "th", "philippines", "ph", "indonesia", "id",
+  ]);
+  // Check compound phrases too (e.g. "new zealand", "united states")
+  const nonIndiaPhrases = ["new zealand", "united states", "united kingdom", "hong kong", "south africa"];
+  if (nonIndiaPhrases.some(p => loc.includes(p))) return false;
+  return !tokens.some(t => nonIndiaTokens.has(t));
+}
+
 router.get("/rozgar/live", async (req: Request, res: Response) => {
   const rawSection = req.query["section"] as string | undefined;
   const section: RozgarSection = rawSection && VALID_SECTIONS.has(rawSection as RozgarSection)
@@ -390,6 +420,11 @@ router.get("/rozgar/live", async (req: Request, res: Response) => {
 
     const items = mergeItems(
       rawItems.filter((item) => {
+        // For job/vacancy sections from external APIs, filter to India-relevant only
+        if (vacancySections.has(section) && (item.source === "Jobicy API" || item.source === "Arbeitnow API")) {
+          if (!isIndiaRelevantJob(item)) return false;
+        }
+
         if (!vacancySections.has(section)) return true;
 
         const haystack = `${item.title} ${item.company ?? ""} ${item.location ?? ""} ${item.summary ?? ""}`.toLowerCase();

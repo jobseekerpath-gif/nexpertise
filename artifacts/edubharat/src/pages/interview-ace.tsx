@@ -73,6 +73,10 @@ type InterviewReport = {
   strengths: string[];
   improvements: string[];
   nextSteps: string[];
+  questionScores?: Array<{
+    score: number; communication: number; grammar: number;
+    confidence: number; technical: number; feedback: string;
+  }>;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -119,6 +123,16 @@ function parseReportJson(text: string): InterviewReport | null {
       strengths: Array.isArray(parsed["strengths"]) ? parsed["strengths"].map(String) : [],
       improvements: Array.isArray(parsed["improvements"]) ? parsed["improvements"].map(String) : [],
       nextSteps: Array.isArray(parsed["nextSteps"]) ? parsed["nextSteps"].map(String) : [],
+      questionScores: Array.isArray(parsed["questionScores"])
+        ? (parsed["questionScores"] as Record<string, unknown>[]).map(qs => ({
+            score: Math.min(10, Math.max(1, Number(qs["score"]) || 5)),
+            communication: Math.min(10, Math.max(1, Number(qs["communication"]) || 5)),
+            grammar: Math.min(10, Math.max(1, Number(qs["grammar"]) || 5)),
+            confidence: Math.min(10, Math.max(1, Number(qs["confidence"]) || 5)),
+            technical: Math.min(10, Math.max(1, Number(qs["technical"]) || 5)),
+            feedback: String(qs["feedback"] || ""),
+          }))
+        : undefined,
     };
   } catch { return null; }
 }
@@ -291,7 +305,7 @@ function InterviewAceContent() {
 
   const typeMeta = INTERVIEW_TYPES.find(t => t.value === type)!;
   const currentQ = questions[currentIdx];
-  const answeredCount = questions.filter(q => q.feedback).length;
+  const answeredCount = questions.filter(q => q.answer).length;
 
   useEffect(() => { answerRef.current = answer; }, [answer]);
 
@@ -306,8 +320,8 @@ function InterviewAceContent() {
   useEffect(() => {
     if (phase !== "interview") return;
     const durationSeconds = duration * 60;
-    if (elapsedSeconds >= durationSeconds && currentQ && !currentQ.feedback && !isStreaming && !isRecording) {
-      // No active answer being processed; end the interview
+    if (elapsedSeconds >= durationSeconds && currentQ && !isStreaming && !isRecording) {
+      // Time is up — end the interview
       setPhase("report");
     }
   }, [elapsedSeconds, duration, phase, currentQ, isStreaming, isRecording]);
@@ -318,11 +332,11 @@ function InterviewAceContent() {
   }, []);
 
   useEffect(() => {
-    if (currentQ?.feedback || phase !== "interview" || isStreaming || synth.isSpeaking) {
+    if (phase !== "interview" || isStreaming || synth.isSpeaking) {
       clearAutoSubmitTimer();
-      if (isRecording) { setIsRecording(false); speech.stop(); }
+      if (isRecording && (isStreaming || synth.isSpeaking)) { setIsRecording(false); speech.stop(); }
     }
-  }, [currentQ?.feedback, phase, isStreaming, synth.isSpeaking, isRecording, speech, clearAutoSubmitTimer]);
+  }, [phase, isStreaming, synth.isSpeaking, isRecording, speech, clearAutoSubmitTimer]);
 
   useEffect(() => { return () => clearAutoSubmitTimer(); }, [clearAutoSubmitTimer]);
 
@@ -370,7 +384,7 @@ Generate ONLY the first opening question. Make it natural, warm, and specific to
     setReport(null);
     setSaved(false);
     setPhase("interview");
-    setTimeout(() => synth.speak(question, "English"), 300);
+    setTimeout(() => synth.speak(question, "English", undefined, { voiceGender: coach.gender }), 300);
   }, [typeMeta, experience, duration, coach, stream, resetStream, synth, buildProfileSummary]);
 
   const toggleRecording = useCallback(() => {
@@ -389,71 +403,64 @@ Generate ONLY the first opening question. Make it natural, warm, and specific to
     clearAutoSubmitTimer();
     setIsRecording(false);
     speech.stop();
+    const recordedAnswer = userAnswer.trim();
     setAnswer("");
-    const label = typeMeta.label;
     resetStream();
 
     const elapsedMin = Math.floor(elapsedSeconds / 60);
     const remainingMin = duration - elapsedMin;
-    const shouldWrap = remainingMin <= 2;
+    const isFinalQuestion = remainingMin <= 2;
 
-    const feedback = await stream(
-      `Interview context: ${label}, ${experience}, ${duration} minutes total. ${remainingMin} minutes remaining. ${shouldWrap ? "This is the final answer of the interview — provide feedback and then stop." : "Provide feedback and then ask exactly one natural follow-up question."}
-
-Candidate profile: ${buildProfileSummary()}
-
-Transcript so far:
-${buildTranscript(currentIdx - 1)}
-
-Current question: ${currentQ.question}
-Candidate's answer: "${userAnswer}"
-
-Return EXACTLY these sections (no extras, no markdown):
-Reaction: one warm sentence acknowledging the answer.
-Score: X/10 (overall answer quality)
-Communication: X/10
-Grammar: X/10
-Confidence: X/10
-Technical: X/10
-Strengths: 2 short bullets
-Improvements: 2 short bullets
-Ideal Answer: 2-3 line model answer
-${shouldWrap ? "Final: END" : "Next Question: one adaptive follow-up question based on this answer"}
-
-Keep it human, realistic, and encouraging. Use Indian hiring context.`,
-      `You are ${coach.name}, ${coach.role}. ${coach.style}. Give natural feedback and ask sharp, adaptive follow-up questions.`,
-      undefined,
-      { maxTokens: 700 }
-    );
-
-    const scoreMatch = feedback.match(/^score[:\s]+(\d+)/im) ?? feedback.match(/(\d+)\s*\/\s*10/i);
-    const score = scoreMatch ? Math.min(10, Math.max(1, parseInt(scoreMatch[1]!))) : 6;
-    const communication = parseSubScore(feedback, "Communication");
-    const grammar = parseSubScore(feedback, "Grammar");
-    const confidence = parseSubScore(feedback, "Confidence");
-    const technical = parseSubScore(feedback, "Technical");
-
-    const nextMatch = feedback.match(/Next Question:\s*(.+)/is);
-    const nextQuestion = nextMatch ? nextMatch[1].trim() : undefined;
-    const isFinal = /Final:\s*END/i.test(feedback) || shouldWrap || !nextQuestion;
-
+    // Record the answer without generating per-question feedback
     setQuestions(prev => prev.map((q, i) => i === currentIdx
-      ? { ...q, answer: userAnswer, feedback, score, communication, grammar, confidence, technical }
+      ? { ...q, answer: recordedAnswer }
       : q
     ));
 
-    // Add next question if available and not final
-    if (nextQuestion && !isFinal) {
+    if (isFinalQuestion) {
+      void synth.speak("Thank you. That completes our session. Generating your full report now.", "English", undefined, { voiceGender: coach.gender });
+      setTimeout(() => setPhase("report"), 1500);
+      return;
+    }
+
+    // Get a brief natural acknowledgment + next question — no scores, no analysis
+    const response = await stream(
+      `You are conducting a mock interview. Keep it natural and flowing.
+
+Interview: ${typeMeta.label}, ${experience} experience. ${remainingMin} minutes remaining.
+Profile: ${buildProfileSummary()}
+
+Transcript so far:
+${buildTranscript(currentIdx)}
+
+You just asked: ${currentQ.question}
+Candidate answered: "${recordedAnswer}"
+
+Give ONE brief warm acknowledgment (1 sentence, no feedback, no scores), then ask ONE sharp adaptive follow-up question.
+Respond in exactly this format:
+Ack: <one sentence>
+Next: <interview question>`,
+      `You are ${coach.name}, ${coach.role}. ${coach.style}. Keep the interview conversational and natural. No scoring or analysis during the interview.`,
+      undefined,
+      { maxTokens: 200 }
+    );
+
+    const ackMatch = response.match(/^Ack:\s*(.+)/im);
+    const nextMatch = response.match(/^Next:\s*(.+)/im);
+    const acknowledgment = ackMatch?.[1]?.trim() ?? "Thank you for that.";
+    const nextQuestion = nextMatch?.[1]?.trim();
+
+    if (nextQuestion) {
       setQuestions(prev => [...prev, { question: nextQuestion }]);
+      setCurrentIdx(prev => prev + 1);
+      setAnswer("");
+      setIsRecording(false);
+      void synth.speak(`${acknowledgment} ${nextQuestion}`, "English", undefined, { voiceGender: coach.gender });
+    } else {
+      void synth.speak("Thank you. Generating your full interview report now.", "English", undefined, { voiceGender: coach.gender });
+      setTimeout(() => setPhase("report"), 1200);
     }
-
-    const opening = feedback.split("\n")[0]?.replace(/^Reaction:\s*/i, "").trim() ?? feedback.slice(0, 140);
-    void synth.speak(opening, "English");
-
-    if (isFinal) {
-      setTimeout(() => setPhase("report"), 800);
-    }
-  }, [currentQ, currentIdx, type, experience, duration, elapsedSeconds, coach, stream, resetStream, synth, typeMeta, buildProfileSummary, buildTranscript, clearAutoSubmitTimer, speech]);
+  }, [currentQ, currentIdx, experience, duration, elapsedSeconds, coach, stream, resetStream, synth, typeMeta, buildProfileSummary, buildTranscript, clearAutoSubmitTimer, speech]);
 
   const submitAnswer = useCallback(() => {
     if (!answer.trim()) return;
@@ -468,7 +475,7 @@ Keep it human, realistic, and encouraging. Use Indian hiring context.`,
     setIsRecording(false);
     clearAutoSubmitTimer();
     resetStream();
-    setTimeout(() => synth.speak(questions[nextIdx]!.question, "English"), 300);
+    setTimeout(() => synth.speak(questions[nextIdx]!.question, "English", undefined, { voiceGender: coach.gender }), 300);
   }, [currentIdx, questions, resetStream, synth, clearAutoSubmitTimer]);
 
   const endEarly = useCallback(() => {
@@ -480,7 +487,7 @@ Keep it human, realistic, and encouraging. Use Indian hiring context.`,
   }, [speech, clearAutoSubmitTimer]);
 
   useEffect(() => {
-    if (phase !== "interview" || !autoListenEnabled || !speech.isSupported || !currentQ || currentQ.feedback || isStreaming || synth.isSpeaking || isRecording) return;
+    if (phase !== "interview" || !autoListenEnabled || !speech.isSupported || !currentQ || isStreaming || synth.isSpeaking || isRecording) return;
     setIsRecording(true);
     speech.startContinuous(text => {
       const chunk = text.trim();
@@ -502,62 +509,89 @@ Keep it human, realistic, and encouraging. Use Indian hiring context.`,
   // Generate detailed report when entering report phase
   useEffect(() => {
     if (phase !== "report" || report || isGeneratingReport) return;
-    const answered = questions.filter(q => q.feedback);
+    const answered = questions.filter(q => q.answer);
     if (answered.length === 0) return;
     setIsGeneratingReport(true);
 
     const generate = async () => {
       const transcript = answered
-        .map((q, i) => `Q${i + 1}: ${q.question}\nA${i + 1}: ${q.answer ?? ""}\nFeedback: ${q.feedback ?? ""}`)
+        .map((q, i) => `Q${i + 1}: ${q.question}\nA${i + 1}: ${q.answer ?? ""}`)
         .join("\n\n");
 
       const reportText = await stream(
-        `You are an expert interview evaluator. Review the full mock interview transcript and produce a detailed structured report.
+        `You are an expert interview evaluator. Review this full mock interview and produce a detailed structured report.
 
 Role: ${typeMeta.label}
-Candidate experience: ${experience}
+Candidate: ${experience} experience
 Duration: ${formatTime(elapsedSeconds)}
-Transcript:
+Profile: ${buildProfileSummary()}
+
+Full interview transcript:
 ${transcript}
 
-Return ONLY a valid JSON object with these exact keys:
+Return ONLY a valid JSON object with exactly these keys (no markdown, no extra text):
 {
-  "overallScore": number 0-100,
-  "communicationScore": number 0-100,
-  "grammarScore": number 0-100,
-  "confidenceScore": number 0-100,
-  "technicalScore": number 0-100,
-  "roleFit": "short sentence",
-  "strengths": ["string", "string", "string"],
-  "improvements": ["string", "string", "string"],
-  "nextSteps": ["string", "string", "string"]
+  "overallScore": 0-100,
+  "communicationScore": 0-100,
+  "grammarScore": 0-100,
+  "confidenceScore": 0-100,
+  "technicalScore": 0-100,
+  "roleFit": "one honest sentence about this candidate for this role",
+  "strengths": ["3 specific observed strengths"],
+  "improvements": ["3 specific improvement areas"],
+  "nextSteps": ["3 concrete actionable steps"],
+  "questionScores": [
+    {
+      "score": 1-10,
+      "communication": 1-10,
+      "grammar": 1-10,
+      "confidence": 1-10,
+      "technical": 1-10,
+      "feedback": "2-3 sentence natural feedback on this answer"
+    }
+  ]
 }
 
-Be fair but honest. Use the full conversation to judge improvement and consistency.`,
-        `You are a senior hiring manager and interview coach. Evaluate an Indian candidate fairly.`,
+Include one entry in questionScores for each question in order (${answered.length} entries total).
+Be honest, specific, and encouraging. Use Indian hiring context.`,
+        `You are a senior hiring manager and interview coach evaluating an Indian candidate. Give human, realistic, non-robotic feedback.`,
         undefined,
-        { maxTokens: 1200 }
+        { maxTokens: 1800 }
       );
 
       const parsed = parseReportJson(reportText) ?? {
-        overallScore: Math.round(avgOf(answered.map(q => q.score)) * 10),
-        communicationScore: avgOf(answered.map(q => q.communication)) * 10,
-        grammarScore: avgOf(answered.map(q => q.grammar)) * 10,
-        confidenceScore: avgOf(answered.map(q => q.confidence)) * 10,
-        technicalScore: avgOf(answered.map(q => q.technical)) * 10,
+        overallScore: 60,
+        communicationScore: 60,
+        grammarScore: 60,
+        confidenceScore: 60,
+        technicalScore: 60,
         roleFit: "Promising candidate with room to grow.",
         strengths: ["Participated actively in the mock interview", "Provided structured answers", "Showed willingness to learn"],
         improvements: ["Add more specific examples", "Tighten language clarity", "Work on concise delivery"],
         nextSteps: ["Practice STAR method answers", "Record yourself and review", "Schedule another mock interview next week"],
       };
 
+      // Populate per-question feedback from report questionScores
+      let updatedAnswered = answered;
+      if (parsed.questionScores) {
+        updatedAnswered = answered.map((q, i) => {
+          const qs = parsed.questionScores![i];
+          if (!qs) return q;
+          return { ...q, feedback: qs.feedback, score: qs.score, communication: qs.communication, grammar: qs.grammar, confidence: qs.confidence, technical: qs.technical };
+        });
+        setQuestions(prev => prev.map(q => {
+          const updated = updatedAnswered.find(uq => uq.question === q.question);
+          return updated ?? q;
+        }));
+      }
+
       setReport(parsed);
       setIsGeneratingReport(false);
-      await saveSession(parsed, answered);
+      await saveSession(parsed, updatedAnswered);
     };
 
     void generate();
-  }, [phase, report, isGeneratingReport, questions, typeMeta, experience, elapsedSeconds, stream, coach]);
+  }, [phase, report, isGeneratingReport, questions, typeMeta, experience, elapsedSeconds, stream, buildProfileSummary]);
 
   const saveSession = useCallback(async (reportData: InterviewReport, answered: QA[]) => {
     if (saved) return;
@@ -606,7 +640,7 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
 
   const downloadReport = useCallback(() => {
     const label = typeMeta.label;
-    const answered = questions.filter(q => q.feedback);
+    const answered = questions.filter(q => q.answer);
     const durationMin = Math.round(elapsedSeconds / 60);
     const avgScore = avgOf(answered.map(q => q.score)) * 10;
     const lines = [
@@ -761,7 +795,7 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
 
   // ── Report ─────────────────────────────────────────────────────────────────
   if (phase === "report") {
-    const answered = questions.filter(q => q.feedback);
+    const answered = questions.filter(q => q.answer);
     const avgScore = avgOf(answered.map(q => q.score)) * 10;
     const g = report ? grade(report.overallScore) : grade(avgScore);
     const displayScore = report ? report.overallScore : avgScore;
@@ -928,13 +962,13 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
                 <div key={i} className={`flex items-center justify-between text-xs px-2 py-1.5 rounded-lg ${i === currentIdx ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"}`}>
                   <span className="truncate mr-2">Q{i + 1}</span>
                   {q.score !== undefined && <ScoreBadge score={q.score * 10} />}
-                  {i === currentIdx && !q.feedback && <span className="text-primary text-[10px] animate-pulse">●</span>}
+                  {i === currentIdx && !q.answer && <span className="text-primary text-[10px] animate-pulse">●</span>}
                 </div>
               ))}
             </div>
           </div>
-          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground w-full" onClick={endEarly}>
-            <LogOut className="w-3 h-3 mr-1" />End Interview
+          <Button variant="destructive" className="font-bold w-full h-11" onClick={endEarly}>
+            <LogOut className="w-4 h-4 mr-2" />End Interview
           </Button>
         </aside>
 
@@ -945,8 +979,8 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
           <div className="flex items-center gap-3 mb-4 lg:hidden">
             <Progress value={Math.min(100, (elapsedSeconds / (duration * 60)) * 100)} className="h-1.5 flex-1" />
             <TimerDisplay elapsedSeconds={elapsedSeconds} durationMinutes={duration} />
-            <Button variant="ghost" size="sm" className="text-xs shrink-0 min-h-9 px-2" onClick={endEarly}>
-              <LogOut className="w-3 h-3 mr-1" />End
+            <Button variant="destructive" size="sm" className="font-bold text-xs shrink-0 min-h-9 px-3" onClick={endEarly}>
+              <LogOut className="w-3.5 h-3.5 mr-1" />End Interview
             </Button>
           </div>
 
@@ -954,7 +988,7 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
             <CardContent className="p-5 md:p-7 h-full min-h-0 flex flex-col">
               <div className="flex items-start gap-3 mb-6">
                 <Button variant="ghost" size="icon" className="shrink-0 min-h-11 min-w-11 mt-0.5 text-muted-foreground hover:text-primary"
-                  onClick={() => currentQ && synth.speak(currentQ.question, "English")}>
+                  onClick={() => currentQ && synth.speak(currentQ.question, "English", undefined, { voiceGender: coach.gender })}>
                   <Volume2 className="w-4 h-4" />
                 </Button>
                 <div>
@@ -965,10 +999,9 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
                 </div>
               </div>
 
-              {!currentQ?.feedback ? (
-                <div className="space-y-4 flex-1 min-h-0 flex flex-col">
+              <div className="space-y-4 flex-1 min-h-0 flex flex-col">
                   <Textarea
-                    placeholder="Speak naturally — the mic starts automatically after each question. You can still type here."
+                    placeholder="Speak naturally — the mic starts automatically. You can also type your answer here."
                     className={`min-h-[180px] text-base transition-colors flex-1 ${isRecording ? "bg-red-50/50 border-red-300 focus-visible:ring-red-300" : "bg-muted/40 border-muted-foreground/20"}`}
                     value={isRecording && speech.interimTranscript ? answer + " " + speech.interimTranscript : answer}
                     onChange={e => !isRecording && setAnswer(e.target.value)}
@@ -985,51 +1018,16 @@ Be fair but honest. Use the full conversation to judge improvement and consisten
                       {autoListenEnabled ? "Pause mic" : "Resume mic"}
                     </Button>
                     <Button className="font-bold" disabled={!answer.trim() || isStreaming} onClick={submitAnswer}>
-                      {isStreaming ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analysing...</> : "Submit Answer"}
+                      {isStreaming ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing...</> : "Submit Answer"}
                     </Button>
                   </div>
-                  {isStreaming && streamText && (
-                    <div className="p-4 bg-muted/50 rounded-xl text-sm text-secondary animate-in fade-in">
-                      {streamText}
+                  {isStreaming && (
+                    <div className="p-3 bg-muted/50 rounded-xl text-sm text-muted-foreground animate-in fade-in flex items-center gap-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
+                      {coach.name} is noting your answer and preparing the next question...
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                  <div className="p-4 bg-muted rounded-xl">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Your Answer</span>
-                    <p className="text-sm text-secondary mt-1 leading-relaxed">{currentQ.answer}</p>
-                  </div>
-                  <div className="p-5 bg-green-50 border border-green-200 rounded-xl">
-                    <div className="flex items-center gap-3 mb-3 flex-wrap">
-                      <span className="text-xs font-bold text-green-700 uppercase tracking-wider">{coach.name}'s Feedback</span>
-                      {currentQ.score !== undefined && <ScoreBadge score={currentQ.score * 10} />}
-                      {currentQ.communication !== undefined && (
-                        <div className="flex gap-1.5 ml-auto flex-wrap">
-                          {[
-                            { label: "Comm", val: currentQ.communication, color: "bg-blue-100 text-blue-700" },
-                            { label: "Gram", val: currentQ.grammar, color: "bg-green-100 text-green-700" },
-                            { label: "Conf", val: currentQ.confidence, color: "bg-orange-100 text-orange-700" },
-                            { label: "Tech", val: currentQ.technical, color: "bg-purple-100 text-purple-700" },
-                          ].map(s => s.val !== undefined && (
-                            <span key={s.label} className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${s.color}`}>
-                              {s.label} {s.val}/10
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-sm text-green-950 whitespace-pre-wrap leading-relaxed">{currentQ.feedback}</div>
-                  </div>
-                  <div className="flex items-center justify-end pt-1">
-                    <Button onClick={nextQuestion} className="font-bold">
-                      {currentIdx < questions.length - 1
-                        ? <><ChevronRight className="w-4 h-4 mr-1" />Next Question</>
-                        : "View Full Report"}
-                    </Button>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
         </main>
@@ -1081,7 +1079,7 @@ function QuestionReview({ q, idx, coachName }: { q: QA; idx: number; coachName: 
           </div>
           <div className="rounded-xl bg-green-50 border border-green-100 p-3">
             <p className="text-xs font-bold text-green-700 mb-1">{coachName}'s Feedback</p>
-            <p className="text-sm text-green-950 whitespace-pre-wrap leading-relaxed">{q.feedback}</p>
+            <p className="text-sm text-green-950 whitespace-pre-wrap leading-relaxed">{q.feedback ?? "Detailed feedback is included in the overall report above."}</p>
           </div>
         </div>
       )}
