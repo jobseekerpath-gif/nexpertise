@@ -37,27 +37,87 @@ type Mode = typeof MODES[number]["value"];
 const ROADMAP_STAGES = [
   {
     level: "A1", label: "Foundation", color: "border-slate-300 bg-slate-50 text-slate-700",
-    topics: ["Greetings & introductions", "Numbers, days, months", "Simple sentences: I am, You are", "Colors, family members", "Basic questions: What, Who, Where", "Common objects vocabulary"],
+    weeks: "Weeks 1–4", dailyGoal: "15 min/day: speak 5 new sentences aloud",
+    resources: "BBC Learning English, Duolingo (Hindi→English), EduBharat Live Chat",
+    milestone: "Can introduce yourself and ask for basic information in a shop or office",
+    topics: [
+      "Greetings & apologies — used in offices, trains, markets",
+      "Numbers 1–1000, dates, time — for forms, bills, schedules",
+      "Simple present tense — I am, You are, He is + daily routines",
+      "Family & common objects vocabulary (building 200-word core)",
+      "Basic questions: What, Who, Where, When — for directions",
+      "Connecting Hindi/regional words to English equivalents daily",
+    ],
   },
   {
-    level: "A2", label: "Basics", color: "border-blue-300 bg-blue-50 text-blue-700",
-    topics: ["Present & past tense basics", "Shopping & food vocabulary", "Giving directions", "Daily routine descriptions", "Simple workplace phrases", "Writing short messages"],
+    level: "A2", label: "Elementary", color: "border-blue-300 bg-blue-50 text-blue-700",
+    weeks: "Weeks 5–10", dailyGoal: "20 min/day: write one short message + speak 5 min",
+    resources: "British Council Learn English, EduBharat Grammar Fix",
+    milestone: "Can handle a phone call and write a short professional message",
+    topics: [
+      "Past tense: 'I went', 'I worked', 'I studied' — for interviews",
+      "Future tense: 'I will', 'I am going to' — for planning conversations",
+      "Shopping, food, travel vocabulary — marketplace to airport",
+      "Short email writing: leave application, complaint, thank-you note",
+      "Telephone phrases: 'May I speak to', 'Please hold', 'I am calling about'",
+      "Giving and following directions clearly in English",
+    ],
   },
   {
     level: "B1", label: "Intermediate", color: "border-green-300 bg-green-50 text-green-700",
-    topics: ["All English tenses", "Expressing opinions clearly", "Job interview basics", "Email writing", "Telephone conversations", "Narrating events & stories"],
+    weeks: "Weeks 11–20", dailyGoal: "25 min/day: 1 mock conversation + 1 written paragraph",
+    resources: "EduBharat Interview Ace, EduBharat Live Conversation",
+    milestone: "Can confidently appear for a job interview and write professional emails",
+    topics: [
+      "All 12 tenses with real India-context examples",
+      "Job interview language: 'My strength is...', STAR method answers",
+      "Expressing opinions: 'I believe...', 'In my view...', 'I disagree because...'",
+      "Professional email formats: request, follow-up, complaint, proposal",
+      "Telephonic interview practice — common HR questions answered well",
+      "Narrating work experiences as compelling stories",
+    ],
   },
   {
     level: "B2", label: "Upper-Intermediate", color: "border-yellow-300 bg-yellow-50 text-yellow-700",
-    topics: ["Complex grammar: conditionals, passive voice", "Professional communication", "Idioms & phrasal verbs", "Formal reports & letters", "Debate & argumentation", "Business meeting language"],
+    weeks: "Weeks 21–32", dailyGoal: "30 min/day: mock meeting or give a 2-minute talk",
+    resources: "EduBharat Interview Ace (advanced), TED Talks with subtitles",
+    milestone: "Can lead a meeting, write a formal report, and present ideas confidently",
+    topics: [
+      "Conditionals: 'If I were', 'Had I known' — for negotiation & persuasion",
+      "Idioms common in Indian offices: 'bite the bullet', 'on the fence', 'cut corners'",
+      "Meeting English: agenda, minutes, action points, 'Let me circle back'",
+      "Formal report writing: executive summary, recommendations, conclusion",
+      "Phrasal verbs for the workplace: set up, follow through, hand over, roll out",
+      "Presentations: structure, signposting language, handling Q&A",
+    ],
   },
   {
     level: "C1", label: "Advanced", color: "border-orange-300 bg-orange-50 text-orange-700",
-    topics: ["Nuanced vocabulary & tone", "Presentations & public speaking", "Negotiation & persuasion", "Academic & technical writing", "Complex comprehension", "Networking & leadership language"],
+    weeks: "Weeks 33–44", dailyGoal: "35 min/day: debate a topic or write a 300-word analysis",
+    resources: "Harvard Business Review, EduBharat Write Better (C1 mode), BBC News",
+    milestone: "Can negotiate, present to senior stakeholders, and write technical documents",
+    topics: [
+      "Nuanced vocabulary: leverage vs use, facilitate vs help, distinguished vs different",
+      "Persuasion & negotiation: anchoring, concession language, closing deals",
+      "Public speaking: TED-style storytelling, eliminating filler words (um, basically)",
+      "Academic & technical writing: abstract, methodology, discussion, references",
+      "Complex reading comprehension: business press, legal documents, research papers",
+      "Leadership communication: giving feedback, managing conflict, inspiring teams",
+    ],
   },
   {
     level: "C2", label: "Mastery", color: "border-purple-300 bg-purple-50 text-purple-700",
-    topics: ["Native-level fluency", "Subtle tone & register shifts", "Creative & persuasive writing", "Cultural references & humour", "Executive communication", "Language for leadership"],
+    weeks: "Weeks 45–52+", dailyGoal: "40 min/day: all-English environment challenge",
+    resources: "All-English environment challenge, EduBharat tutor conversations (C2 mode)",
+    milestone: "Operates at near-native level in any professional or social situation",
+    topics: [
+      "Near-native fluency: thinking in English with zero translation delay",
+      "Subtle register shifts: boardroom vs. client lunch vs. team standup",
+      "Humour, irony & cultural references in global business settings",
+      "Executive communication: board presentations, investor pitches",
+      "Cross-cultural English: UK vs US vs Australian vs Indian nuances",
+      "Mentoring others: teaching English concepts simply and clearly",
+    ],
   },
 ];
 
@@ -666,9 +726,9 @@ function EnglishGuruContent() {
           {mode === "roadmap" && (
             <div className="space-y-5">
               <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl text-sm text-orange-900">
-                <strong>Your current level:</strong> {level} ({currentStage}) — stages below show your full path to English mastery.
+                <strong>Your current level:</strong> {level} ({currentStage}) — your personalised CEFR path to professional English fluency. Each stage shows what to learn, how long it takes, and what resources to use.
               </div>
-              <div className="relative space-y-3">
+              <div className="relative space-y-4">
                 {ROADMAP_STAGES.map((stage, idx) => {
                   const isCurrent = stage.level === currentStage;
                   const isPast = ROADMAP_STAGES.findIndex(s => s.level === currentStage) > idx;
@@ -684,16 +744,31 @@ function EnglishGuruContent() {
                       </div>
                       <div className={`flex-1 p-4 rounded-xl border-2 mb-1 transition-all ${isCurrent ? "border-primary bg-orange-50/80 shadow-sm" : isPast ? "border-primary/30 bg-muted/40 opacity-75" : `${stage.color}`}`}>
                         <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-secondary text-sm">{stage.label}</span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-secondary text-sm">{stage.level} — {stage.label}</span>
                             {isCurrent && <Badge className="text-[10px] px-1.5 py-0 h-5">You are here</Badge>}
-                            {isPast && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-primary/10 text-primary">Done</Badge>}
+                            {isPast && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-primary/10 text-primary">Completed</Badge>}
+                            <span className="text-[10px] font-semibold text-muted-foreground">{stage.weeks}</span>
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap gap-1.5 mb-3">
                           {stage.topics.map(t => (
                             <span key={t} className={`text-xs px-2 py-0.5 rounded-full border ${isCurrent ? "bg-primary/10 border-primary/20 text-primary font-medium" : isPast ? "bg-primary/5 border-primary/10 text-primary/60" : "bg-white/70 border-border/60 text-muted-foreground"}`}>{t}</span>
                           ))}
+                        </div>
+                        <div className={`grid gap-2 text-xs mt-2 pt-2 border-t ${isPast ? "border-primary/10" : isCurrent ? "border-primary/20" : "border-border/40"}`}>
+                          <div className="flex gap-1.5 items-start">
+                            <span className="shrink-0 font-bold">🎯 Daily goal:</span>
+                            <span className="text-muted-foreground">{stage.dailyGoal}</span>
+                          </div>
+                          <div className="flex gap-1.5 items-start">
+                            <span className="shrink-0 font-bold">🏁 Milestone:</span>
+                            <span className="text-muted-foreground">{stage.milestone}</span>
+                          </div>
+                          <div className="flex gap-1.5 items-start">
+                            <span className="shrink-0 font-bold">📚 Resources:</span>
+                            <span className="text-muted-foreground">{stage.resources}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -702,17 +777,17 @@ function EnglishGuruContent() {
               </div>
               <Card className="border-primary/30 bg-primary/5">
                 <CardContent className="pt-5 space-y-3">
-                  <p className="text-sm font-semibold text-secondary">Want a personalised 30-day plan for your level?</p>
+                  <p className="text-sm font-semibold text-secondary">Want a personalised week-by-week 30-day plan for your level?</p>
                   <Button className="w-full font-bold" disabled={isStreaming}
                     onClick={() => handleStream(
-                      `Create a 30-day English learning plan for an Indian ${level} learner (${currentStage} level) aiming to improve for job interviews. Week 1: day-by-day tasks. Week 2-4: weekly themes with activities. Include time per day, resources, and milestones. Keep it practical and achievable.`,
-                      `Experienced English teacher named ${teacherShort}. Practical, India-specific learning advice. ${tutor.teachingStyle}.`,
-                      `30-Day Learning Plan: ${level}`
+                      `Create a detailed 30-day English learning plan for an Indian ${level} learner at CEFR ${currentStage} level, targeting job interviews and professional communication. Format as 4 weeks: for Week 1 give day-by-day tasks (Day 1–7); for Weeks 2–4 give weekly themes with 3 daily activities. For each week: specify 15–40 minutes per day, practical Indian-context exercises, milestone to reach by week end, and one free resource. Keep it specific, achievable, and India-relevant.`,
+                      `You are ${teacherShort}, an experienced English teacher specialising in India's job market. ${tutor.teachingStyle}. Give actionable, specific, time-bound daily tasks.`,
+                      `30-Day Plan: ${level} (${currentStage})`
                     )}>
                     {isStreaming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
-                    Get My 30-Day Plan
+                    Generate My 30-Day Plan
                   </Button>
-                  {displayed && <ResultPanel title="Your Personalised Learning Plan:" content={displayed} isSpeaking={synth.isSpeaking}
+                  {displayed && <ResultPanel title={`Your 30-Day Plan (${level} · ${currentStage}):`} content={displayed} isSpeaking={synth.isSpeaking}
                     onSpeak={() => speak(displayed)} onStop={synth.stop}
                     onSave={() => saveResult("roadmap", `30-Day Plan: ${level}`, displayed)} saved={!!savedMap["roadmap"]} />}
                 </CardContent>

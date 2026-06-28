@@ -18,8 +18,9 @@ function getAnthropicModelChain(maxTokens: number) {
 }
 
 export function getAI() {
-  const apiKey = process.env["GEMINI_API_KEY"];
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
+  // Support both underscore and space variants (Replit sometimes stores secrets with spaces)
+  const apiKey = process.env["GEMINI_API_KEY"] ?? process.env["GEMINI API KEY"];
+  if (!apiKey) throw new Error("Gemini API key is not configured. Set GEMINI_API_KEY in secrets.");
   return new GoogleGenAI({ apiKey });
 }
 

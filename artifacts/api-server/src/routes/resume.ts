@@ -142,6 +142,71 @@ router.get("/resume/current", requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/resume/download — download resume analysis as plain text file
+router.get("/resume/download", requireAuth, async (req, res) => {
+  try {
+    const users = await db
+      .select({
+        resumeFileName: usersTable.resumeFileName,
+        resumeAnalysis: usersTable.resumeAnalysis,
+        experienceSummary: usersTable.experienceSummary,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.session.userId!))
+      .limit(1);
+
+    const user = users[0];
+    if (!user?.resumeAnalysis) {
+      res.status(404).json({ error: "No resume analysis found. Please analyse your resume first." });
+      return;
+    }
+
+    let parsed: Record<string, unknown> = {};
+    try { parsed = JSON.parse(user.resumeAnalysis) as Record<string, unknown>; } catch { /* ignore */ }
+
+    const fileName = (user.resumeFileName ?? "resume").replace(/\.[^.]+$/, "");
+    const lines: string[] = [
+      "══════════════════════════════════════════════════════",
+      "          EduBharat — Resume Intelligence Report",
+      "══════════════════════════════════════════════════════",
+      `File: ${user.resumeFileName ?? "N/A"}`,
+      `Generated: ${new Date().toLocaleString("en-IN")}`,
+      "",
+      `Overall ATS Score: ${parsed.overallScore ?? "N/A"} / 100`,
+      "",
+      "── Experience Summary ──────────────────────────────",
+      user.experienceSummary ?? parsed.experienceSummary as string ?? "Not available",
+      "",
+      "── Skills Identified ───────────────────────────────",
+      ...(Array.isArray(parsed.skills) ? (parsed.skills as string[]).map((s, i) => `  ${i + 1}. ${s}`) : ["  None identified"]),
+      "",
+      "── Education ────────────────────────────────────────",
+      ...(Array.isArray(parsed.education) ? (parsed.education as string[]).map((e, i) => `  ${i + 1}. ${e}`) : ["  None identified"]),
+      "",
+      "── ATS Keyword Gaps ─────────────────────────────────",
+      ...(Array.isArray(parsed.atsGaps) ? (parsed.atsGaps as string[]).map((g, i) => `  ${i + 1}. ${g}`) : ["  None identified"]),
+      "",
+      "── Formatting Issues ────────────────────────────────",
+      ...(Array.isArray(parsed.formattingIssues) ? (parsed.formattingIssues as string[]).map((f, i) => `  ${i + 1}. ${f}`) : ["  None identified"]),
+      "",
+      "── Actionable Suggestions ───────────────────────────",
+      ...(Array.isArray(parsed.suggestions) ? (parsed.suggestions as string[]).map((s, i) => `  ${i + 1}. ${s}`) : ["  None available"]),
+      "",
+      "══════════════════════════════════════════════════════",
+      "    EduBharat — India's AI Career Intelligence Platform",
+      "══════════════════════════════════════════════════════",
+    ];
+
+    const content = lines.join("\n");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}_edubharat_analysis.txt"`);
+    res.send(content);
+  } catch (err) {
+    req.log.error({ err }, "Resume download error");
+    res.status(500).json({ error: "Failed to generate download" });
+  }
+});
+
 // POST /api/resume/analyse — SSE stream
 router.post("/resume/analyse", requireAuth, async (req, res) => {
   try {

@@ -25,8 +25,9 @@ function getCallbackURL() {
 }
 
 function setupPassport() {
-  const clientID = process.env["GOOGLE_CLIENT_ID"];
-  const clientSecret = process.env["GOOGLE_CLIENT_SECRET"];
+  // Support both underscore and space variants of secret names
+  const clientID = process.env["GOOGLE_CLIENT_ID"] ?? process.env["GOOGLE CLIENT ID"];
+  const clientSecret = process.env["GOOGLE_CLIENT_SECRET"] ?? process.env["GOOGLE CLIENT SECRET"];
   if (!clientID || !clientSecret) return;
 
   passport.use(
@@ -216,6 +217,48 @@ router.post("/auth/logout", (req, res) => {
   req.session.destroy(() => {
     res.json({ success: true });
   });
+});
+
+// POST /api/auth/admin-login — username + password login for admin/local accounts
+// Set ADMIN_USERNAME and ADMIN_PASSWORD_HASH (sha256 hex) as Replit secrets to enable.
+router.post("/auth/admin-login", async (req, res) => {
+  try {
+    const { username, password } = req.body as { username?: string; password?: string };
+    const adminUser = process.env["ADMIN_USERNAME"] ?? "admin";
+    const adminHash = process.env["ADMIN_PASSWORD_HASH"];
+
+    if (!adminHash) {
+      res.status(503).json({ error: "Admin login not configured. Set ADMIN_USERNAME and ADMIN_PASSWORD_HASH secrets." });
+      return;
+    }
+
+    const incoming = crypto.createHash("sha256").update(password ?? "").digest("hex");
+    if (!username || username !== adminUser || incoming !== adminHash) {
+      res.status(401).json({ error: "Invalid username or password" });
+      return;
+    }
+
+    const adminEmail = "admin@edubharat.in";
+    let adminRecords = await db.select().from(usersTable).where(eq(usersTable.email, adminEmail)).limit(1);
+    if (adminRecords.length === 0) {
+      const inserted = await db.insert(usersTable).values({
+        email: adminEmail,
+        name: "Admin",
+        authProvider: "local",
+      }).returning();
+      adminRecords = inserted;
+    }
+
+    const user = adminRecords[0]!;
+    req.session.userId = user.id;
+    req.session.userEmail = user.email;
+    req.session.userName = user.name ?? undefined;
+
+    res.json({ success: true, user: { id: user.id, email: user.email, name: user.name } });
+  } catch (err) {
+    req.log?.error?.({ err }, "Admin login error");
+    res.status(500).json({ error: "Login failed. Please try again." });
+  }
 });
 
 export { setupPassport };
