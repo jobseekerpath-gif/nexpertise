@@ -134,7 +134,8 @@ export function AnimatedAvatar({
               alt={name}
               width={sz.px}
               height={sz.px}
-              className="w-full h-full object-cover object-top"
+              className={`w-full h-full object-cover object-top transition-all duration-100 ${isSpeaking ? "animate-pulse brightness-105 scale-[1.02]" : ""}`}
+              style={isSpeaking ? { animationDuration: "0.5s" } : undefined}
               onError={() => setImgFailed(true)}
               draggable={false}
             />

@@ -35,7 +35,7 @@ const LANG_RATE: Record<string, number> = {
   Gujarati:  0.86,
   Kannada:   0.83,
   Malayalam: 0.80,
-  Punjabi:   0.90,
+  Punjabi:   0.88,
   Odia:      0.84,
   Assamese:  0.85,
   Urdu:      0.88,
@@ -220,8 +220,8 @@ export function useSpeechSynthesis() {
         (langPitch.male + langPitch.female) / 2
       );
 
-      // For English, use a slightly slower, lower pitch delivery to sound more natural and less robotic
-      utterance.rate = language === "English" ? Math.min(baseRate, 0.82) : baseRate;
+      // Hard cap so speech never becomes robotic; English stays slower, other languages are natural but capped
+      utterance.rate = Math.min(language === "English" ? Math.min(baseRate, 0.82) : baseRate, 0.88);
       utterance.pitch = language === "English" ? Math.min(basePitch, 1.0) : basePitch;
       utterance.volume = 1.0;
 
