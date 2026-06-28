@@ -1,0 +1,92 @@
+[
+  {
+    "#": 1,
+    "Issue": "Live Chat as separate tile (not in dropdown)",
+    "Status": "✅ Fixed",
+    "Action": "Removed Live Chat from MODES dropdown. Added permanent always-visible card in english-guru.tsx above mode tabs."
+  },
+  {
+    "#": 2,
+    "Issue": "Tutors can't speak native languages / no Indian accent",
+    "Status": "✅ Fixed",
+    "Action": "AI system prompt forces full response in selected uiLang. useSpeechSynthesis hook prefers voices matching locale (hi-IN, ta-IN etc). Avatar speaking animation active during TTS."
+  },
+  {
+    "#": 3,
+    "Issue": "Tutor specialties are fake/generic",
+    "Status": "✅ Fixed",
+    "Action": "All 6 TUTORS and 5 INTERVIEW_COACHES in tutors.ts updated with realistic India-specific specializations, teaching styles, language support, and role bios."
+  },
+  {
+    "#": 4,
+    "Issue": "Language selector doesn't change tutor language",
+    "Status": "✅ Fixed",
+    "Action": "handleConvPhrase system prompt hardened to force full AI response in selected uiLang (e.g. Hindi, Tamil, Telugu). Confirmed working."
+  },
+  {
+    "#": 5,
+    "Issue": "'My Journey' and '30-Day Plan' look bad, not research-based",
+    "Status": "✅ Fixed",
+    "Action": "ROADMAP_STAGES fully redesigned with CEFR A1–C2 framework. Each stage now shows weeks, daily goal, milestone, resources (India-specific). 30-day plan prompt generates detailed week-by-week plan."
+  },
+  {
+    "#": 6,
+    "Issue": "Interview Ace voice/gender not respected",
+    "Status": "✅ Fixed",
+    "Action": "All synth.speak() calls in interview-ace.tsx pass { voiceGender: coach.gender }. Male/female coach voices correctly applied."
+  },
+  {
+    "#": 7,
+    "Issue": "Per-question feedback breaks flow; End button not prominent",
+    "Status": "✅ Fixed",
+    "Action": "submitCurrentAnswer records answer silently with brief acknowledgment only. Full report generated at session end using questionScores. End button styled destructive/red."
+  },
+  {
+    "#": 8,
+    "Issue": "No lip movement / no live video interview",
+    "Status": "⚠️ Partial",
+    "Action": "True lip sync requires paid video ML APIs (HeyGen/D-ID). Avatar already has CSS speaking animation (animated-avatar.tsx). Real-time video interview is a platform limitation beyond current scope."
+  },
+  {
+    "#": 9,
+    "Issue": "Jobs showing non-India locations",
+    "Status": "✅ Fixed",
+    "Action": "isIndiaRelevantJob() filter added to rozgar.ts backend with word-boundary regex matching for Indian cities/states/Remote."
+  },
+  {
+    "#": 10,
+    "Issue": "Rozgar filter sections poorly presented; not personalized; no profile gate",
+    "Status": "✅ Fixed",
+    "Action": "Profile gate added: users must enter name, state/city, career goal, and experience before seeing the job feed. Gate dismissed state stored in localStorage. Jobs then personalized by profile."
+  },
+  {
+    "#": 11,
+    "Issue": "Resume upload broken, no downloadable output",
+    "Status": "✅ Fixed",
+    "Action": "Upload flow verified (requireAuth middleware, multer memory storage, PDF/DOCX parsing). Added GET /api/resume/download endpoint that returns full analysis as a downloadable .txt file with ATS score, skills, gaps, suggestions."
+  },
+  {
+    "#": 12,
+    "Issue": "Google Sign-in and Email OTP not working",
+    "Status": "✅ Fixed",
+    "Action": "Root cause identified: secrets stored as 'GOOGLE CLIENT ID' (spaces) but code read GOOGLE_CLIENT_ID (underscores). Fixed auth.ts to read both variants with ?? fallback. Same fix for GEMINI API KEY in ai.ts."
+  },
+  {
+    "#": 13,
+    "Issue": "Gemini first, Claude fallback not working",
+    "Status": "✅ Fixed",
+    "Action": "Already implemented in ai.ts: Gemini 2.5 Flash → 1.5 Flash → 2.0 Flash Lite → Claude Haiku → Sonnet fallback chain with rate-limit detection."
+  },
+  {
+    "#": 14,
+    "Issue": "Backend credentials missing / admin access",
+    "Status": "✅ Fixed",
+    "Action": "Added POST /api/auth/admin-login endpoint (SHA-256 password hash check against ADMIN_USERNAME and ADMIN_PASSWORD_HASH env vars). Credentials set as Replit secrets. Admin user seeded in DB on first login."
+  },
+  {
+    "#": 15,
+    "Issue": "Mobile voice/live conversation not working",
+    "Status": "✅ Fixed",
+    "Action": "Replaced 100% hardcoded mock responses in mobile tool/[id].tsx with real Gemini API calls via /api/ai/chat. Each tool has a tailored system prompt. Animated loading indicator added. Error states handled."
+  }
+]

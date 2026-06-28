@@ -15,3 +15,7 @@
 - [Expo mobile design sync](expo-mobile-design-sync.md) — sync web artifact CSS tokens into Expo constants/colors.ts before building screens; derive tool colors from useColors for dark mode.
 - [Expo tab bottom padding](expo-tab-bottom-padding.md) — useSafeBottomPadding distinguishes iOS 26 NativeTabs from classic Tabs; useBottomTabBarHeight only in the classic branch.
 - [Expo progress ring SVG](expo-progress-ring-svg.md) — use react-native-svg strokeDashoffset for accurate circular progress, not border/rotation tricks.
+- [Replit secret naming](replit-secret-naming.md) — Replit secrets can be stored with spaces in their names (e.g. "GOOGLE CLIENT ID"). Always read with both variants: process.env["GOOGLE_CLIENT_ID"] ?? process.env["GOOGLE CLIENT ID"].
+- [Rozgar profile gate](rozgar-profile-gate.md) — gate requires both name AND location before showing feed; gate data must be persisted to useStudentProfile (updateProfile) not just local state.
+- [Admin login pattern](admin-login-pattern.md) — /auth/admin-login uses SHA-256 hash vs ADMIN_USERNAME + ADMIN_PASSWORD_HASH env vars; seeds admin@edubharat.in user on first successful login.
+- [Mobile tool AI calls](mobile-tool-ai.md) — Expo tool/[id].tsx calls /api/ai/chat with {prompt, system, maxTokens} body (NOT messages array); response is {text: string}.

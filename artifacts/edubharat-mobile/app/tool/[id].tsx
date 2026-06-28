@@ -41,7 +41,7 @@ async function callGemini(toolId: string, userInput: string): Promise<string> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      messages: [{ role: 'user', content: userInput }],
+      prompt: userInput,
       system,
       maxTokens: 400,
     }),

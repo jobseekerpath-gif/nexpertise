@@ -567,7 +567,7 @@ export default function RozgarSamachar() {
 function RozgarSamacharContent() {
   const synth = useSpeechSynthesis();
   const { toast } = useToast();
-  const { profile: studentProfile } = useStudentProfile();
+  const { profile: studentProfile, updateProfile: updateStudentProfile } = useStudentProfile();
   const { saveJob, unsaveJob, isJobSaved, savedJobs, count: savedCount } = useSavedJobs();
 
   const derivedDefault = useMemo<Profile>(() => ({
@@ -588,6 +588,17 @@ function RozgarSamacharContent() {
   const [profile, setProfile] = useState<Profile>(derivedDefault);
   const [showProfile, setShowProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+
+  // Profile gate — shown on first visit if both name AND location are not set
+  const [gateComplete, setGateComplete] = useState(() => {
+    try { return !!localStorage.getItem("rozgar_gate_done"); } catch { return false; }
+  });
+  const [gateName, setGateName] = useState("");
+  const [gateCity, setGateCity] = useState("");
+  const [gateGoal, setGateGoal] = useState("Private Job");
+  const [gateExp, setGateExp] = useState("Fresher");
+  // Gate is required when BOTH name and location are missing (not just one)
+  const needsGate = !gateComplete && !profile.name && !profile.location;
   const [activeTab, setActiveTab] = useState<"jobs" | "feed" | "saved">("jobs");
   const [activeFilterTab, setActiveFilterTab] = useState<FilterTabId>("all");
   const [hiddenJobIds, setHiddenJobIds] = useState<Set<string>>(new Set());
@@ -728,6 +739,78 @@ function RozgarSamacharContent() {
       </SheetContent>
     </Sheet>
   );
+
+  // ── Profile gate ─────────────────────────────────────────────────────────────
+  if (needsGate) {
+    const handleGateSubmit = () => {
+      if (!gateName.trim() || !gateCity) return;
+      // Persist to local component state
+      setProfile(p => ({ ...p, name: gateName.trim(), location: gateCity, careerGoal: gateGoal, status: gateExp }));
+      // Persist to durable student profile store (survives page refresh)
+      void updateStudentProfile({
+        name: gateName.trim(),
+        preferredCity: gateCity,
+        location: gateCity,
+        careerGoal: gateGoal,
+        experienceLevel: gateExp,
+      });
+      setProfileSaved(true);
+      setGateComplete(true);
+      try { localStorage.setItem("rozgar_gate_done", "1"); } catch { /* ignore */ }
+      void reload();
+    };
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-white to-orange-50 p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+              <Newspaper className="w-8 h-8" />
+            </div>
+            <h1 className="text-2xl font-display font-extrabold text-secondary mb-2">Welcome to Rozgar Samachar</h1>
+            <p className="text-muted-foreground text-sm">Tell us a bit about yourself so we can show you <strong>personalised</strong> jobs and opportunities across India.</p>
+          </div>
+          <Card className="border-purple-100 shadow-md rounded-2xl">
+            <CardContent className="pt-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-secondary">Your Name <span className="text-red-500">*</span></label>
+                <Input value={gateName} onChange={e => setGateName(e.target.value)} placeholder="e.g. Rahul Sharma" className="h-11 rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-secondary">State / City <span className="text-red-500">*</span></label>
+                <Select value={gateCity} onValueChange={setGateCity}>
+                  <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select your state or city" /></SelectTrigger>
+                  <SelectContent>{INDIAN_STATES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-secondary">Career Goal</label>
+                <Select value={gateGoal} onValueChange={setGateGoal}>
+                  <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>{["Government Job", "Private Job", "IT / Tech", "Startup", "Business", "Higher Education", "Foreign Opportunity"].map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-secondary">Experience Level</label>
+                <Select value={gateExp} onValueChange={setGateExp}>
+                  <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>{["Student", "Fresher", "Working Professional (1-3 yrs)", "Working Professional (3-6 yrs)", "Senior Professional (6+ yrs)"].map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <Button
+                className="w-full h-11 font-bold rounded-xl mt-2"
+                disabled={!gateName.trim() || !gateCity}
+                onClick={handleGateSubmit}
+              >
+                <Briefcase className="w-4 h-4 mr-2" />
+                Show My Personalised Jobs →
+              </Button>
+              <p className="text-center text-[11px] text-muted-foreground">Your data stays on your device. We use it only to personalise your feed.</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-full overflow-y-auto container mx-auto px-4 py-4 max-w-[1400px]">
