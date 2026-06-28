@@ -18,7 +18,7 @@ import { PageMeta } from "@/components/page-meta";
 import {
   Loader2, Mic, MicOff, PlayCircle, ChevronRight, Download, Volume2,
   LogOut, CheckCircle2, ChevronDown, MessageCircle, Pencil, Flame, Brain,
-  Star, Trophy, Clock, Timer, AlertCircle, Save,
+  Star, Trophy, Clock, Timer, AlertCircle, Save, PhoneOff, VideoOff, Video,
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -302,6 +302,11 @@ function InterviewAceContent() {
   const [saved, setSaved] = useState(false);
   const autoSubmitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const answerRef = useRef("");
+  // Webcam for video call mode
+  const webcamRef = useRef<HTMLVideoElement>(null);
+  const webcamStreamRef = useRef<MediaStream | null>(null);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [cameraError, setCameraError] = useState(false);
 
   const typeMeta = INTERVIEW_TYPES.find(t => t.value === type)!;
   const currentQ = questions[currentIdx];
@@ -330,6 +335,32 @@ function InterviewAceContent() {
     if (autoSubmitRef.current) clearTimeout(autoSubmitRef.current);
     autoSubmitRef.current = null;
   }, []);
+
+  const startWebcam = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      webcamStreamRef.current = stream;
+      // Attach to video element once it mounts (slight delay to allow React render)
+      setTimeout(() => {
+        if (webcamRef.current) webcamRef.current.srcObject = stream;
+      }, 200);
+      setCameraOn(true);
+      setCameraError(false);
+    } catch {
+      setCameraError(true);
+      setCameraOn(false);
+    }
+  }, []);
+
+  const stopWebcam = useCallback(() => {
+    webcamStreamRef.current?.getTracks().forEach(t => t.stop());
+    webcamStreamRef.current = null;
+    if (webcamRef.current) webcamRef.current.srcObject = null;
+    setCameraOn(false);
+  }, []);
+
+  // Cleanup webcam on unmount
+  useEffect(() => () => stopWebcam(), [stopWebcam]);
 
   useEffect(() => {
     if (phase !== "interview" || isStreaming || synth.isSpeaking) {
@@ -384,8 +415,9 @@ Generate ONLY the first opening question. Make it natural, warm, and specific to
     setReport(null);
     setSaved(false);
     setPhase("interview");
+    void startWebcam();
     setTimeout(() => synth.speak(question, "English", undefined, { voiceGender: coach.gender }), 300);
-  }, [typeMeta, experience, duration, coach, stream, resetStream, synth, buildProfileSummary]);
+  }, [typeMeta, experience, duration, coach, stream, resetStream, synth, buildProfileSummary, startWebcam]);
 
   const toggleRecording = useCallback(() => {
     if (autoListenEnabled) {
@@ -481,10 +513,12 @@ Next: <interview question>`,
   const endEarly = useCallback(() => {
     clearAutoSubmitTimer();
     speech.stop();
+    synth.stop();
+    stopWebcam();
     setIsRecording(false);
     setAutoListenEnabled(false);
     setPhase("report");
-  }, [speech, clearAutoSubmitTimer]);
+  }, [speech, synth, clearAutoSubmitTimer, stopWebcam]);
 
   useEffect(() => {
     if (phase !== "interview" || !autoListenEnabled || !speech.isSupported || !currentQ || isStreaming || synth.isSpeaking || isRecording) return;
@@ -935,102 +969,181 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
     );
   }
 
-  // ── Interview ──────────────────────────────────────────────────────────────
+  // ── Interview — Video Call Mode ────────────────────────────────────────────
   return (
-    <div className="min-h-full overflow-y-auto container mx-auto px-4 py-4 max-w-[1400px]">
-      <div className="grid min-h-full lg:grid-cols-[260px_1fr] gap-5">
-        {/* Desktop sidebar */}
-        <aside className="hidden lg:flex flex-col items-center gap-4 min-h-0 overflow-hidden">
-          <AnimatedAvatar
-            name={coach.name}
-            subtitle={`${typeMeta.label} Interviewer`}
-            isSpeaking={synth.isSpeaking}
-            isThinking={isStreaming}
-            gender={coach.gender}
-            size="xl"
-            imageSrc={coach.imageSrc}
-          />
-          <div className="w-full space-y-2 min-h-0 overflow-hidden flex flex-col">
-            <TimerDisplay elapsedSeconds={elapsedSeconds} durationMinutes={duration} />
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Progress</span>
-              <span className="font-bold text-secondary">{answeredCount} answered</span>
-            </div>
-            <Progress value={Math.min(100, (elapsedSeconds / (duration * 60)) * 100)} className="h-2" />
-            <div className="space-y-1 mt-2 overflow-y-auto pr-1">
-              {questions.map((q, i) => (
-                <div key={i} className={`flex items-center justify-between text-xs px-2 py-1.5 rounded-lg ${i === currentIdx ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"}`}>
-                  <span className="truncate mr-2">Q{i + 1}</span>
-                  {q.score !== undefined && <ScoreBadge score={q.score * 10} />}
-                  {i === currentIdx && !q.answer && <span className="text-primary text-[10px] animate-pulse">●</span>}
-                </div>
+    <div className="fixed inset-0 bg-gray-950 flex flex-col z-30" style={{ top: 56 }}>
+
+      {/* ── Top HUD ──────────────────────────────────────────────────────── */}
+      <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/80 to-transparent z-10 pointer-events-none">
+        <div className="flex items-center gap-2">
+          <span className="text-white text-sm font-bold">{coach.name}</span>
+          <span className="text-white/50 text-xs">· {typeMeta.icon} {typeMeta.label} · {experience}</span>
+        </div>
+        <div className="flex items-center gap-2 text-white/80 text-sm font-bold">
+          <Timer className="w-4 h-4" />
+          <span className={elapsedSeconds >= duration * 60 - 120 ? "text-red-400" : ""}>
+            {formatTime(elapsedSeconds)} / {duration}:00
+          </span>
+        </div>
+      </div>
+
+      {/* ── Progress bar under HUD ──────────────────────────────────────── */}
+      <div className="absolute top-11 left-0 right-0 h-0.5 bg-white/10 z-10">
+        <div
+          className={`h-full transition-all ${elapsedSeconds >= duration * 60 - 120 ? "bg-red-500" : "bg-primary"}`}
+          style={{ width: `${Math.min(100, (elapsedSeconds / (duration * 60)) * 100)}%` }}
+        />
+      </div>
+
+      {/* ── Main video area ─────────────────────────────────────────────── */}
+      <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+
+        {/* AI avatar — large central "video" */}
+        <div className="flex flex-col items-center gap-5">
+          <div
+            className="rounded-full transition-all duration-300"
+            style={synth.isSpeaking ? { boxShadow: "0 0 0 12px rgba(249,115,22,0.15), 0 0 0 24px rgba(249,115,22,0.07)" } : {}}
+          >
+            <AnimatedAvatar
+              name={coach.name}
+              subtitle={coach.role}
+              isSpeaking={synth.isSpeaking}
+              isThinking={isStreaming}
+              gender={coach.gender}
+              size="xl"
+              imageSrc={coach.imageSrc}
+            />
+          </div>
+
+          {/* Voice visualiser bars */}
+          {synth.isSpeaking && (
+            <div className="flex items-end gap-1">
+              {[10, 18, 24, 18, 14, 22, 10].map((h, i) => (
+                <div
+                  key={i}
+                  className="w-1.5 rounded-full bg-primary animate-pulse"
+                  style={{ height: h, animationDelay: `${i * 0.12}s`, animationDuration: "0.6s" }}
+                />
               ))}
             </div>
+          )}
+          {isStreaming && !synth.isSpeaking && (
+            <p className="text-white/50 text-xs animate-pulse">{coach.name} is thinking…</p>
+          )}
+        </div>
+
+        {/* Current question subtitle */}
+        {currentQ && (
+          <div className="absolute bottom-4 left-4 right-20 sm:right-4">
+            <div className="bg-black/70 backdrop-blur-sm rounded-2xl px-4 py-3 max-w-2xl mx-auto text-center">
+              <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest mb-1">
+                Question {currentIdx + 1} · {answeredCount} answered
+              </p>
+              <p className="text-white text-sm sm:text-base font-semibold leading-snug">{currentQ.question}</p>
+              <button
+                className="mt-2 text-primary/70 hover:text-primary text-xs flex items-center gap-1 mx-auto"
+                onClick={() => synth.speak(currentQ.question, "English", undefined, { voiceGender: coach.gender })}
+              >
+                <Volume2 className="w-3 h-3" /> Repeat question
+              </button>
+            </div>
           </div>
-          <Button variant="destructive" className="font-bold w-full h-11" onClick={endEarly}>
-            <LogOut className="w-4 h-4 mr-2" />End Interview
+        )}
+
+        {/* User webcam — PiP corner */}
+        <div className="absolute top-14 right-3 w-24 h-18 sm:w-32 sm:h-24 rounded-xl overflow-hidden border border-white/20 shadow-2xl bg-gray-800">
+          {cameraOn ? (
+            <video
+              ref={webcamRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+              style={{ transform: "scaleX(-1)" }}
+              onLoadedMetadata={e => { (e.target as HTMLVideoElement).play().catch(() => {}); }}
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-white/30">
+              <VideoOff className="w-5 h-5" />
+              <span className="text-[9px]">{cameraError ? "No camera" : "Camera off"}</span>
+            </div>
+          )}
+          <div className="absolute bottom-1 right-1.5 text-[9px] text-white/50 font-bold">You</div>
+        </div>
+
+        {/* Camera toggle */}
+        <button
+          className="absolute top-14 right-3 w-24 sm:w-32 h-5 -mt-5 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+          style={{ top: "calc(3.5rem + 72px + 4px)" }}
+          onClick={cameraOn ? stopWebcam : () => void startWebcam()}
+          title={cameraOn ? "Turn off camera" : "Turn on camera"}
+        >
+          <span className="bg-black/60 text-white/60 text-[9px] px-2 py-0.5 rounded-full">
+            {cameraOn ? "Turn off" : "Turn on"}
+          </span>
+        </button>
+      </div>
+
+      {/* ── Bottom answer + controls ─────────────────────────────────────── */}
+      <div className="bg-gray-900 border-t border-white/10 px-4 pt-3 pb-4 space-y-3">
+        <Textarea
+          placeholder="Speak naturally — mic starts automatically. Or type here."
+          className={`min-h-[90px] sm:min-h-[110px] text-sm resize-none bg-gray-800 border-gray-700 text-white placeholder:text-white/30 focus-visible:ring-primary ${
+            isRecording ? "border-green-500/50" : ""
+          }`}
+          value={isRecording && speech.interimTranscript ? answer + " " + speech.interimTranscript : answer}
+          onChange={e => !isRecording && setAnswer(e.target.value)}
+        />
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Mic status pill */}
+          <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shrink-0 ${
+            isRecording ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-white/10 text-white/40"
+          }`}>
+            {isRecording ? <Mic className="w-3 h-3" /> : <MicOff className="w-3 h-3" />}
+            {isRecording ? "Listening…" : speech.isSupported ? "Mic paused" : "No mic"}
+          </div>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleRecording}
+            disabled={!speech.isSupported}
+            className="text-white/50 hover:text-white hover:bg-white/10 text-xs shrink-0"
+          >
+            {autoListenEnabled ? "Pause mic" : "Resume mic"}
           </Button>
-        </aside>
 
-        {/* Main interview area */}
-        <main className="min-w-0 min-h-0 flex flex-col">
-          <AvatarBar coach={coach} isSpeaking={synth.isSpeaking} isThinking={isStreaming} className="lg:hidden mb-4" />
+          <div className="flex-1" />
 
-          <div className="flex items-center gap-3 mb-4 lg:hidden">
-            <Progress value={Math.min(100, (elapsedSeconds / (duration * 60)) * 100)} className="h-1.5 flex-1" />
-            <TimerDisplay elapsedSeconds={elapsedSeconds} durationMinutes={duration} />
-            <Button variant="destructive" size="sm" className="font-bold text-xs shrink-0 min-h-9 px-3" onClick={endEarly}>
-              <LogOut className="w-3.5 h-3.5 mr-1" />End Interview
-            </Button>
+          {/* Submit answer */}
+          <Button
+            size="sm"
+            className="font-bold bg-primary hover:bg-primary/90 shrink-0"
+            disabled={!answer.trim() || isStreaming}
+            onClick={submitAnswer}
+          >
+            {isStreaming
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <><ChevronRight className="w-4 h-4 mr-1" />Submit</>}
+          </Button>
+
+          {/* End call — red hang-up button */}
+          <button
+            onClick={endEarly}
+            className="w-10 h-10 rounded-full bg-red-600 hover:bg-red-700 active:scale-95 flex items-center justify-center shadow-lg shadow-red-900/40 transition-all shrink-0"
+            title="End Interview"
+          >
+            <PhoneOff className="w-4 h-4 text-white" />
+          </button>
+        </div>
+
+        {isStreaming && (
+          <div className="flex items-center gap-2 text-xs text-white/40 animate-in fade-in">
+            <Loader2 className="w-3 h-3 animate-spin text-primary" />
+            {coach.name} is preparing the next question…
           </div>
-
-          <Card className="shadow-lg border-none min-h-[72vh] overflow-hidden">
-            <CardContent className="p-5 md:p-7 h-full min-h-0 flex flex-col">
-              <div className="flex items-start gap-3 mb-6">
-                <Button variant="ghost" size="icon" className="shrink-0 min-h-11 min-w-11 mt-0.5 text-muted-foreground hover:text-primary"
-                  onClick={() => currentQ && synth.speak(currentQ.question, "English", undefined, { voiceGender: coach.gender })}>
-                  <Volume2 className="w-4 h-4" />
-                </Button>
-                <div>
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Question {currentIdx + 1}</span>
-                  <h2 className="text-lg md:text-xl font-display font-bold text-secondary leading-snug mt-1">
-                    {currentQ?.question}
-                  </h2>
-                </div>
-              </div>
-
-              <div className="space-y-4 flex-1 min-h-0 flex flex-col">
-                  <Textarea
-                    placeholder="Speak naturally — the mic starts automatically. You can also type your answer here."
-                    className={`min-h-[180px] text-base transition-colors flex-1 ${isRecording ? "bg-red-50/50 border-red-300 focus-visible:ring-red-300" : "bg-muted/40 border-muted-foreground/20"}`}
-                    value={isRecording && speech.interimTranscript ? answer + " " + speech.interimTranscript : answer}
-                    onChange={e => !isRecording && setAnswer(e.target.value)}
-                  />
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${isRecording ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
-                      {isRecording ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5" />}
-                      {speech.isSupported ? (isRecording ? "Mic on — speak freely" : "Mic paused") : "Microphone not supported"}
-                    </div>
-                    {speech.interimTranscript && (
-                      <span className="text-xs text-muted-foreground italic flex-1 min-w-[220px] truncate">{speech.interimTranscript}</span>
-                    )}
-                    <Button variant="outline" size="sm" onClick={toggleRecording} disabled={!speech.isSupported}>
-                      {autoListenEnabled ? "Pause mic" : "Resume mic"}
-                    </Button>
-                    <Button className="font-bold" disabled={!answer.trim() || isStreaming} onClick={submitAnswer}>
-                      {isStreaming ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing...</> : "Submit Answer"}
-                    </Button>
-                  </div>
-                  {isStreaming && (
-                    <div className="p-3 bg-muted/50 rounded-xl text-sm text-muted-foreground animate-in fade-in flex items-center gap-2">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
-                      {coach.name} is noting your answer and preparing the next question...
-                    </div>
-                  )}
-                </div>
-            </CardContent>
-          </Card>
-        </main>
+        )}
       </div>
     </div>
   );

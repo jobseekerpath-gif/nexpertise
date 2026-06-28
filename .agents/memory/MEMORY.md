@@ -19,3 +19,4 @@
 - [Rozgar profile gate](rozgar-profile-gate.md) — gate requires both name AND location before showing feed; gate data must be persisted to useStudentProfile (updateProfile) not just local state.
 - [Admin login pattern](admin-login-pattern.md) — /auth/admin-login uses SHA-256 hash vs ADMIN_USERNAME + ADMIN_PASSWORD_HASH env vars; seeds admin@edubharat.in user on first successful login.
 - [Mobile tool AI calls](mobile-tool-ai.md) — Expo tool/[id].tsx calls /api/ai/chat with {prompt, system, maxTokens} body (NOT messages array); response is {text: string}.
+- [Interview Ace video call UI](interview-video-call.md) — interview session phase uses fixed full-screen dark layout (z-30, top:56px offset for nav); webcam PiP via getUserMedia; red PhoneOff hang-up button to end.
