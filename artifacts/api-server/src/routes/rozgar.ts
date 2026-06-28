@@ -354,15 +354,35 @@ function mergeItems(items: LiveItem[]) {
  * Filters out jobs with explicit non-India locations (Australia, USA, Germany, etc.)
  * unless the job is explicitly marked remote.
  */
+// Title/description keywords that indicate the job explicitly targets non-India regions
+const NON_INDIA_TITLE_TERMS = [
+  "latam", "latin america", "portuguese", "español", "emea", "apac",
+  "dach", "benelux", "nordics", "mena", "gcc", "cis", "cee",
+  "europe", "european", "americas", "africa", "middle east",
+  "australia", "canadian", "uk market", "us market",
+];
+
 function isIndiaRelevantJob(item: LiveItem): boolean {
-  // Explicitly remote jobs are universally applicable
-  if (item.remote === true) return true;
+  const title = (item.title ?? "").toLowerCase();
+  const company = (item.company ?? "").toLowerCase();
+  const summary = (item.summary ?? "").toLowerCase();
+  const haystack = `${title} ${company} ${summary}`;
+
+  // Reject if title/summary explicitly targets a non-India region — even for remote jobs
+  if (NON_INDIA_TITLE_TERMS.some(t => haystack.includes(t))) return false;
+
   // Unknown location — allow through
   if (!item.location) return true;
   const loc = item.location.toLowerCase().trim();
-  if (!loc || loc === "remote" || loc === "worldwide" || loc.includes("india")) return true;
-  // Exclude jobs with clearly non-India locations
-  // Word-boundary match so "uk" inside "kolkata" doesn't false-positive
+  if (!loc || loc === "remote" || loc === "worldwide") return true;
+
+  // Explicitly India location — always allow
+  if (loc.includes("india")) return true;
+
+  // Remote but no non-India signal — allow
+  if (item.remote === true) return true;
+
+  // Exclude jobs with clearly non-India location tokens
   const tokens = loc.split(/[\s,\/\-]+/).map(t => t.trim()).filter(Boolean);
   const nonIndiaTokens = new Set([
     "australia", "aus", "usa", "us", "united", "states", "canada", "ca",
@@ -372,9 +392,13 @@ function isIndiaRelevantJob(item: LiveItem): boolean {
     "denmark", "finland", "switzerland", "austria", "spain", "italy",
     "portugal", "poland", "czech", "singapore", "sg", "malaysia", "my",
     "thailand", "th", "philippines", "ph", "indonesia", "id",
+    "argentina", "colombia", "chile", "peru", "venezuela", "nigeria",
+    "kenya", "ghana", "egypt", "turkey", "israel", "pakistan",
   ]);
-  // Check compound phrases too (e.g. "new zealand", "united states")
-  const nonIndiaPhrases = ["new zealand", "united states", "united kingdom", "hong kong", "south africa"];
+  const nonIndiaPhrases = [
+    "new zealand", "united states", "united kingdom", "hong kong",
+    "south africa", "latin america", "south america",
+  ];
   if (nonIndiaPhrases.some(p => loc.includes(p))) return false;
   return !tokens.some(t => nonIndiaTokens.has(t));
 }

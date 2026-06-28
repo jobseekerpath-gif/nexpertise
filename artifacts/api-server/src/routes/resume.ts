@@ -80,23 +80,26 @@ router.post("/resume/upload", requireAuth, upload.single("resume"), async (req, 
 });
 
 // POST /api/resume/text — fallback for users who paste resume text directly
-router.post("/resume/text", requireAuth, async (req, res) => {
+// Works for both guests and authenticated users
+router.post("/resume/text", async (req, res) => {
   try {
     const { text } = req.body as Record<string, unknown>;
     if (typeof text !== "string" || !text.trim()) {
       res.status(400).json({ error: "Resume text is required" });
       return;
     }
-    const userId = req.session.userId!;
-    await db
-      .update(usersTable)
-      .set({
-        resumeText: text.trim(),
-        resumeFileName: "Pasted resume",
-        resumeAnalysis: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(usersTable.id, userId));
+    // For authenticated users, persist to DB; guests get a simple ack
+    if (req.session.userId) {
+      await db
+        .update(usersTable)
+        .set({
+          resumeText: text.trim(),
+          resumeFileName: "Pasted resume",
+          resumeAnalysis: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(usersTable.id, req.session.userId));
+    }
     res.json({ success: true, wordCount: text.trim().split(/\s+/).filter(Boolean).length });
   } catch (err) {
     req.log.error({ err }, "Resume text save error");
@@ -207,34 +210,50 @@ router.get("/resume/download", requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/resume/analyse — SSE stream
-router.post("/resume/analyse", requireAuth, async (req, res) => {
+// POST /api/resume/analyse — SSE stream (works for guests too)
+router.post("/resume/analyse", async (req, res) => {
   try {
-    const { targetRole, experienceLevel } = req.body as Record<string, string>;
-    const userId = req.session.userId!;
+    const { targetRole, experienceLevel, guestText } = req.body as Record<string, string>;
 
-    const users = await db
-      .select({
-        resumeText: usersTable.resumeText,
-        preferredRole: usersTable.preferredRole,
-      })
-      .from(usersTable)
-      .where(eq(usersTable.id, userId))
-      .limit(1);
+    let resumeTextToAnalyse: string;
+    let preferredRole = "General";
 
-    const user = users[0];
-    if (!user?.resumeText) {
-      res.status(400).json({ error: "No resume uploaded yet" });
+    if (req.session.userId) {
+      // Authenticated user — load from DB
+      const users = await db
+        .select({
+          resumeText: usersTable.resumeText,
+          preferredRole: usersTable.preferredRole,
+        })
+        .from(usersTable)
+        .where(eq(usersTable.id, req.session.userId))
+        .limit(1);
+
+      const user = users[0];
+      // Use DB text or fall back to guestText if passed alongside
+      resumeTextToAnalyse = user?.resumeText || guestText || "";
+      preferredRole = user?.preferredRole || "General";
+    } else {
+      // Guest — require text in request body
+      if (!guestText?.trim()) {
+        res.status(400).json({ error: "Please paste your resume text to analyse without signing in." });
+        return;
+      }
+      resumeTextToAnalyse = guestText.trim();
+    }
+
+    if (!resumeTextToAnalyse.trim()) {
+      res.status(400).json({ error: "No resume text found. Please upload a file or paste your resume text." });
       return;
     }
 
-    const role = targetRole || user.preferredRole || "General";
+    const role = targetRole || preferredRole || "General";
     const experience = experienceLevel || "Fresher";
 
     const prompt = `Analyse the following resume for a candidate targeting a "${role}" role in India with ${experience} experience.
 
 RESUME TEXT:
-${user.resumeText}
+${resumeTextToAnalyse}
 
 Return a structured JSON analysis with exactly this shape (no markdown, no extra text, valid JSON only):
 
@@ -283,7 +302,7 @@ Ensure the response is valid JSON and can be parsed with JSON.parse().`;
       }
     }
 
-    // Try to parse final JSON and sync to profile
+    // Try to parse final JSON and sync to profile (authenticated users only)
     try {
       const cleaned = fullText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       const parsed = JSON.parse(cleaned) as {
@@ -296,16 +315,18 @@ Ensure the response is valid JSON and can be parsed with JSON.parse().`;
         suggestions?: string[];
       };
 
-      await db
-        .update(usersTable)
-        .set({
-          resumeAnalysis: JSON.stringify(parsed),
-          experienceSummary: parsed.experienceSummary ?? "",
-          skills: JSON.stringify(parsed.skills ?? []),
-          education: JSON.stringify(parsed.education ?? []),
-          updatedAt: new Date(),
-        })
-        .where(eq(usersTable.id, userId));
+      if (req.session.userId) {
+        await db
+          .update(usersTable)
+          .set({
+            resumeAnalysis: JSON.stringify(parsed),
+            experienceSummary: parsed.experienceSummary ?? "",
+            skills: JSON.stringify(parsed.skills ?? []),
+            education: JSON.stringify(parsed.education ?? []),
+            updatedAt: new Date(),
+          })
+          .where(eq(usersTable.id, req.session.userId));
+      }
     } catch (err) {
       req.log.error({ err, fullText }, "Failed to parse resume analysis JSON");
     }

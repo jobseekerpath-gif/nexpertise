@@ -597,8 +597,8 @@ function RozgarSamacharContent() {
   const [gateCity, setGateCity] = useState("");
   const [gateGoal, setGateGoal] = useState("Private Job");
   const [gateExp, setGateExp] = useState("Fresher");
-  // Gate is required when BOTH name and location are missing (not just one)
-  const needsGate = !gateComplete && !profile.name && !profile.location;
+  // Gate is required when name OR location is missing (either one missing = show gate)
+  const needsGate = !gateComplete && (!profile.name || !profile.location);
   const [activeTab, setActiveTab] = useState<"jobs" | "feed" | "saved">("jobs");
   const [activeFilterTab, setActiveFilterTab] = useState<FilterTabId>("all");
   const [hiddenJobIds, setHiddenJobIds] = useState<Set<string>>(new Set());

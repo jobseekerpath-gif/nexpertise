@@ -482,8 +482,9 @@ function EnglishGuruContent() {
         const cleanResponse = stripMarkdownForSpeech(response);
         setConvHistory(h => [...h, { role: "ai", text: cleanResponse }]);
         track("English Guru", "Live Conversation");
-        const spokenLanguage = detectSpokenLanguage(cleanResponse, uiLang);
-        speak(cleanResponse, spokenLanguage, () => {
+        // Always use uiLang for TTS — AI was instructed to respond in uiLang,
+        // so we should speak it in that language regardless of script detection.
+        speak(cleanResponse, uiLang, () => {
           if (liveChat) setConvFlowState("ai-speaking");
         });
       }

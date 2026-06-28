@@ -971,7 +971,7 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
 
   // ── Interview — Video Call Mode ────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 bg-gray-950 flex flex-col z-30" style={{ top: 56 }}>
+    <div className="fixed inset-0 bg-gray-950 flex flex-col z-[9999]" style={{ top: 56 }}>
 
       {/* ── Top HUD ──────────────────────────────────────────────────────── */}
       <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/80 to-transparent z-10 pointer-events-none">

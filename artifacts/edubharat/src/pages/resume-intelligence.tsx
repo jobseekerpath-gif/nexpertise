@@ -242,7 +242,7 @@ function ResumeIntelligenceContent() {
     abortRef.current = new AbortController();
 
     try {
-      // If user pasted text without uploading a file, save it first
+      // If user pasted text without uploading a file, save it first (best-effort for auth users)
       if (!hasResume && resumeText.trim()) {
         const saveRes = await fetch(`${base}/api/resume/text`, {
           method: "POST",
@@ -250,18 +250,25 @@ function ResumeIntelligenceContent() {
           body: JSON.stringify({ text: resumeText.trim() }),
           credentials: "include",
         });
-        if (!saveRes.ok) throw new Error("Failed to save resume text");
-        setHasResume(true);
+        if (saveRes.ok) setHasResume(true);
+        // For guests, save may fail — that's OK, we'll pass text directly below
       }
+
+      // Pass guestText so the server can analyse without auth if user isn't signed in
+      const body: Record<string, string> = { targetRole: targetRoleMeta.label, experienceLevel };
+      if (resumeText.trim()) body.guestText = resumeText.trim();
 
       const res = await fetch(`${base}/api/resume/analyse`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetRole: targetRoleMeta.label, experienceLevel }),
+        body: JSON.stringify(body),
         credentials: "include",
         signal: abortRef.current.signal,
       });
-      if (!res.ok) throw new Error("Analysis request failed");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(errData.error ?? "Analysis request failed");
+      }
 
       let fullText = "";
       for await (const chunk of parseSSE(res)) {
