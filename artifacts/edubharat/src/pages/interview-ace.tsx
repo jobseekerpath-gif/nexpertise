@@ -255,15 +255,26 @@ function InterviewAceContent() {
   const { text: streamText, isStreaming, stream, reset: resetStream } = useGeminiStream();
   const synth = useEdgeTTS();
   const speech = useSpeechRecognition("English");
+  // Tracks whether the coach is currently speaking (TTS active). The auto-listen
+  // effect checks this so it never restarts the mic while the coach is mid-speech,
+  // fixing the "stops after 1 question" bug caused by the effect firing eagerly
+  // between when the stream ends and when speakCoach actually starts TTS.
+  const [coachSpeaking, setCoachSpeaking] = useState(false);
   /**
    * speakCoach — the ONLY way the interviewer should talk. It hard-pauses the
    * mic the instant the AI begins speaking (kills echo/self-repeat on phones
    * and laptop speakers) and releases it ~1.1s after the audio ends.
+   * coachSpeaking stays true until TTS finishes, letting the auto-listen effect
+   * know it should wait before restarting the mic.
    */
   const speakCoach = useCallback(
     (text: string, opts: { voiceGender?: "male" | "female"; pitch?: number; rate?: number }) => {
       speech.pause();
-      void synth.speak(text, "English", () => speech.blockFor(1100), opts);
+      setCoachSpeaking(true);
+      void synth.speak(text, "English", () => {
+        speech.blockFor(1100);
+        setCoachSpeaking(false);
+      }, opts);
     },
     [speech, synth],
   );
@@ -407,20 +418,14 @@ function InterviewAceContent() {
     resetStream();
     const candidateName = profile.name || "there";
     const full = await stream(
-      `You are ${coach.name} starting a real ${duration}-minute job interview for ${typeMeta.label} in India.
+      `You are ${coach.name} opening a real ${duration}-min ${typeMeta.label} interview in India.
 
-Candidate you are interviewing: ${buildProfileSummary()}
+Candidate: ${buildProfileSummary()}
 
-Open the interview naturally — like a real interviewer would. In 1-2 warm sentences:
-- Greet them by their first name (${candidateName.split(" ")[0]})
-- Briefly introduce yourself
-- Then ask your first real interview question (relevant to their background and the role)
-
-Do NOT say "Welcome to this mock interview" or anything that breaks the realism. Speak as if this is a real interview.
-Return just the spoken text — no labels, no formatting.`,
-      `You are ${coach.name}, ${coach.role}. ${coach.style}. You are conducting a real-feeling Indian job interview. Sound warm, natural, and professional — like an actual interviewer, never robotic or scripted.`,
+In 2-3 natural spoken sentences: greet them by first name (${candidateName.split(" ")[0]}), briefly say who you are, then ask your first interview question tailored to their background. Sound like a real person — warm, conversational, not reading from a checklist. Return ONLY the spoken words, no labels.`,
+      `You are ${coach.name}, ${coach.role}. Talk like a real Indian professional interviewer — warm, natural, direct. Never sound like a script.`,
       undefined,
-      { maxTokens: 300 }
+      { maxTokens: 150 }
     );
     const opening = full.replace(/^\s*["']?|["']?\s*$/g, "").trim();
     if (!opening) return;
@@ -435,10 +440,13 @@ Return just the spoken text — no labels, no formatting.`,
     setReport(null);
     setSaved(false);
     setPhase("interview");
-    // Camera does NOT start automatically — user must enable it via the button
+    // Camera does NOT start automatically — user must enable it via the button.
+    // Set coachSpeaking BEFORE the delay so the auto-listen effect cannot fire
+    // during the 300ms window between phase="interview" and speakCoach start.
     const pitchVariation = coach.gender === "male" ? 0.88 : 1.08;
+    setCoachSpeaking(true);
     setTimeout(() => speakCoach(opening, { voiceGender: coach.gender, pitch: pitchVariation, rate: 0.90 }), 300);
-  }, [typeMeta, experience, duration, coach, stream, resetStream, synth, buildProfileSummary, profile.name]);
+  }, [typeMeta, experience, duration, coach, stream, resetStream, speakCoach, buildProfileSummary, profile.name]);
 
   const toggleRecording = useCallback(() => {
     if (autoListenEnabled) {
@@ -478,24 +486,18 @@ Return just the spoken text — no labels, no formatting.`,
 
     // Get a brief natural acknowledgment + next question — no scores, no analysis
     const response = await stream(
-      `You are conducting a mock interview. Keep it natural and flowing.
+      `${typeMeta.label} interview, ${remainingMin} min left.
 
-Interview: ${typeMeta.label}, ${experience} experience. ${remainingMin} minutes remaining.
-Profile: ${buildProfileSummary()}
+Q: ${currentQ.question}
+A: "${recordedAnswer}"
 
-Transcript so far:
-${buildTranscript(currentIdx)}
-
-You just asked: ${currentQ.question}
-Candidate answered: "${recordedAnswer}"
-
-Give ONE brief warm acknowledgment (1 sentence, no feedback, no scores), then ask ONE sharp adaptive follow-up question.
-Respond in exactly this format:
-Ack: <one sentence>
-Next: <interview question>`,
-      `You are ${coach.name}, ${coach.role}. ${coach.style}. Keep the interview conversational and natural. No scoring or analysis during the interview.`,
+React to the answer in ONE casual sentence (warm but human — like "Oh great!", "That's interesting.", "Mm, I see." — never corporate), then ask ONE specific follow-up question relevant to their answer.
+Write exactly two lines:
+Ack: <your natural reaction>
+Next: <your follow-up question>`,
+      `You are ${coach.name}, a real Indian interviewer. Sound human and warm — casual conversational style, never robotic or scripted.`,
       undefined,
-      { maxTokens: 200 }
+      { maxTokens: 100 }
     );
 
     const ackMatch = response.match(/^Ack:\s*(.+)/im);
@@ -529,8 +531,10 @@ Next: <interview question>`,
     setIsRecording(false);
     clearAutoSubmitTimer();
     resetStream();
+    // Guard against the 300ms window before speakCoach fires
+    setCoachSpeaking(true);
     setTimeout(() => speakCoach(questions[nextIdx]!.question, { voiceGender: coach.gender, rate: 0.90 }), 300);
-  }, [currentIdx, questions, resetStream, synth, clearAutoSubmitTimer]);
+  }, [currentIdx, questions, resetStream, speakCoach, clearAutoSubmitTimer]);
 
   const endEarly = useCallback(() => {
     clearAutoSubmitTimer();
@@ -543,7 +547,9 @@ Next: <interview question>`,
   }, [speech, synth, clearAutoSubmitTimer, stopWebcam]);
 
   useEffect(() => {
-    if (phase !== "interview" || !autoListenEnabled || !speech.isSupported || !currentQ || isStreaming || synth.isSpeaking || isRecording) return;
+    // coachSpeaking guard: don't start mic while the AI coach is speaking — prevents
+    // the mic from activating between when the stream ends and when TTS actually starts.
+    if (phase !== "interview" || !autoListenEnabled || !speech.isSupported || !currentQ || isStreaming || synth.isSpeaking || isRecording || coachSpeaking) return;
     setIsRecording(true);
     speech.startContinuous(text => {
       const chunk = text.trim();
@@ -554,13 +560,14 @@ Next: <interview question>`,
         return next;
       });
       clearAutoSubmitTimer();
+      // 900ms silence → auto-submit (faster than 1500ms for a more conversational feel)
       autoSubmitRef.current = setTimeout(() => {
         const latest = answerRef.current.trim();
         if (latest) void submitCurrentAnswer(latest);
-      }, 1500);
+      }, 900);
     });
     return () => { clearAutoSubmitTimer(); };
-  }, [phase, currentQ, autoListenEnabled, speech, isStreaming, synth.isSpeaking, isRecording, submitCurrentAnswer, clearAutoSubmitTimer]);
+  }, [phase, currentQ, autoListenEnabled, speech, isStreaming, synth.isSpeaking, isRecording, coachSpeaking, submitCurrentAnswer, clearAutoSubmitTimer]);
 
   // Generate detailed report when entering report phase
   useEffect(() => {

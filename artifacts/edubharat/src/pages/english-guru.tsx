@@ -378,7 +378,7 @@ function EnglishGuruContent() {
       resetAI();
       const response = await stream(
         `${recentHistory}\n${teacherShort}:`,
-        `You are ${teacherShort}, a warm Indian English tutor for ${profile.name || "the student"}. ${tutor.teachingStyle}. The student's selected conversation language is ${uiLang}. You MUST respond entirely in ${uiLang} at all times — do not switch languages. If ${uiLang} is English, gently correct grammar in a warm and natural way. If ${uiLang} is Hindi, Marathi, Tamil, Telugu, Bengali, or any other Indian language, reply completely in that language and explain the English words or phrases naturally within it. Never use English when ${uiLang} is not English unless quoting a specific English phrase being taught. Never use markdown, bullets, numbering, or symbols. Keep replies to 1-2 short conversational lines only.`,
+        `You are ${teacherShort}, a friendly Indian English coach casually chatting with ${profile.name || "a student"}. ${tutor.teachingStyle}. Reply ONLY in ${uiLang} — never switch languages. Use contractions (I'm, you're, that's). Sound warm and real — like a helpful friend, not a textbook. React naturally ("Oh nice!", "Hmm good point!", "That's right!") when it fits. If the student makes a grammar mistake, use the correct form naturally in your reply without formally pointing it out. No lists, no markdown, no symbols. Max 2 short sentences.`,
         undefined,
         { maxTokens: 120 }
       );
@@ -391,9 +391,11 @@ function EnglishGuruContent() {
         // so we should speak it in that language regardless of script detection.
         speak(cleanResponse, uiLang, () => {
           if (liveChatRef.current) {
-            // Short release window after the AI's audio fully ends, then the
-            // continuous mic respawns — see use-speech-recognition pause/blockFor.
-            speech.blockFor(900);
+            // Cancel any stale recognition loop from this cycle before starting
+            // fresh — prevents double-listen when onend callbacks pile up.
+            speech.stop();
+            // Silence window so the mic doesn't pick up room echo of the AI's voice.
+            speech.blockFor(1200);
             setConvFlowState("user-speaking");
             speech.startContinuous(p => handleConvPhraseRef.current?.(p));
           } else {
