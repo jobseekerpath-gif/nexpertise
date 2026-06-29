@@ -1,15 +1,16 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Bookmark, LogIn, LogOut, User, BarChart2, Menu, X, BookOpen, Mic, Newspaper, Settings, FileText } from "lucide-react";
+import { Bookmark, LogIn, LogOut, User, BarChart2, Menu, X, BookOpen, Mic, Newspaper, Settings, FileText, Route } from "lucide-react";
 import { useHistory } from "@/lib/use-history";
 import { useAuth } from "@/lib/use-auth";
 import { Button } from "@/components/ui/button";
 
 const NAV_LINKS = [
-  { href: "/english-guru", label: "English Guru", icon: BookOpen },
-  { href: "/interview-ace", label: "Interview Ace", icon: Mic },
-  { href: "/rozgar-samachar", label: "Rozgar Samachar", icon: Newspaper },
-  { href: "/resume-intelligence", label: "Resume", icon: FileText },
+  { href: "/english-guru",      label: "English Guru",      icon: BookOpen },
+  { href: "/interview-ace",     label: "Interview Ace",     icon: Mic },
+  { href: "/rozgar-samachar",   label: "Rozgar Samachar",   icon: Newspaper },
+  { href: "/resume-intelligence", label: "Resume",          icon: FileText },
+  { href: "/learning-journey",  label: "My Journey",        icon: Route },
 ];
 
 export function Navbar() {

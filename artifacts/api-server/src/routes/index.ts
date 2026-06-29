@@ -10,6 +10,9 @@ import historyItemsRouter from "./history-items.js";
 import resumeRouter from "./resume.js";
 import analyticsRouter from "./analytics.js";
 import ttsRouter from "./tts.js";
+import jobsRouter from "./jobs.js";
+import newsRouter from "./news.js";
+import journeyRouter from "./journey.js";
 
 const router: IRouter = Router();
 
@@ -24,5 +27,8 @@ router.use(historyItemsRouter);
 router.use(resumeRouter);
 router.use(analyticsRouter);
 router.use(ttsRouter);
+router.use(jobsRouter);
+router.use(newsRouter);
+router.use(journeyRouter);
 
 export default router;

@@ -18,6 +18,7 @@ const EnglishGuru = lazy(() => import("@/pages/english-guru"));
 const InterviewAce = lazy(() => import("@/pages/interview-ace"));
 const RozgarSamachar = lazy(() => import("@/pages/rozgar-samachar"));
 const ResumeIntelligence = lazy(() => import("@/pages/resume-intelligence"));
+const LearningJourney = lazy(() => import("@/pages/learning-journey"));
 const History = lazy(() => import("@/pages/history"));
 const Login = lazy(() => import("@/pages/login"));
 const Progress = lazy(() => import("@/pages/progress"));
@@ -52,6 +53,11 @@ function Router() {
       <Route path="/resume-intelligence">
         <Layout compact showFooter={false}>
           <ResumeIntelligence />
+        </Layout>
+      </Route>
+      <Route path="/learning-journey">
+        <Layout>
+          <LearningJourney />
         </Layout>
       </Route>
       <Route>
