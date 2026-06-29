@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 
 const NAV_LINKS = [
   { href: "/english-guru",      label: "English Guru",      icon: BookOpen },
+  { href: "/learning-journey",  label: "My Journey",        icon: Route },
   { href: "/interview-ace",     label: "Interview Ace",     icon: Mic },
   { href: "/rozgar-samachar",   label: "Rozgar Samachar",   icon: Newspaper },
   { href: "/resume-intelligence", label: "Resume",          icon: FileText },
-  { href: "/learning-journey",  label: "My Journey",        icon: Route },
 ];
 
 export function Navbar() {

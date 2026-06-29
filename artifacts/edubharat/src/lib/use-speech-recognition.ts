@@ -66,6 +66,20 @@ export function useSpeechRecognition(language = "English") {
     blockedUntilRef.current = Date.now() + ms;
   }, []);
 
+  /**
+   * pause — immediately stops any active recognition AND blocks new
+   * sessions for a long window. Call this the moment the AI STARTS
+   * speaking so the mic can never pick up the AI's own voice (the root
+   * cause of echo/self-repeat on phones and laptops with speakers).
+   * Call blockFor(short) afterwards (in the TTS onEnd) to release.
+   */
+  const pause = useCallback(() => {
+    blockedUntilRef.current = Date.now() + 10 * 60 * 1000; // effectively "until resumed"
+    try { recognitionRef.current?.stop(); } catch { /* ignore */ }
+    setStatus("idle");
+    setInterimTranscript("");
+  }, []);
+
   const start = useCallback(
     (onResult?: (text: string) => void) => {
       if (!isSupported) {
@@ -125,8 +139,9 @@ export function useSpeechRecognition(language = "English") {
         // Honour the post-speech block window
         const remaining = blockedUntilRef.current - Date.now();
         if (remaining > 0) {
-          // Try again once the block lifts (+ small safety buffer)
-          setTimeout(spawnRecognition, remaining + 80);
+          // Poll frequently (cap at 250ms) so a later, SHORTER blockFor()
+          // can release a long pause() window without waiting minutes.
+          setTimeout(spawnRecognition, Math.min(remaining + 80, 250));
           return;
         }
 
@@ -208,5 +223,7 @@ export function useSpeechRecognition(language = "English") {
     reset,
     /** Block the mic for ms milliseconds — call in TTS onEnd to prevent echo pickup */
     blockFor,
+    /** Stop the mic and block it until released — call when AI STARTS speaking */
+    pause,
   };
 }

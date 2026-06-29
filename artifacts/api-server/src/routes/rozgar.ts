@@ -282,32 +282,6 @@ function normalizeJobicy(job: Record<string, unknown>): LiveItem | null {
   };
 }
 
-function normalizeArbeitnow(job: Record<string, unknown>): LiveItem | null {
-  const title = typeof job["title"] === "string" ? job["title"] : "";
-  const link = typeof job["url"] === "string" ? job["url"] : "";
-  if (!title || !link) return null;
-
-  const company = typeof job["company_name"] === "string" ? job["company_name"] : undefined;
-  const location = typeof job["location"] === "string" ? job["location"] : undefined;
-  const summaryRaw = typeof job["description"] === "string" ? job["description"] : "";
-  const createdAt = typeof job["created_at"] === "string" ? job["created_at"] : null;
-  const remote = typeof job["remote"] === "boolean" ? job["remote"] : undefined;
-  const jobType = Array.isArray(job["job_types"]) ? job["job_types"].filter((v): v is string => typeof v === "string").join(", ") : undefined;
-
-  return {
-    title,
-    link,
-    source: "Arbeitnow API",
-    publishedAt: createdAt,
-    summary: cleanText(summaryRaw).slice(0, 220),
-    company,
-    location,
-    jobType,
-    remote,
-    kind: "vacancy",
-  };
-}
-
 async function fetchFeedItems(source: FeedSource): Promise<LiveItem[]> {
   const url = buildGoogleNewsFeed(source.query);
   const response = await fetch(url, {
@@ -330,13 +304,6 @@ async function fetchJobicyItems(): Promise<LiveItem[]> {
     "https://jobicy.com/api/v2/remote-jobs?count=20",
   );
   return (json.jobs ?? []).map(normalizeJobicy).filter((item): item is LiveItem => Boolean(item));
-}
-
-async function fetchArbeitnowItems(): Promise<LiveItem[]> {
-  const json = await fetchJson<{ data?: Array<Record<string, unknown>> }>(
-    "https://www.arbeitnow.com/api/job-board-api",
-  );
-  return (json.data ?? []).map(normalizeArbeitnow).filter((item): item is LiveItem => Boolean(item));
 }
 
 function mergeItems(items: LiveItem[]) {
@@ -428,13 +395,17 @@ router.get("/rozgar/live", async (req: Request, res: Response) => {
       "scholarships",
     ]);
 
+    // NOTE: Arbeitnow is a Germany/EU job board — its postings (e.g. "Werkstudent"
+    // roles in Magdeburg) are irrelevant to Indian candidates, so it is no longer
+    // used. India-centric live vacancies come from Google News India RSS
+    // (gl=IN, hl=en-IN) plus Jobicy filtered to India-relevant/remote roles.
     const itemGroups = await Promise.allSettled(
       section === "top_jobs"
-        ? [fetchJobicyItems(), fetchArbeitnowItems(), Promise.all(sources.map((source) => fetchFeedItems(source))).then((groups) => groups.flat())]
+        ? [Promise.all(sources.map((source) => fetchFeedItems(source))).then((groups) => groups.flat()), fetchJobicyItems()]
         : section === "private_jobs"
-          ? [fetchArbeitnowItems(), fetchJobicyItems()]
+          ? [Promise.all(sources.map((source) => fetchFeedItems(source))).then((groups) => groups.flat()), fetchJobicyItems()]
           : section === "internships"
-            ? [fetchJobicyItems()]
+            ? [Promise.all(sources.map((source) => fetchFeedItems(source))).then((groups) => groups.flat()), fetchJobicyItems()]
             : section === "govt_jobs" || section === "scholarships"
               ? [Promise.all(sources.map((source) => fetchFeedItems(source))).then((groups) => groups.flat())]
               : [Promise.all(sources.map((source) => fetchFeedItems(source))).then((groups) => groups.flat())],
@@ -445,7 +416,7 @@ router.get("/rozgar/live", async (req: Request, res: Response) => {
     const items = mergeItems(
       rawItems.filter((item) => {
         // For job/vacancy sections from external APIs, filter to India-relevant only
-        if (vacancySections.has(section) && (item.source === "Jobicy API" || item.source === "Arbeitnow API")) {
+        if (vacancySections.has(section) && item.source === "Jobicy API") {
           if (!isIndiaRelevantJob(item)) return false;
         }
 

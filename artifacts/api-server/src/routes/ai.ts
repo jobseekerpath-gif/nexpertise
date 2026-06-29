@@ -254,4 +254,82 @@ router.post("/ai/chat", async (req, res) => {
   }
 });
 
+/**
+ * Generate text with full provider fallback: try every Gemini model in the
+ * chain, and if they all fail (e.g. 429 quota exhausted on the free tier) or
+ * return empty output, fall back to the Anthropic/Claude chain.
+ *
+ * `onDelta` is called with each streamed text fragment so callers can forward
+ * SSE `content` events; the full accumulated text is returned for parsing.
+ * Throws a (user-friendly via userFriendlyError) error only if BOTH providers
+ * fail to produce any text.
+ */
+export async function generateTextWithFallback(opts: {
+  prompt: string;
+  system?: string | null;
+  maxTokens?: number;
+  onDelta?: (text: string) => void;
+  log?: { warn: (obj: unknown, msg?: string) => void };
+}): Promise<string> {
+  const { prompt, system, maxTokens = 4096, onDelta, log } = opts;
+  let full = "";
+
+  // ── Gemini chain ──
+  try {
+    const ai = getAI();
+    const contents = buildContents(prompt, system);
+    for (let i = 0; i < GEMINI_MODEL_CHAIN.length; i++) {
+      const model = GEMINI_MODEL_CHAIN[i]!;
+      try {
+        const stream = await ai.models.generateContentStream({
+          model, contents, config: { maxOutputTokens: maxTokens },
+        });
+        for await (const chunk of stream) {
+          const text = chunk.text;
+          if (text) { full += text; onDelta?.(text); }
+        }
+        if (full.trim()) return full;
+        // Empty output (e.g. all budget went to thinking) — try the next model.
+      } catch (err) {
+        log?.warn({ model, err }, "Gemini model failed in generateTextWithFallback");
+        if (isRateLimit(err)) {
+          const delay = retryDelayMs(err);
+          if (delay < 5000) await new Promise((r) => setTimeout(r, delay));
+        }
+        continue;
+      }
+    }
+  } catch (err) {
+    log?.warn({ err }, "Gemini provider unavailable — trying Claude");
+  }
+  if (full.trim()) return full;
+
+  // ── Anthropic / Claude fallback ──
+  const anthropic = getAnthropic();
+  if (!anthropic) return full;
+  const modelChain = getAnthropicModelChain(maxTokens);
+  for (let i = 0; i < modelChain.length; i++) {
+    const model = modelChain[i]!;
+    try {
+      const stream = anthropic.messages.stream({
+        model,
+        max_tokens: maxTokens,
+        messages: [{ role: "user", content: prompt }],
+        ...(system ? { system } : {}),
+      });
+      for await (const event of stream) {
+        if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+          full += event.delta.text;
+          onDelta?.(event.delta.text);
+        }
+      }
+      if (full.trim()) return full;
+    } catch (err) {
+      log?.warn({ model, err }, "Claude model failed in generateTextWithFallback");
+      continue;
+    }
+  }
+  return full;
+}
+
 export default router;

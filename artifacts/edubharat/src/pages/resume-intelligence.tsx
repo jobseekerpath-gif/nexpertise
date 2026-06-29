@@ -285,9 +285,21 @@ function ResumeIntelligenceContent() {
         setStreamText(fullText);
       }
 
-      // Try to parse final JSON from the accumulated text
-      const cleaned = fullText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-      const parsed: ResumeAnalysis = JSON.parse(cleaned);
+      // Try to parse final JSON from the accumulated text. The model occasionally
+      // wraps JSON in prose or markdown fences, so isolate the {...} object before
+      // parsing — this prevents the "Unexpected end of JSON input" failure.
+      const stripped = fullText.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+      const firstBrace = stripped.indexOf("{");
+      const lastBrace = stripped.lastIndexOf("}");
+      const candidate = firstBrace !== -1 && lastBrace > firstBrace
+        ? stripped.slice(firstBrace, lastBrace + 1)
+        : stripped;
+      let parsed: ResumeAnalysis;
+      try {
+        parsed = JSON.parse(candidate);
+      } catch {
+        throw new Error("The analysis came back incomplete. Please tap Analyse again.");
+      }
       setAnalysis(parsed);
       track("Rozgar Samachar", `Resume analysis — ${targetRoleMeta.label}`, parsed.overallScore);
 

@@ -255,6 +255,18 @@ function InterviewAceContent() {
   const { text: streamText, isStreaming, stream, reset: resetStream } = useGeminiStream();
   const synth = useEdgeTTS();
   const speech = useSpeechRecognition("English");
+  /**
+   * speakCoach — the ONLY way the interviewer should talk. It hard-pauses the
+   * mic the instant the AI begins speaking (kills echo/self-repeat on phones
+   * and laptop speakers) and releases it ~1.1s after the audio ends.
+   */
+  const speakCoach = useCallback(
+    (text: string, opts: { voiceGender?: "male" | "female"; pitch?: number; rate?: number }) => {
+      speech.pause();
+      void synth.speak(text, "English", () => speech.blockFor(1100), opts);
+    },
+    [speech, synth],
+  );
   const { profile } = useStudentProfile();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -425,7 +437,7 @@ Return just the spoken text — no labels, no formatting.`,
     setPhase("interview");
     // Camera does NOT start automatically — user must enable it via the button
     const pitchVariation = coach.gender === "male" ? 0.88 : 1.08;
-    setTimeout(() => synth.speak(opening, "English", () => speech.blockFor(1200), { voiceGender: coach.gender, pitch: pitchVariation, rate: 0.90 }), 300);
+    setTimeout(() => speakCoach(opening, { voiceGender: coach.gender, pitch: pitchVariation, rate: 0.90 }), 300);
   }, [typeMeta, experience, duration, coach, stream, resetStream, synth, buildProfileSummary, profile.name]);
 
   const toggleRecording = useCallback(() => {
@@ -459,7 +471,7 @@ Return just the spoken text — no labels, no formatting.`,
     ));
 
     if (isFinalQuestion) {
-      void synth.speak("Thank you for that. It was great speaking with you — we'll wrap up here and put together your report.", "English", () => speech.blockFor(1200), { voiceGender: coach.gender, rate: 0.90 });
+      speakCoach("Thank you for that. It was great speaking with you — we'll wrap up here and put together your report.", { voiceGender: coach.gender, rate: 0.90 });
       setTimeout(() => setPhase("report"), 1500);
       return;
     }
@@ -497,9 +509,9 @@ Next: <interview question>`,
       setAnswer("");
       setIsRecording(false);
       const pitchVariation = coach.gender === "male" ? 0.88 + Math.random() * 0.06 : 1.06 + Math.random() * 0.06;
-      void synth.speak(`${acknowledgment} ${nextQuestion}`, "English", () => speech.blockFor(1200), { voiceGender: coach.gender, pitch: pitchVariation, rate: 0.90 });
+      speakCoach(`${acknowledgment} ${nextQuestion}`, { voiceGender: coach.gender, pitch: pitchVariation, rate: 0.90 });
     } else {
-      void synth.speak("Thank you. That was a great session. Generating your full report now.", "English", () => speech.blockFor(1200), { voiceGender: coach.gender, rate: 0.90 });
+      speakCoach("Thank you. That was a great session. Generating your full report now.", { voiceGender: coach.gender, rate: 0.90 });
       setTimeout(() => setPhase("report"), 1200);
     }
   }, [currentQ, currentIdx, experience, duration, elapsedSeconds, coach, stream, resetStream, synth, typeMeta, buildProfileSummary, buildTranscript, clearAutoSubmitTimer, speech]);
@@ -517,7 +529,7 @@ Next: <interview question>`,
     setIsRecording(false);
     clearAutoSubmitTimer();
     resetStream();
-    setTimeout(() => synth.speak(questions[nextIdx]!.question, "English", () => speech.blockFor(1200), { voiceGender: coach.gender, rate: 0.90 }), 300);
+    setTimeout(() => speakCoach(questions[nextIdx]!.question, { voiceGender: coach.gender, rate: 0.90 }), 300);
   }, [currentIdx, questions, resetStream, synth, clearAutoSubmitTimer]);
 
   const endEarly = useCallback(() => {
@@ -1057,7 +1069,7 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
               <p className="text-white text-sm sm:text-base font-semibold leading-snug">{currentQ.question}</p>
               <button
                 className="mt-2 text-primary/70 hover:text-primary text-xs flex items-center gap-1 mx-auto"
-                onClick={() => synth.speak(currentQ.question, "English", () => speech.blockFor(1200), { voiceGender: coach.gender, pitch: coach.gender === "male" ? 0.88 : 1.08, rate: 0.90 })}
+                onClick={() => speakCoach(currentQ.question, { voiceGender: coach.gender, pitch: coach.gender === "male" ? 0.88 : 1.08, rate: 0.90 })}
               >
                 <Volume2 className="w-3 h-3" /> Repeat question
               </button>

@@ -5,7 +5,7 @@ import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { getAI } from "./ai.js";
+import { generateTextWithFallback } from "./ai.js";
 
 export const router: IRouter = Router();
 
@@ -283,38 +283,24 @@ Ensure the response is valid JSON and can be parsed with JSON.parse().`;
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
 
-    const ai = getAI();
-    const contents = [
-      { role: "user", parts: [{ text: "You are an expert Indian resume reviewer with 15 years of experience." }] },
-      { role: "model", parts: [{ text: "Understood." }] },
-      { role: "user", parts: [{ text: prompt }] },
-    ];
-
-    let fullText = "";
-    for (const model of ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"]) {
-      try {
-        const stream = await ai.models.generateContentStream({
-          model,
-          contents,
-          config: { maxOutputTokens: 1200 },
-        });
-        for await (const chunk of stream) {
-          const text = chunk.text;
-          if (text) {
-            fullText += text;
-            res.write(`data: ${JSON.stringify({ content: text }) }\n\n`);
-          }
-        }
-        break;
-      } catch (err) {
-        req.log.warn({ err, model }, "Resume analysis model failed");
-        continue;
-      }
-    }
+    // Generate with full provider fallback (Gemini chain → Claude). This is what
+    // fixes "Unexpected end of JSON input"/empty output: the Gemini free tier is
+    // frequently 429-quota-exhausted, so without a Claude fallback the analysis
+    // returned nothing. maxTokens is generous so JSON is never truncated.
+    const fullText = await generateTextWithFallback({
+      prompt,
+      system: "You are an expert Indian resume reviewer with 15 years of experience. Respond with valid JSON only.",
+      maxTokens: 4096,
+      onDelta: (t) => res.write(`data: ${JSON.stringify({ content: t })}\n\n`),
+      log: req.log,
+    });
 
     // Try to parse final JSON and sync to profile (authenticated users only)
     try {
-      const cleaned = fullText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+      const stripped = fullText.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+      const a = stripped.indexOf("{");
+      const b = stripped.lastIndexOf("}");
+      const cleaned = a !== -1 && b > a ? stripped.slice(a, b + 1) : stripped;
       const parsed = JSON.parse(cleaned) as {
         overallScore?: number;
         skills?: string[];
@@ -389,22 +375,13 @@ RULES:
 
 Return ONLY the improved resume text. Nothing else.`;
 
-    const ai = getAI();
-    const contents = [
-      { role: "user", parts: [{ text: prompt }] },
-    ];
-
-    let improvedText = "";
-    for (const model of ["gemini-2.5-flash", "gemini-2.0-flash-lite"]) {
-      try {
-        const result = await ai.models.generateContent({ model, contents, config: { maxOutputTokens: 2000 } });
-        improvedText = result.text ?? "";
-        if (improvedText.trim()) break;
-      } catch (err) {
-        req.log.warn({ err, model }, "Improved resume model failed, trying next");
-        continue;
-      }
-    }
+    // Gemini chain → Claude fallback so a quota-exhausted Gemini key never
+    // blocks the improved-resume generation.
+    const improvedText = (await generateTextWithFallback({
+      prompt,
+      maxTokens: 2048,
+      log: req.log,
+    })).trim();
 
     if (!improvedText.trim()) {
       res.status(500).json({ error: "Could not generate improved resume. Please try again." });

@@ -22,3 +22,4 @@
 - [Interview Ace video call UI](interview-video-call.md) — interview session phase uses fixed full-screen dark layout (z-30, top:56px offset for nav); webcam PiP via getUserMedia; red PhoneOff hang-up button to end.
 - [Edge TTS + echo fix](edge-tts-echo-fix.md) — Live chat + Interview Ace use Edge Neural TTS via /api/tts; blockFor(1200ms) prevents mic from picking up AI's own voice from speakers.
 - [Learning Journey SM-2](learning-journey.md) — /api/journey/* routes; due reviews must interleave separately from new lessons or priority breaks; /api/jobs/search and /api/news/feed also added.
+- [AI provider fallback](ai-provider-fallback.md) — every Gemini route must use generateTextWithFallback (Gemini→Claude); free-tier Gemini is often 429/404, causing empty output + "Unexpected end of JSON input".

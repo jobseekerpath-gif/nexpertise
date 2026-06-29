@@ -5,9 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { PageMeta } from "@/components/page-meta";
+import { RoadmapTimeline } from "@/components/roadmap-timeline";
+import { LEVEL_TO_STAGE, mapEnglishLevel } from "@/lib/english-roadmap";
+import { useStudentProfile } from "@/lib/use-student-profile";
+import { useGeminiStream } from "@/lib/use-gemini-stream";
 import {
   BookOpen, CheckCircle2, RotateCcw, ChevronRight,
-  Flame, Clock, Star, Brain, Mic, Headphones, Eye,
+  Flame, Clock, Star, Brain, Mic, Headphones, Eye, Map, Zap, Loader2,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -82,7 +86,18 @@ export default function LearningJourneyPage() {
   const [scores, setScores] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState<Record<string, boolean>>({});
   const [submitted, setSubmitted] = useState<Record<string, boolean>>({});
-  const [activeTab, setActiveTab] = useState<"queue" | "all">("queue");
+  const [activeTab, setActiveTab] = useState<"queue" | "all" | "roadmap">("queue");
+
+  const { profile } = useStudentProfile();
+  const { text: planText, isStreaming: planStreaming, stream: streamPlan } = useGeminiStream();
+  const level = mapEnglishLevel(profile.englishLevel);
+  const currentStage = LEVEL_TO_STAGE[level] ?? "A1";
+  const generatePlan = useCallback(() => {
+    void streamPlan(
+      `Create a detailed 30-day English learning plan for an Indian ${level} learner at CEFR ${currentStage} level, targeting job interviews and professional communication. Format as 4 weeks: for Week 1 give day-by-day tasks (Day 1–7); for Weeks 2–4 give weekly themes with 3 daily activities. For each week: specify 15–40 minutes per day, practical Indian-context exercises, milestone to reach by week end, and one free resource. Keep it specific, achievable, and India-relevant.`,
+      `You are an experienced English teacher specialising in India's job market. Give actionable, specific, time-bound daily tasks.`,
+    );
+  }, [streamPlan, level, currentStage]);
 
   const loadNext = useCallback(async () => {
     setLoading(true);
@@ -185,7 +200,7 @@ export default function LearningJourneyPage() {
 
         {/* Tabs */}
         <div className="flex gap-2">
-          {(["queue", "all"] as const).map(tab => (
+          {(["queue", "all", "roadmap"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -195,7 +210,7 @@ export default function LearningJourneyPage() {
                   : "bg-muted text-muted-foreground border-border hover:bg-muted/70"
               }`}
             >
-              {tab === "queue" ? "📋 Today's Queue" : "📚 All Lessons"}
+              {tab === "queue" ? "📋 Today's Queue" : tab === "all" ? "📚 All Lessons" : "🗺️ Roadmap"}
             </button>
           ))}
           <button
@@ -297,6 +312,32 @@ export default function LearningJourneyPage() {
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {/* ── ROADMAP ── */}
+        {activeTab === "roadmap" && (
+          <div className="space-y-5">
+            <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl text-sm text-orange-900">
+              <strong>Your current level:</strong> {level} ({currentStage}) — your personalised CEFR path to professional English fluency. Each stage shows what to learn, how long it takes, and what resources to use.
+            </div>
+            <RoadmapTimeline currentStage={currentStage} />
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="pt-5 space-y-3">
+                <p className="text-sm font-semibold text-secondary flex items-center gap-2">
+                  <Map className="w-4 h-4 text-primary" />Want a personalised week-by-week 30-day plan for your level?
+                </p>
+                <Button className="w-full font-bold" disabled={planStreaming} onClick={generatePlan}>
+                  {planStreaming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
+                  Generate My 30-Day Plan
+                </Button>
+                {planText && (
+                  <div className="rounded-xl border bg-white p-4 text-sm whitespace-pre-wrap leading-relaxed text-secondary max-h-[50vh] overflow-y-auto">
+                    {planText}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         )}
 
