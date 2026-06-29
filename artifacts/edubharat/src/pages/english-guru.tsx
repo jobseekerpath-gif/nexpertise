@@ -11,7 +11,7 @@ import { useHistory } from "@/lib/use-history";
 import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
-import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
+import { useEdgeTTS } from "@/lib/use-edge-tts";
 import { useStudentProfile } from "@/lib/use-student-profile";
 import { AnimatedAvatar } from "@/components/avatar";
 import { TUTORS, getTutorById } from "@/lib/tutors";
@@ -323,7 +323,7 @@ function EnglishGuruContent() {
   const { save } = useHistory();
   const { track } = useProgress();
   const { text: aiText, isStreaming, error: aiError, stream, reset: resetAI } = useGeminiStream();
-  const synth = useSpeechSynthesis();
+  const synth = useEdgeTTS();
   const { profile, updateProfile } = useStudentProfile();
 
   const [mode, setMode] = useState<Mode>(() => {
@@ -485,7 +485,12 @@ function EnglishGuruContent() {
         // Always use uiLang for TTS — AI was instructed to respond in uiLang,
         // so we should speak it in that language regardless of script detection.
         speak(cleanResponse, uiLang, () => {
-          if (liveChat) setConvFlowState("ai-speaking");
+          if (liveChat) {
+            // Block mic for 1200 ms after AI stops speaking so room echo
+            // cannot be picked up and fed back to the AI as user input.
+            speech.blockFor(1200);
+            setConvFlowState("ai-speaking");
+          }
         });
       }
     })();

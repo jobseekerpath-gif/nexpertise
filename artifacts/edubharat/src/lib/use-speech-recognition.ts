@@ -33,9 +33,15 @@ export function useSpeechRecognition(language = "English") {
   const [interimTranscript, setInterimTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef    = useRef<any>(null);
   const shouldContinueRef = useRef(false);
-  const onPhraseRef = useRef<((text: string) => void) | null>(null);
+  const onPhraseRef       = useRef<((text: string) => void) | null>(null);
+  /**
+   * blockedUntilRef — epoch ms before which startContinuous must NOT spawn
+   * a new recognition session. Set by blockFor() when AI is speaking to
+   * prevent the mic from picking up the AI's own voice (echo/loopback).
+   */
+  const blockedUntilRef = useRef(0);
   const langCode = LANG_MAP[language] ?? "en-IN";
 
   const isSupported =
@@ -49,6 +55,16 @@ export function useSpeechRecognition(language = "English") {
     if (!SpeechAPI) return null;
     return new SpeechAPI();
   }, [isSupported]);
+
+  /**
+   * blockFor — prevents the continuous recognition loop from spawning
+   * for at least `ms` milliseconds.  Call this in the TTS onEnd callback
+   * to add a post-speech silence window so the mic doesn't pick up
+   * room echo of the AI's voice.
+   */
+  const blockFor = useCallback((ms: number) => {
+    blockedUntilRef.current = Date.now() + ms;
+  }, []);
 
   const start = useCallback(
     (onResult?: (text: string) => void) => {
@@ -91,7 +107,8 @@ export function useSpeechRecognition(language = "English") {
     [isSupported, langCode, createRecognitionInstance]
   );
 
-  // Continuous mode: auto-restarts after each phrase until stop() is called
+  // Continuous mode: auto-restarts after each phrase until stop() is called.
+  // Respects blockedUntilRef — will delay spawning if the AI was recently speaking.
   const startContinuous = useCallback(
     (onPhrase: (text: string) => void) => {
       if (!isSupported) {
@@ -104,6 +121,15 @@ export function useSpeechRecognition(language = "English") {
 
       const spawnRecognition = () => {
         if (!shouldContinueRef.current) return;
+
+        // Honour the post-speech block window
+        const remaining = blockedUntilRef.current - Date.now();
+        if (remaining > 0) {
+          // Try again once the block lifts (+ small safety buffer)
+          setTimeout(spawnRecognition, remaining + 80);
+          return;
+        }
+
         const recognition = createRecognitionInstance();
         if (!recognition) return;
 
@@ -180,5 +206,7 @@ export function useSpeechRecognition(language = "English") {
     startContinuous,
     stop,
     reset,
+    /** Block the mic for ms milliseconds — call in TTS onEnd to prevent echo pickup */
+    blockFor,
   };
 }
