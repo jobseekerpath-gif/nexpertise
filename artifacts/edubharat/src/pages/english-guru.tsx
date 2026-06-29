@@ -318,10 +318,11 @@ function EnglishGuruContent() {
     if (preferred && preferred.id !== tutorId) setTutorId(preferred.id);
   }, [profile.preferredTutor, profile.voiceStyle, tutorId]);
 
-  const speak = useCallback((text: string, language = uiLang, onEnd?: () => void) => {
+  const speak = useCallback((text: string, language = uiLang, onEnd?: () => void, opts: { rate?: number } = {}) => {
     synth.speak(stripMarkdownForSpeech(text), language, onEnd, {
       voiceGender: tutor.voiceGender,
       voiceStyle: tutor.voiceStyle,
+      ...opts,
     });
   }, [synth, uiLang, tutor.voiceGender, tutor.voiceStyle]);
 
@@ -391,23 +392,22 @@ function EnglishGuruContent() {
         // so we should speak it in that language regardless of script detection.
         speak(cleanResponse, uiLang, () => {
           if (liveChatRef.current) {
-            // Cancel any stale recognition loop from this cycle before starting
-            // fresh — prevents double-listen when onend callbacks pile up.
-            speech.stop();
-            // Silence window so the mic doesn't pick up room echo of the AI's voice.
+            // Only override the block — the single recognition loop started in
+            // toggleLiveChat resumes automatically once blockFor expires.
+            // Do NOT call stop() or startContinuous() here; that creates a second
+            // competing loop which cancels the first and kills subsequent turns.
             speech.blockFor(1200);
             setConvFlowState("user-speaking");
-            speech.startContinuous(p => handleConvPhraseRef.current?.(p));
           } else {
             setConvFlowState("idle");
           }
-        });
+        }, { rate: 1.15 });
       } else {
-        // AI gave no response — return to listening so the chat doesn't stall.
+        // AI gave no response — release the pause block so the existing loop
+        // resumes listening. No new startContinuous needed.
         if (liveChatRef.current) {
           speech.blockFor(400);
           setConvFlowState("user-speaking");
-          speech.startContinuous(p => handleConvPhraseRef.current?.(p));
         } else {
           setConvFlowState("idle");
         }
@@ -426,9 +426,11 @@ function EnglishGuruContent() {
     } else {
       setLiveChat(true);
       setConvFlowState("user-speaking");
-      speech.startContinuous(handleConvPhrase);
+      // Use ref so the callback always calls the latest handleConvPhrase even
+      // after its deps (e.g. isStreaming) change — avoids stale closures.
+      speech.startContinuous(p => handleConvPhraseRef.current?.(p));
     }
-  }, [liveChat, speech, synth, handleConvPhrase]);
+  }, [liveChat, speech, synth]);
 
   const handleConvSend = useCallback(async () => {
     const userMsg = convInput.trim();

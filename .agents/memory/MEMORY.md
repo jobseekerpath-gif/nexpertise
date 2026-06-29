@@ -23,3 +23,4 @@
 - [Edge TTS + echo fix](edge-tts-echo-fix.md) — Live chat + Interview Ace use Edge Neural TTS via /api/tts; blockFor(1200ms) prevents mic from picking up AI's own voice from speakers.
 - [Learning Journey SM-2](learning-journey.md) — /api/journey/* routes; due reviews must interleave separately from new lessons or priority breaks; /api/jobs/search and /api/news/feed also added.
 - [AI provider fallback](ai-provider-fallback.md) — every Gemini route must use generateTextWithFallback (Gemini→Claude); free-tier Gemini is often 429/404, causing empty output + "Unexpected end of JSON input".
+- [Live-chat recognition loop](live-chat-recognition-loop.md) — ONE startContinuous in toggleLiveChat (via ref); TTS onEnd uses blockFor() only — never stop()+startContinuous there.
