@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -17,7 +17,7 @@ import { useColors } from '@/hooks/useColors';
 import { useSafeBottomPadding } from '@/hooks/useSafeBottomPadding';
 import { Header } from '@/components/Header';
 import { EmptyState } from '@/components/EmptyState';
-import { getProfile } from '@/lib/storage';
+import { getProfile, getSavedJobs, toggleSavedJob, type SavedJob } from '@/lib/storage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,7 +64,17 @@ async function searchJobs(params: {
 
 // ─── Job Card ─────────────────────────────────────────────────────────────────
 
-function JobCard({ job, colors }: { job: JobItem; colors: ReturnType<typeof useColors> }) {
+function JobCard({
+  job,
+  colors,
+  isSaved,
+  onToggleSave,
+}: {
+  job: JobItem;
+  colors: ReturnType<typeof useColors>;
+  isSaved: boolean;
+  onToggleSave: (job: JobItem) => void;
+}) {
   const handleApply = () => {
     if (job.link) Linking.openURL(job.link);
   };
@@ -80,10 +90,25 @@ function JobCard({ job, colors }: { job: JobItem; colors: ReturnType<typeof useC
         },
       ]}
     >
-      {/* Title + company */}
-      <Text style={[styles.jobTitle, { color: colors.foreground }]} numberOfLines={2}>
-        {job.title}
-      </Text>
+      {/* Title row + bookmark */}
+      <View style={styles.titleRow}>
+        <Text style={[styles.jobTitle, { color: colors.foreground, flex: 1 }]} numberOfLines={2}>
+          {job.title}
+        </Text>
+        <TouchableOpacity
+          onPress={() => onToggleSave(job)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.bookmarkBtn}
+          activeOpacity={0.7}
+        >
+          <Feather
+            name={isSaved ? 'bookmark' : 'bookmark'}
+            size={18}
+            color={isSaved ? colors.tools.rozgar : colors.mutedForeground}
+          />
+        </TouchableOpacity>
+      </View>
+
       {job.company ? (
         <Text style={[styles.company, { color: colors.info }]} numberOfLines={1}>
           {job.company}
@@ -159,6 +184,8 @@ const EXP_OPTIONS: { value: string; label: string }[] = [
   { value: 'senior', label: 'Senior' },
 ];
 
+type Tab = 'search' | 'saved';
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function JobsScreen() {
@@ -166,6 +193,7 @@ export default function JobsScreen() {
   const insets = useSafeAreaInsets();
   const bottomPadding = useSafeBottomPadding();
 
+  const [activeTab, setActiveTab] = useState<Tab>('search');
   const [query, setQuery] = useState('');
   const [city, setCity] = useState('');
   const [experience, setExperience] = useState('all');
@@ -175,10 +203,17 @@ export default function JobsScreen() {
   const [searched, setSearched] = useState(false);
   const searchQueryRef = useRef('');
 
-  // Pre-fill city + skills from profile on first focus
+  // Saved jobs state
+  const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
+  const savedLinksSet = new Set(savedJobs.map((j) => j.link));
+
+  // Load saved jobs on focus
   useFocusEffect(
     useCallback(() => {
       let mounted = true;
+      getSavedJobs().then((jobs) => {
+        if (mounted) setSavedJobs(jobs);
+      });
       getProfile().then((profile) => {
         if (!mounted) return;
         if (!city && profile.location) setCity(profile.location);
@@ -187,6 +222,11 @@ export default function JobsScreen() {
       return () => { mounted = false; };
     }, []),
   );
+
+  const handleToggleSave = useCallback(async (job: JobItem) => {
+    const { saved } = await toggleSavedJob(job);
+    setSavedJobs(await getSavedJobs());
+  }, []);
 
   const handleSearch = useCallback(async () => {
     setLoading(true);
@@ -222,131 +262,219 @@ export default function JobsScreen() {
     >
       <Header title="Rozgar Samachar" subtitle="Find your next opportunity" />
 
-      {/* Search box */}
-      <View style={styles.searchSection}>
-        <View
+      {/* Tab toggle */}
+      <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity
+          onPress={() => setActiveTab('search')}
           style={[
-            styles.inputRow,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              borderRadius: colors.radius,
-            },
+            styles.tab,
+            activeTab === 'search' && { borderBottomColor: colors.tools.rozgar, borderBottomWidth: 2 },
           ]}
+          activeOpacity={0.8}
         >
-          <Feather name="search" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Role or keyword (e.g. Data Analyst)"
-            placeholderTextColor={colors.mutedForeground}
-            returnKeyType="search"
-            onSubmitEditing={handleSearch}
-            style={[styles.textInput, { color: colors.foreground }]}
+          <Feather
+            name="search"
+            size={14}
+            color={activeTab === 'search' ? colors.tools.rozgar : colors.mutedForeground}
           />
-        </View>
-
-        <View
-          style={[
-            styles.inputRow,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              borderRadius: colors.radius,
-              marginTop: 8,
-            },
-          ]}
-        >
-          <Feather name="map-pin" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
-          <TextInput
-            value={city}
-            onChangeText={setCity}
-            placeholder="City (e.g. Bangalore)"
-            placeholderTextColor={colors.mutedForeground}
-            returnKeyType="search"
-            onSubmitEditing={handleSearch}
-            style={[styles.textInput, { color: colors.foreground }]}
-          />
-        </View>
-
-        {/* Experience filter chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chips}
-          style={styles.chipsScroll}
-        >
-          {EXP_OPTIONS.map((opt) => {
-            const active = experience === opt.value;
-            return (
-              <TouchableOpacity
-                key={opt.value}
-                onPress={() => setExperience(opt.value)}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: active ? colors.tools.rozgar : colors.muted,
-                    borderRadius: 20,
-                  },
-                ]}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    { color: active ? '#fff' : colors.mutedForeground },
-                  ]}
-                >
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+          <Text
+            style={[
+              styles.tabText,
+              { color: activeTab === 'search' ? colors.tools.rozgar : colors.mutedForeground },
+            ]}
+          >
+            Search
+          </Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={handleSearch}
+          onPress={() => setActiveTab('saved')}
           style={[
-            styles.searchBtn,
-            { backgroundColor: colors.tools.rozgar, borderRadius: colors.radius },
+            styles.tab,
+            activeTab === 'saved' && { borderBottomColor: colors.tools.rozgar, borderBottomWidth: 2 },
           ]}
-          activeOpacity={0.85}
+          activeOpacity={0.8}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              <Feather name="search" size={16} color="#fff" />
-              <Text style={styles.searchBtnText}>Search jobs</Text>
-            </>
-          )}
+          <Feather
+            name="bookmark"
+            size={14}
+            color={activeTab === 'saved' ? colors.tools.rozgar : colors.mutedForeground}
+          />
+          <Text
+            style={[
+              styles.tabText,
+              { color: activeTab === 'saved' ? colors.tools.rozgar : colors.mutedForeground },
+            ]}
+          >
+            Saved{savedJobs.length > 0 ? ` (${savedJobs.length})` : ''}
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Results */}
-      {error ? (
-        <EmptyState icon="wifi-off" title="Search failed" subtitle={error} />
-      ) : loading ? null : !searched ? (
-        <EmptyState
-          icon="briefcase"
-          title="Search for jobs"
-          subtitle="Enter a role or keyword above and tap Search to find live opportunities across India."
-        />
-      ) : jobs.length === 0 ? (
-        <EmptyState
-          icon="search"
-          title="No jobs found"
-          subtitle="Try a different keyword or city. Fresher jobs in major cities work well."
-        />
-      ) : (
-        <View style={styles.results}>
-          <Text style={[styles.resultCount, { color: colors.mutedForeground }]}>
-            {jobs.length} job{jobs.length !== 1 ? 's' : ''} found
-          </Text>
-          {jobs.map((job, idx) => (
-            <JobCard key={`${job.link}-${idx}`} job={job} colors={colors} />
-          ))}
-        </View>
+      {/* ── SEARCH TAB ── */}
+      {activeTab === 'search' && (
+        <>
+          {/* Search box */}
+          <View style={styles.searchSection}>
+            <View
+              style={[
+                styles.inputRow,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderRadius: colors.radius,
+                },
+              ]}
+            >
+              <Feather name="search" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Role or keyword (e.g. Data Analyst)"
+                placeholderTextColor={colors.mutedForeground}
+                returnKeyType="search"
+                onSubmitEditing={handleSearch}
+                style={[styles.textInput, { color: colors.foreground }]}
+              />
+            </View>
+
+            <View
+              style={[
+                styles.inputRow,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderRadius: colors.radius,
+                  marginTop: 8,
+                },
+              ]}
+            >
+              <Feather name="map-pin" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+              <TextInput
+                value={city}
+                onChangeText={setCity}
+                placeholder="City (e.g. Bangalore)"
+                placeholderTextColor={colors.mutedForeground}
+                returnKeyType="search"
+                onSubmitEditing={handleSearch}
+                style={[styles.textInput, { color: colors.foreground }]}
+              />
+            </View>
+
+            {/* Experience filter chips */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chips}
+              style={styles.chipsScroll}
+            >
+              {EXP_OPTIONS.map((opt) => {
+                const active = experience === opt.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    onPress={() => setExperience(opt.value)}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: active ? colors.tools.rozgar : colors.muted,
+                        borderRadius: 20,
+                      },
+                    ]}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.chipText,
+                        { color: active ? '#fff' : colors.mutedForeground },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              onPress={handleSearch}
+              style={[
+                styles.searchBtn,
+                { backgroundColor: colors.tools.rozgar, borderRadius: colors.radius },
+              ]}
+              activeOpacity={0.85}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Feather name="search" size={16} color="#fff" />
+                  <Text style={styles.searchBtnText}>Search jobs</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Results */}
+          {error ? (
+            <EmptyState icon="wifi-off" title="Search failed" subtitle={error} />
+          ) : loading ? null : !searched ? (
+            <EmptyState
+              icon="briefcase"
+              title="Search for jobs"
+              subtitle="Enter a role or keyword above and tap Search to find live opportunities across India."
+            />
+          ) : jobs.length === 0 ? (
+            <EmptyState
+              icon="search"
+              title="No jobs found"
+              subtitle="Try a different keyword or city. Fresher jobs in major cities work well."
+            />
+          ) : (
+            <View style={styles.results}>
+              <Text style={[styles.resultCount, { color: colors.mutedForeground }]}>
+                {jobs.length} job{jobs.length !== 1 ? 's' : ''} found
+              </Text>
+              {jobs.map((job, idx) => (
+                <JobCard
+                  key={`${job.link}-${idx}`}
+                  job={job}
+                  colors={colors}
+                  isSaved={savedLinksSet.has(job.link)}
+                  onToggleSave={handleToggleSave}
+                />
+              ))}
+            </View>
+          )}
+        </>
+      )}
+
+      {/* ── SAVED TAB ── */}
+      {activeTab === 'saved' && (
+        <>
+          {savedJobs.length === 0 ? (
+            <EmptyState
+              icon="bookmark"
+              title="No saved jobs yet"
+              subtitle="Tap the bookmark icon on any job card to save it here for later."
+            />
+          ) : (
+            <View style={styles.results}>
+              <Text style={[styles.resultCount, { color: colors.mutedForeground }]}>
+                {savedJobs.length} saved job{savedJobs.length !== 1 ? 's' : ''}
+              </Text>
+              {savedJobs.map((job, idx) => (
+                <JobCard
+                  key={`saved-${job.link}-${idx}`}
+                  job={job}
+                  colors={colors}
+                  isSaved
+                  onToggleSave={handleToggleSave}
+                />
+              ))}
+            </View>
+          )}
+        </>
       )}
     </ScrollView>
   );
@@ -358,9 +486,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  tabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginHorizontal: 20,
+    marginBottom: 4,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    marginRight: 24,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
+  },
   searchSection: {
     paddingHorizontal: 20,
-    paddingTop: 4,
+    paddingTop: 8,
     paddingBottom: 8,
   },
   inputRow: {
@@ -423,10 +571,18 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 6,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
   jobTitle: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 15,
     lineHeight: 20,
+  },
+  bookmarkBtn: {
+    paddingTop: 1,
   },
   company: {
     fontFamily: 'Inter_500Medium',

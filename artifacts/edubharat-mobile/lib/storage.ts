@@ -69,3 +69,50 @@ export async function incrementProgress(key: keyof Progress): Promise<void> {
   current[key] = (current[key] as number) + 1;
   await saveProgress(current);
 }
+
+// ─── Saved Jobs ───────────────────────────────────────────────────────────────
+
+export type SavedJob = {
+  title: string;
+  link: string;
+  source: string;
+  publishedAt: string | null;
+  summary: string;
+  company?: string;
+  location?: string;
+  jobType?: string;
+  remote?: boolean;
+  salary?: string;
+  kind?: string;
+  savedAt: string; // ISO timestamp
+};
+
+const SAVED_JOBS_KEY = 'edubharat_saved_jobs';
+
+export async function getSavedJobs(): Promise<SavedJob[]> {
+  try {
+    const raw = await AsyncStorage.getItem(SAVED_JOBS_KEY);
+    return raw ? (JSON.parse(raw) as SavedJob[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function toggleSavedJob(job: Omit<SavedJob, 'savedAt'>): Promise<{ saved: boolean; count: number }> {
+  const current = await getSavedJobs();
+  const idx = current.findIndex((j) => j.link === job.link);
+  let saved: boolean;
+  if (idx >= 0) {
+    current.splice(idx, 1);
+    saved = false;
+  } else {
+    current.unshift({ ...job, savedAt: new Date().toISOString() });
+    saved = true;
+  }
+  await AsyncStorage.setItem(SAVED_JOBS_KEY, JSON.stringify(current));
+  // Keep jobsSaved counter in sync
+  const progress = await getProgress();
+  progress.jobsSaved = current.length;
+  await saveProgress(progress);
+  return { saved, count: current.length };
+}
