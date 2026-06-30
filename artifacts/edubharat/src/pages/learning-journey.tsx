@@ -57,13 +57,26 @@ type ProgressLesson = Lesson & {
   mastery: "bronze" | "silver" | "gold" | null;
 };
 
+type Exercise = {
+  q: string;
+  options: string[];
+  answer: number; // 0-based index of the correct option
+};
+
 // ── Lesson → CEFR level mapping ───────────────────────────────────────────────
-// Lessons l1–l4 map to A1, l5/l6/l9/l10 to A2, l7/l8/l11/l12 to B1.
-// Update as the lesson bank grows.
 const LESSON_TO_LEVEL: Record<string, string> = {
-  l1: "A1", l2: "A1", l3: "A1", l4: "A1",
-  l5: "A2", l6: "A2", l9: "A2", l10: "A2",
-  l7: "B1", l8: "B1", l11: "B1", l12: "B1",
+  // A1 — Foundation
+  l1: "A1", l2: "A1", l3: "A1", l4: "A1", l13: "A1", l14: "A1",
+  // A2 — Elementary
+  l5: "A2", l6: "A2", l9: "A2", l10: "A2", l15: "A2", l16: "A2",
+  // B1 — Intermediate
+  l7: "B1", l8: "B1", l11: "B1", l12: "B1", l17: "B1", l18: "B1",
+  // B2 — Upper-Intermediate
+  l19: "B2", l20: "B2", l21: "B2", l22: "B2",
+  // C1 — Advanced
+  l23: "C1", l24: "C1", l25: "C1", l26: "C1",
+  // C2 — Mastery
+  l27: "C2", l28: "C2", l29: "C2", l30: "C2",
 };
 
 // Ordered CEFR codes
@@ -836,7 +849,15 @@ export default function LearningJourneyPage() {
 }
 
 // ── Lesson content bank ───────────────────────────────────────────────────────
-const LESSON_CONTENT: Record<string, { concept: string; examples: string[]; practice: string }> = {
+type LessonContent = {
+  concept: string;
+  examples: string[];
+  practice: string;
+  exercises: Exercise[];
+};
+
+const LESSON_CONTENT: Record<string, LessonContent> = {
+  // ── A1 Foundation ───────────────────────────────────────────────────────────
   l1: {
     concept: "Greetings set the tone. Use 'Good morning/afternoon/evening' formally and 'Hi/Hello' casually. Always add your name when meeting someone new.",
     examples: [
@@ -844,25 +865,40 @@ const LESSON_CONTENT: Record<string, { concept: string; examples: string[]; prac
       '"Hi Priya! How are you doing today?" (casual, with a colleague)',
       '"Hello, this is Anita calling from ABC Ltd." (phone call)',
     ],
-    practice: "Say it out loud: Introduce yourself — your name, where you work or study, and one friendly sentence.",
+    practice: "Introduce yourself out loud — your name, where you work or study, and one friendly sentence.",
+    exercises: [
+      { q: "Which greeting is MOST appropriate for a first meeting with a senior manager?", options: ["Hey, what's up?", "Good morning, sir. I'm Rahul, the new analyst. Pleased to meet you.", "Hi!", "Hello there."], answer: 1 },
+      { q: "You're calling a company for the first time. What do you say after 'Hello'?", options: ["I need some help.", "This is Priya calling from InfoTech. May I speak with the HR manager?", "Give me the HR person.", "Is anyone there?"], answer: 1 },
+      { q: "Your colleague introduces you to a client. What's the best response?", options: ["Nice.", "Hi.", "It's a pleasure to meet you. I've heard great things about your company.", "Cool, let's talk business."], answer: 2 },
+    ],
   },
   l2: {
     concept: "Present Simple = habits, facts, routines. Add -s/-es for He/She/It. Use do/does for questions and negatives.",
     examples: [
       '"I work in Pune. She works in Delhi." (He/She always gets +s)',
-      '"We have a meeting every Monday." (regular habit)',
+      '"We have a team meeting every Monday." (regular habit)',
       '"Does he speak English? I don\'t understand." (question + negative)',
     ],
-    practice: "Write 3 sentences: one thing you do every day, one thing a friend does, one yes/no question.",
+    practice: "Write 3 sentences: one thing you do every day, one thing a friend does, and one yes/no question.",
+    exercises: [
+      { q: "Which sentence is correct?", options: ["She work in Bengaluru.", "She works in Bengaluru.", "She is work in Bengaluru.", "She working in Bengaluru."], answer: 1 },
+      { q: "How do you make a negative sentence with 'He'?", options: ["He not like this job.", "He don't like this job.", "He doesn't like this job.", "He isn't like this job."], answer: 2 },
+      { q: "Which sentence uses Present Simple correctly for a habit?", options: ["I am going to office every Monday.", "I go to the office every Monday.", "I went to office every Monday.", "I have gone to office every Monday."], answer: 1 },
+    ],
   },
   l3: {
     concept: "In shops: greet the shopkeeper, state what you need clearly, ask the price politely, thank them before leaving.",
     examples: [
       '"Excuse me, do you have this in size 32?" (asking for a product)',
-      '"How much is this? Is there any discount?" (checking price)',
-      '"Please give me two bottles of water and a packet of biscuits." (placing order)',
+      '"How much does this cost, please? Is there any discount?" (checking price)',
+      '"Please give me two bottles of water and a packet of biscuits." (placing an order)',
     ],
     practice: "Role-play out loud: You're at a mobile shop asking about a new phone. What do you say?",
+    exercises: [
+      { q: "You want to know the price. Which phrase is most polite?", options: ["Price?", "Money?", "How much does this cost, please?", "Tell me the price."], answer: 2 },
+      { q: "The item you want is out of stock. What do you say?", options: ["Okay, forget it.", "Do you have any similar items in stock?", "This shop is bad.", "Give me something else."], answer: 1 },
+      { q: "You want to buy 2 items. Which sentence is correct?", options: ["Give me two of this.", "I will take two of these, please.", "Two, please.", "I want this two times."], answer: 1 },
+    ],
   },
   l4: {
     concept: "Describe your day using time sequence words: first, then, after that, next, finally. They show the order of events clearly.",
@@ -871,8 +907,42 @@ const LESSON_CONTENT: Record<string, { concept: string; examples: string[]; prac
       '"After breakfast, I take the metro to the office."',
       '"Finally, I go to bed around 10:30 after watching the news."',
     ],
-    practice: "Speak or write 4–5 sentences about your morning — from when you wake up to when you leave home.",
+    practice: "Speak or write 4–5 sentences about your morning — from waking up to leaving home.",
+    exercises: [
+      { q: "Which word BEST shows the ORDER of events?", options: ["Because", "Although", "After that", "However"], answer: 2 },
+      { q: "'_____ I wake up, I drink a glass of water.' Which fits best?", options: ["While", "Because", "Although", "First,"], answer: 3 },
+      { q: "Which describes a morning routine MOST clearly?", options: ["I wake. I eat. I go.", "Waking up and eating and going.", "First, I wake up at 6. Then I have breakfast. After that, I leave for work.", "I usually be waking up early."], answer: 2 },
+    ],
   },
+  l13: {
+    concept: "Prepositions of place show WHERE things are. Key ones: IN (enclosed space), ON (surface), AT (specific point), UNDER (below), NEXT TO (beside).",
+    examples: [
+      '"The documents are IN the drawer." (enclosed)',
+      '"The report is ON your desk, ON the third floor." (surface + floor)',
+      '"Meet me AT the reception AT 9 AM." (specific point)',
+    ],
+    practice: "Look around you right now. Say 5 sentences describing where things are using in, on, at, under, next to.",
+    exercises: [
+      { q: "The HR office is _____ the second floor.", options: ["in", "on", "at", "under"], answer: 1 },
+      { q: "'I'll meet you _____ the reception at 9 AM.' Which preposition fits?", options: ["in", "on", "at", "by"], answer: 2 },
+      { q: "The printer is _____ the corner of the room.", options: ["at", "on", "in", "under"], answer: 0 },
+    ],
+  },
+  l14: {
+    concept: "The 20 most-used English verbs form the backbone of daily conversation: go, come, take, give, want, need, make, get, know, think, see, say, tell, ask, work, use, find, feel, keep, let.",
+    examples: [
+      '"Can you GIVE me the updated file? I NEED it for the meeting."',
+      '"I KNOW she WENT to the client site. She SAID she\'d be back by 3."',
+      '"Please TAKE a look at this. FIND the error and LET me know."',
+    ],
+    practice: "Write 3 sentences about your work using at least 5 different action verbs from the list above.",
+    exercises: [
+      { q: "'Can you _____ this document to the client by tonight?' Which verb fits?", options: ["go", "come", "send", "need"], answer: 2 },
+      { q: "'I _____ more time to complete this project.' Which verb fits?", options: ["go", "take", "give", "need"], answer: 3 },
+      { q: "'Please _____ a look at this report before the meeting.' Which verb fits?", options: ["go", "take", "give", "come"], answer: 1 },
+    ],
+  },
+  // ── A2 Elementary ────────────────────────────────────────────────────────────
   l5: {
     concept: "Core office words every professional needs: meeting, deadline, agenda, feedback, update, presentation, report, approve, pending, follow-up.",
     examples: [
@@ -881,42 +951,39 @@ const LESSON_CONTENT: Record<string, { concept: string; examples: string[]; prac
       '"Can you approve this by Friday? The deadline is Monday."',
     ],
     practice: "Use 5 of these words — meeting, deadline, update, approve, follow-up — in sentences from your own work life.",
+    exercises: [
+      { q: "Your boss says 'Please send me an update by EOD.' What does EOD mean?", options: ["End of Department", "End of Day", "Every Other Day", "Email on Demand"], answer: 1 },
+      { q: "'The project is still _____. I'm waiting for your approval.' Which word fits?", options: ["complete", "finished", "pending", "done"], answer: 2 },
+      { q: "'We need to _____ up on the client call from last Tuesday.' Which word fits?", options: ["look", "catch", "check", "follow"], answer: 3 },
+    ],
   },
   l6: {
-    concept: "Past Simple = finished actions. Regular verbs add -ed (worked, studied). Common irregulars: go→went, see→saw, take→took, have→had.",
+    concept: "Past Simple = finished actions. Regular verbs add -ed (worked, studied). Common irregulars: go→went, see→saw, take→took, have→had, say→said.",
     examples: [
       '"I worked late yesterday. She finished the project on time." (regular)',
       '"We went to Hyderabad last month. I saw him at the station." (irregular)',
       '"Did you eat lunch? I didn\'t have time — I had a meeting." (question + negative)',
     ],
     practice: "Tell 4 things you did yesterday — use at least 2 irregular verbs.",
-  },
-  l7: {
-    concept: "Common HR interview questions: 'Tell me about yourself', 'Why do you want this job?', 'What are your strengths?'. Have a clear 60-second answer for each.",
-    examples: [
-      '"Tell me about yourself." → Name + education + key skill + career goal in 4-5 sentences.',
-      '"Why this company?" → What you know about them + how your skills fit their work.',
-      '"Describe a challenge you faced." → Situation, what YOU did, result — keep it positive.',
+    exercises: [
+      { q: "Which sentence uses Past Simple CORRECTLY?", options: ["I go to Hyderabad last week.", "I went to Hyderabad last week.", "I am went to Hyderabad last week.", "I have go to Hyderabad last week."], answer: 1 },
+      { q: "Which is the correct past form of 'see'?", options: ["seed", "seened", "saw", "seen"], answer: 2 },
+      { q: "How do you make a Past Simple question?", options: ["Went you to the meeting?", "Did you went to the meeting?", "Did you go to the meeting?", "You did go to the meeting?"], answer: 2 },
     ],
-    practice: "Answer this out loud right now: 'Tell me about yourself.' — aim for 60 seconds, no more.",
-  },
-  l8: {
-    concept: "STAR answers impress interviewers. S = Situation, T = Task (your role), A = Action (what YOU did), R = Result (what happened). Always end with a positive outcome.",
-    examples: [
-      '"In my last job (S), I was asked to lead a data cleanup project (T)..."',
-      '"I organised the files and trained 3 team members on the new system (A)..."',
-      '"...which reduced errors by 30% and saved 2 hours per week (R)."',
-    ],
-    practice: "Pick one challenge from your own life. Tell it in STAR format — out loud, 45–60 seconds.",
   },
   l9: {
-    concept: "Dates: say Day + Month + Year in full. Times: use AM/PM or 24-hour clock. Large numbers: say 'thousand', 'lakh', 'crore' (not 'thousands').",
+    concept: "Dates: say Day + Month + Year in full. Times: use AM/PM or 24-hour clock. Large numbers: say 'lakh' and 'crore' — the Indian number system works perfectly in English.",
     examples: [
       '"The meeting is on the fifteenth of June, 2024." (say dates fully)',
       '"It starts at half past three — 3:30 PM." (time expressions)',
       '"My CTC is twelve lakh per annum." (Indian number system in English)',
     ],
     practice: "Say out loud: today's date, your date of birth, and the current time — all in complete English sentences.",
+    exercises: [
+      { q: "How do you say the date '15/06/2024' in formal English?", options: ["Fifteen-six-twenty-twenty-four", "The fifteenth of June, twenty twenty-four", "June fifteen, two thousand twenty-four", "15th June, 2024 (written only, not spoken)"], answer: 1 },
+      { q: "Your salary is ₹8,50,000 per year. How do you say this in English?", options: ["Eight thousand five hundred thousand", "Eight lakh fifty thousand rupees per annum", "Eight point five lakh", "850 thousand rupees"], answer: 1 },
+      { q: "The meeting is at 'half past three.' What time is this?", options: ["3:15 PM", "3:45 PM", "3:30 PM", "2:30 PM"], answer: 2 },
+    ],
   },
   l10: {
     concept: "Question words: What (thing), Who (person), Where (place), When (time), Why (reason), How (manner/degree). Use do/does/did for simple tense questions.",
@@ -926,26 +993,409 @@ const LESSON_CONTENT: Record<string, { concept: string; examples: string[]; prac
       '"Why are you looking for a change? How did you hear about this role?"',
     ],
     practice: "Write 5 questions you might ask a hiring manager at the end of a job interview.",
+    exercises: [
+      { q: "'_____ did you leave your last job?' — asking for a REASON.", options: ["What", "Where", "When", "Why"], answer: 3 },
+      { q: "'_____ is responsible for the accounts department?' — asking for a PERSON.", options: ["What", "Who", "Which", "Where"], answer: 1 },
+      { q: "'_____ did you hear about this position?' — asking about METHOD.", options: ["When", "Why", "How", "What"], answer: 2 },
+    ],
+  },
+  l15: {
+    concept: "Present Continuous = actions happening RIGHT NOW or around this period. Form: am/is/are + verb-ing. Do NOT use it for permanent facts or habits.",
+    examples: [
+      '"I am working on the Q3 report right now." (happening now)',
+      '"She is preparing a presentation for Monday\'s meeting." (ongoing this week)',
+      '"We are hiring for three new positions this quarter." (current period)',
+    ],
+    practice: "Look at what you and your colleagues are doing right now. Say 4 sentences using Present Continuous.",
+    exercises: [
+      { q: "Which sentence uses Present Continuous CORRECTLY?", options: ["I working on the report now.", "I am working on the report right now.", "I am work on the report now.", "I works on the report now."], answer: 1 },
+      { q: "When do we use Present Continuous instead of Present Simple?", options: ["For permanent facts", "For things happening RIGHT NOW or around this period", "For past events", "For future plans only"], answer: 1 },
+      { q: "'She _____ a presentation for Monday.' Which fits for something in progress this week?", options: ["prepares", "prepared", "is preparing", "has prepare"], answer: 2 },
+    ],
+  },
+  l16: {
+    concept: "Comparatives compare two things (better, larger, more expensive). Superlatives compare one against all others (the best, the largest, the most expensive). Irregular: good→better→the best, bad→worse→the worst.",
+    examples: [
+      '"This offer is BETTER than the last one." (comparative)',
+      '"This is THE BEST opportunity I\'ve had." (superlative)',
+      '"Bangalore is LARGER THAN Pune in terms of tech companies." (comparative)',
+    ],
+    practice: "Compare two job offers you've received (or imagine two). Use 4 comparatives and 2 superlatives.",
+    exercises: [
+      { q: "Which comparative form is CORRECT?", options: ["This job is more better.", "This job is gooder.", "This job is better.", "This job is more good."], answer: 2 },
+      { q: "'This is _____ offer I have received.' Which superlative form is correct?", options: ["the more good", "the best", "the goodest", "the most best"], answer: 1 },
+      { q: "'Bangalore is _____ Pune in terms of tech jobs.' Fill in correctly.", options: ["more large than", "larger as", "larger than", "more larger than"], answer: 2 },
+    ],
+  },
+  // ── B1 Intermediate ──────────────────────────────────────────────────────────
+  l7: {
+    concept: "Common HR interview question types: Behavioural ('Tell me about a time…'), Situational ('What would you do if…'), and Competency ('What are your strengths?'). Prepare a 60-second answer for each.",
+    examples: [
+      '"Tell me about yourself." → Name + education + key skill + career goal in 4–5 sentences.',
+      '"Why this company?" → Research + how your skills match their work.',
+      '"Describe a challenge you faced." → Situation → what YOU did → positive result.',
+    ],
+    practice: "Answer out loud right now: 'Tell me about yourself.' — aim for 60 seconds, no more.",
+    exercises: [
+      { q: "'Tell me about a time you solved a problem.' This is an example of what type of question?", options: ["Technical question", "Trick question", "Behavioural question", "Situational question"], answer: 2 },
+      { q: "In an interview, HR asks 'What is your notice period?' What do they want to know?", options: ["When your contract expires", "How long until you can join if hired", "Why you are leaving your current job", "How many years you have worked"], answer: 1 },
+      { q: "The interviewer says 'We'll get back to you.' What does this mean?", options: ["They rejected you.", "They want you to call back.", "They will contact you later with their decision.", "The interview is over immediately."], answer: 2 },
+    ],
+  },
+  l8: {
+    concept: "STAR answers impress interviewers. S = Situation, T = Task (your role), A = Action (what YOU did), R = Result (outcome). Always end with a measurable positive result.",
+    examples: [
+      '"In my last job (S), I was asked to lead a data cleanup project (T)..."',
+      '"I organised the files and trained 3 team members on the new system (A)..."',
+      '"...which reduced errors by 30% and saved 2 hours per week (R)."',
+    ],
+    practice: "Pick one challenge from your own life. Tell it in STAR format — out loud, 45–60 seconds.",
+    exercises: [
+      { q: "The STAR method stands for:", options: ["Skills, Training, Achievements, Results", "Situation, Task, Action, Result", "Strength, Talent, Ability, Responsibility", "Story, Theme, Argument, Resolution"], answer: 1 },
+      { q: "You're asked 'What is your greatest weakness?' The BEST response is:", options: ["I have no weaknesses.", "I am too hardworking.", "I sometimes struggle with public speaking, so I've been practising by volunteering to present in team meetings.", "I can't think of any right now."], answer: 2 },
+      { q: "'Tell me about yourself' should be approximately:", options: ["10–15 minutes long, very detailed", "5–10 seconds — just your name", "60–90 seconds covering education, experience, and career goal", "As long as possible to impress them"], answer: 2 },
+    ],
   },
   l11: {
-    concept: "Reading job ads: look for Role (what the job is), Requirements (skills + experience needed), Responsibilities (daily tasks), and How to apply.",
+    concept: "Reading job ads: look for Role (what the job is), Requirements (skills + experience), Responsibilities (daily tasks), Benefits, and How to apply.",
     examples: [
       '"Required: 2+ years experience, B.Com/MBA, proficiency in MS Excel." (requirements)',
       '"Responsibilities: manage accounts payable, prepare monthly MIS reports." (duties)',
-      '"Send CV to hr@company.com with subject line \'Application – Accounts Executive\'." (apply)',
+      '"Send CV to hr@company.com with subject \'Application – Accounts Executive\'." (apply)',
     ],
     practice: "Find one real job ad on Naukri or LinkedIn. Write: the role, 3 requirements, 2 responsibilities.",
+    exercises: [
+      { q: "A job ad says 'CTC: ₹5–7 LPA.' What does LPA mean?", options: ["Lakhs Per Annum", "Location Per Assignment", "Leave Per Allowance", "Learning Per Activity"], answer: 0 },
+      { q: "The ad says 'Required: Proficiency in MS Excel.' This is listed under:", options: ["Responsibilities", "Benefits", "Requirements / Qualifications", "Company description"], answer: 2 },
+      { q: "To apply, you should 'Send your CV with subject \'Application – Sales Executive\'.' What does this mean?", options: ["Email your CV with a specific email subject line", "Walk in with your CV", "Upload your CV to the company website", "Call the HR number with your details"], answer: 0 },
+    ],
   },
   l12: {
-    concept: "A professional call has 5 parts: greet + state your name, give your reason for calling, share key details, confirm the next step, close politely.",
+    concept: "A professional call has 5 parts: greet + state your name → give your reason for calling → share key details → confirm the next step → close politely.",
     examples: [
       '"Hello, this is Amit Sharma calling from TechSolutions. May I speak with the HR manager?"',
       '"I\'m calling to follow up on the interview I attended last Wednesday."',
       '"Could you let me know the next steps? Thank you so much for your time."',
     ],
-    practice: "Call a friend and role-play: you're following up on a job application you submitted 5 days ago.",
+    practice: "Role-play with a friend: you're following up on a job application you submitted 5 days ago.",
+    exercises: [
+      { q: "You call a company and the receptionist answers. What do you say first?", options: ["Is HR there?", "Connect me to someone.", "Hello, this is [Name] from [Company]. May I please speak with [Person]?", "Hello? Hello?"], answer: 2 },
+      { q: "The person you need is away. What's the BEST thing to do?", options: ["Just hang up.", "Leave an angry message.", "Could you please take a message, or let me know when would be a good time to call back?", "Call the same number 5 times."], answer: 2 },
+      { q: "To end a professional call politely, you should:", options: ["Just stop talking.", "Say 'bye bye bye' repeatedly.", "Thank the person for their time, confirm next steps if any, then say goodbye.", "Hang up when you are done."], answer: 2 },
+    ],
+  },
+  l17: {
+    concept: "In professional settings, opinions must be framed carefully. Use hedges ('I think', 'In my view', 'I wonder if') to sound thoughtful, not aggressive. Disagreement works best with acknowledge→counter structure.",
+    examples: [
+      '"In my view, we might want to reconsider the timeline." (soft opinion)',
+      '"I see your point; however, I wonder if we could also consider the budget impact." (polite counter)',
+      '"That\'s a valid perspective — I\'d add that the client feedback also suggests..." (build on others)',
+    ],
+    practice: "Think of a decision at work or college you disagree with. Frame your opinion using 3 different hedging phrases.",
+    exercises: [
+      { q: "Which phrase is the MOST professional way to share an opinion in a meeting?", options: ["I think we should change the plan.", "In my view, we might want to reconsider the timeline.", "Obviously, you're all wrong.", "I feel like this is bad."], answer: 1 },
+      { q: "How do you politely DISAGREE with a colleague's idea?", options: ["That's a terrible idea.", "No, that's wrong.", "I see your point; however, I wonder if we could also consider...", "I don't agree with you at all."], answer: 2 },
+      { q: "'I take your point, but...' is used to:", options: ["Fully agree with someone", "End the conversation", "Acknowledge a point while introducing a counterargument", "Ask for clarification"], answer: 2 },
+    ],
+  },
+  l18: {
+    concept: "A professional email has 5 parts: Subject (specific and clear) → Greeting (Dear Mr./Ms. Surname) → Body (reason → details → action needed) → Closing (Regards/Yours sincerely) → Signature.",
+    examples: [
+      '"Subject: Application for Sales Executive – Neha Sharma" (clear + your name)',
+      '"Dear Ms. Kapoor, I am writing to follow up on my application submitted on 10 June." (formal opening)',
+      '"Please find my updated CV attached. I look forward to hearing from you." (call to action + close)',
+    ],
+    practice: "Write a short follow-up email (5–6 sentences) after a job interview you attended yesterday.",
+    exercises: [
+      { q: "Which is the BEST subject line for a job application email?", options: ["Job", "Hi", "Application for Sales Executive – [Your Name]", "Please read this email"], answer: 2 },
+      { q: "Which opening is MOST appropriate for a professional email?", options: ["Hey John!!!", "Yo,", "Dear Mr. Sharma,", "To who it concerns,"], answer: 2 },
+      { q: "Which closing is MOST professional?", options: ["Bye!", "Cya later", "Regards, [Your Name]", "Love,"], answer: 2 },
+    ],
+  },
+  // ── B2 Upper-Intermediate ────────────────────────────────────────────────────
+  l19: {
+    concept: "Three conditional types: Zero (always true: if + present, present), First (likely future: if + present, will), Second (hypothetical: if + past, would), Third (past regret: if + had + past participle, would have).",
+    examples: [
+      '"If you heat water to 100°C, it boils." (Zero — always true)',
+      '"If I get this role, I will relocate to Mumbai." (First — real future possibility)',
+      '"If I had applied earlier, I would have been shortlisted." (Third — past regret)',
+    ],
+    practice: "Write one sentence for each conditional type using your own career situation.",
+    exercises: [
+      { q: "Which First Conditional sentence is CORRECT?", options: ["If I will get the job, I will move to Mumbai.", "If I get the job, I will move to Mumbai.", "If I got the job, I will move to Mumbai.", "If I get the job, I would move to Mumbai."], answer: 1 },
+      { q: "'If I _____ harder, I would have passed the exam.' (Third Conditional) Which fits?", options: ["studied", "had studied", "study", "have studied"], answer: 1 },
+      { q: "Which sentence expresses a GENERAL truth (Zero Conditional)?", options: ["If I study, I will pass.", "If I would study, I pass.", "If you heat water to 100°C, it boils.", "If I had studied, I would pass."], answer: 2 },
+    ],
+  },
+  l20: {
+    concept: "Register = the level of formality. Formal English uses longer, Latinate words (commence, assist, endeavour). Informal uses short, Anglo-Saxon words (start, help, try). Emails, reports, and interviews need formal register.",
+    examples: [
+      '"I would like to REQUEST a meeting." (formal) vs "Can we MEET?" (informal)',
+      '"Please ASSIST me with this matter." vs "Please HELP me with this."',
+      '"We will COMMENCE the project next Monday." vs "We\'ll START next Monday."',
+    ],
+    practice: "Rewrite these informal sentences formally: 'Hi, can you help me? I wanna ask about the job. Thanks!'",
+    exercises: [
+      { q: "The FORMAL equivalent of 'start' is:", options: ["begin", "commence", "kick off", "get going"], answer: 1 },
+      { q: "Which version is MOST appropriate for a cover letter?", options: ["I'm writing to ask about the job you posted.", "I am writing to apply for the position of Sales Manager advertised on LinkedIn.", "Hey! I saw your job listing and I want it.", "Please give me a job interview."], answer: 1 },
+      { q: "In a professional email, 'ASAP' should be replaced with:", options: ["Quick", "Now", "As soon as possible", "RSVP"], answer: 2 },
+    ],
+  },
+  l21: {
+    concept: "In business meetings: listen for the AGENDA (what topics will be covered), ACTION POINTS (who does what by when), and DECISIONS. Polite disagreement uses softeners: 'I'm not sure I agree,' 'Could we look at this differently?'",
+    examples: [
+      '"Let\'s table that for now and move to the next item." (postpone a topic)',
+      '"To summarise the key takeaways from today\'s meeting..." (signalling a conclusion)',
+      '"Any other business before we close?" (inviting final topics)',
+    ],
+    practice: "Listen to any business podcast in English for 5 minutes. Write 3 action points you heard (or inferred).",
+    exercises: [
+      { q: "In a meeting, someone says 'Let's table that for now.' What do they mean?", options: ["Put it on the table to look at", "Postpone discussing it until later", "Delete the item from the agenda", "Stand at the table"], answer: 1 },
+      { q: "A presenter says 'To summarise the key takeaways...' This phrase signals:", options: ["A new topic is starting", "A question is being asked", "The presenter is concluding and highlighting main points", "The presentation is being cancelled"], answer: 2 },
+      { q: "In a meeting, 'Any other business?' means:", options: ["Does anyone want to do business with us?", "Is there any additional topic someone wants to raise?", "Can we discuss the budget?", "Should we leave now?"], answer: 1 },
+    ],
+  },
+  l22: {
+    concept: "Salary negotiation: research market rates first, give a range (not a single number), anchor high within reason, justify with experience, and stay collaborative — you're building a working relationship.",
+    examples: [
+      '"Based on my experience and market research, I\'m looking for a range of ₹10–12 LPA." (range + justification)',
+      '"I appreciate the offer. Could we discuss bringing this closer to ₹11 LPA given my 4 years in this domain?" (counter)',
+      '"I\'m very excited about the role — this is my priority consideration right now." (signal genuine interest)',
+    ],
+    practice: "Role-play: the company offers ₹8 LPA. You expected ₹10. Negotiate out loud for 2 minutes.",
+    exercises: [
+      { q: "How should you BEST respond when asked 'What salary are you expecting?'", options: ["As much as possible.", "Based on my experience and industry research, I'm looking for a range of ₹X–Y.", "Whatever you give me.", "I can't say."], answer: 1 },
+      { q: "The company offers ₹8 LPA but you expected ₹10 LPA. What do you say?", options: ["That's too low, I won't take it.", "I appreciate the offer. Given my experience in this domain, could we discuss bringing this closer to ₹10 LPA?", "Okay, I accept.", "Give me more money."], answer: 1 },
+      { q: "'The role aligns perfectly with my goals' is an example of:", options: ["Making a demand", "Complaining about the offer", "Building your case by showing genuine interest before negotiating", "Rejecting the offer"], answer: 2 },
+    ],
+  },
+  // ── C1 Advanced ─────────────────────────────────────────────────────────────
+  l23: {
+    concept: "Passive voice focuses on the ACTION or RESULT, not who did it — essential for formal writing. Reported speech shifts tenses back one step: 'I will call' → 'She said she would call.'",
+    examples: [
+      '"The annual report was submitted on time." (passive — what matters is the submission)',
+      '"She told me that the project had been completed ahead of schedule." (reported speech)',
+      '"Mistakes were made; corrective action has been taken." (passive in corporate communication)',
+    ],
+    practice: "Rewrite these active sentences in passive: 'The team finished the report. The manager approved the budget.'",
+    exercises: [
+      { q: "Which sentence is in the PASSIVE voice?", options: ["The team submitted the report on time.", "The report was submitted by the team on time.", "The team has submitted the report.", "Submit the report on time."], answer: 1 },
+      { q: "'She said that she _____ the project.' (Reported Speech) Which fits?", options: ["is completing", "has completed", "was completing", "will complete"], answer: 2 },
+      { q: "Why is passive voice used in formal writing?", options: ["To sound casual and friendly", "To focus on the action or result rather than who did it", "To make sentences shorter", "To avoid using verbs"], answer: 1 },
+    ],
+  },
+  l24: {
+    concept: "Idioms make you sound fluent, but overusing them sounds forced. Know when to use them (casual team chats) and when to avoid them (international clients, formal documents). Always understand before using.",
+    examples: [
+      '"Let\'s hit the ground running on Monday." (start work immediately and energetically)',
+      '"Think outside the box here — we need a fresh approach." (creative solutions)',
+      '"I\'ll touch base with the client after the demo." (check in / follow up)',
+    ],
+    practice: "Use 3 idioms from this lesson naturally in a spoken summary of your current project or studies.",
+    exercises: [
+      { q: "Your manager says 'Let's hit the ground running on Monday.' What does this mean?", options: ["Run a race on Monday", "Start working immediately and energetically", "Go for a walk to brainstorm", "Have an early morning meeting outside"], answer: 1 },
+      { q: "'Think outside the box' means:", options: ["Work in a different office", "Organise your desk", "Consider creative or unconventional solutions", "Stop overthinking"], answer: 2 },
+      { q: "When is it BEST to avoid idioms?", options: ["In casual conversations with colleagues", "When speaking with international clients who may not share the same cultural context", "In team meetings", "Never — idioms always improve communication"], answer: 1 },
+    ],
+  },
+  l25: {
+    concept: "Critical reading: SKIM for the main idea → SCAN for specific data → READ actively by questioning the author's claims, evidence quality, and possible bias. Always ask: Who wrote this, and why?",
+    examples: [
+      '"The article claims revenue rose 40% YoY — but it doesn\'t specify the base year." (questioning evidence)',
+      '"The author works for the firm being praised — possible conflict of interest." (checking bias)',
+      '"The headline says X, but the body data shows Y — check for spin." (spotting inconsistency)',
+    ],
+    practice: "Read one article from Economic Times or BBC Business. Write 3 sentences: main claim, one piece of evidence, one question you'd ask the author.",
+    exercises: [
+      { q: "When SKIMMING an article, you:", options: ["Read every word carefully for detail", "Read only the last paragraph", "Quickly read headings, subheadings, and first sentences to get the overall idea", "Look only at images"], answer: 2 },
+      { q: "A business article says 'The firm's revenue surged 40% YoY.' What does YoY mean?", options: ["Year of Year", "Your or Yours", "Year on Year", "Yield or Yardstick"], answer: 2 },
+      { q: "Critical reading means:", options: ["Reading very quickly", "Reading only the title", "Questioning the author's claims, sources, and whether the argument is well-supported", "Memorising every sentence"], answer: 2 },
+    ],
+  },
+  l26: {
+    concept: "A 3-minute presentation: Opening hook (question/fact/story) → State your 2–3 key points → Develop each briefly → Close with a clear action or takeaway. Signposting language guides your audience through the structure.",
+    examples: [
+      '"Firstly, let\'s look at the problem. Secondly, I\'ll present the data. Finally, I\'ll propose a solution." (signposting)',
+      '"By the end of this, you\'ll understand why we need to act now." (strong opening)',
+      '"To summarise: the cost is high, the ROI is clear, and the timeline is achievable. I recommend we proceed." (powerful close)',
+    ],
+    practice: "Prepare and deliver a 3-minute presentation on any topic you know well. Record yourself and play it back.",
+    exercises: [
+      { q: "A good 3-minute presentation should:", options: ["Cover as many topics as possible", "Have no structure — just speak freely", "Have a clear opening, 2–3 key points, and a strong closing statement", "Last exactly 3 minutes with no variation"], answer: 2 },
+      { q: "'Signposting language' in a presentation means:", options: ["Using visual signs", "Repeating yourself", "Phrases that guide the audience through the presentation (e.g. 'Firstly', 'Moving on', 'To conclude')", "Using technical jargon"], answer: 2 },
+      { q: "The BEST way to open a presentation is:", options: ["Start by apologising for being nervous", "Read your slides word for word", "Open with a relevant question, fact, or brief story to engage the audience", "Explain your entire life history first"], answer: 2 },
+    ],
+  },
+  // ── C2 Mastery ───────────────────────────────────────────────────────────────
+  l27: {
+    concept: "Precision vocabulary separates C2 speakers. Key pairs: affect (verb) vs effect (noun), imply (speaker suggests) vs infer (listener concludes), comprise (contain as parts) vs consist of (be made up of).",
+    examples: [
+      '"The policy change will AFFECT our timeline." vs "The EFFECT on revenue was significant."',
+      '"The data IMPLIES that demand is rising." vs "What do you INFER from this chart?"',
+      '"The committee COMPRISES five members." (not \'comprises of\'!)',
+    ],
+    practice: "Write 6 sentences — one for each word in the three pairs above — using real examples from your field.",
+    exercises: [
+      { q: "'The results _____ that the campaign was successful.' Which word shows NUANCE correctly?", options: ["say", "suggest", "prove definitely", "tell"], answer: 1 },
+      { q: "What is the difference between 'affect' and 'effect'?", options: ["No difference — they're the same", "'Affect' is usually the verb (to influence); 'effect' is usually the noun (the result)", "'Effect' is the verb; 'affect' is the noun", "Both are only used in science"], answer: 1 },
+      { q: "'The policy comprises three key components.' The word 'comprises' means:", options: ["excludes", "consists of / includes", "replaces", "requires"], answer: 1 },
+    ],
+  },
+  l28: {
+    concept: "Advanced grammar for impact: Inversion (Had I known…), Cleft sentences (It is X that…), and Subjunctive (I suggest that he be…). These structures signal mastery and add emphasis or formality.",
+    examples: [
+      '"Had I known about the merger, I would have prepared differently." (Inversion — formal emphasis)',
+      '"It is the product quality that sets us apart." (Cleft sentence — focus on key element)',
+      '"The board recommends that she BE appointed immediately." (Subjunctive — formal recommendation)',
+    ],
+    practice: "Rewrite 3 simple sentences using inversion, a cleft sentence, and the subjunctive — make them sound boardroom-ready.",
+    exercises: [
+      { q: "'Had I known about the meeting, I would have attended.' This sentence uses:", options: ["Simple Past", "Present Perfect", "Inversion for formal/literary emphasis", "Past Continuous"], answer: 2 },
+      { q: "'It is the marketing team that drives our growth.' This is an example of:", options: ["A passive sentence", "A relative clause", "A cleft sentence used for emphasis", "A conditional sentence"], answer: 2 },
+      { q: "The subjunctive mood is used in which sentence?", options: ["He goes to work every day.", "She went to the conference.", "I suggest that he be promoted.", "They are attending the webinar."], answer: 2 },
+    ],
+  },
+  l29: {
+    concept: "Rapid speech features: connected speech (gonna, wanna, gonna, kinda, shoulda), elision (dropping sounds), and assimilation (sounds blending). The key is to focus on stressed words — those carry the meaning.",
+    examples: [
+      '"Going to" → "gonna" | "want to" → "wanna" | "would you" → "wudja"',
+      '"Did you eat?" → "Dija eat?" (elision in fast speech)',
+      '"Focus on KEY WORDS — nouns, verbs, adjectives carry the meaning; small words blur."',
+    ],
+    practice: "Watch 3 minutes of a TED talk or BBC report at normal speed. Note 5 words you couldn't catch — look them up.",
+    exercises: [
+      { q: "In rapid speech, 'going to' is often pronounced as:", options: ["'going to' — always fully pronounced", "'gonna'", "'goin'", "'goe-to'"], answer: 1 },
+      { q: "Which strategy BEST helps you understand a speaker with an unfamiliar accent?", options: ["Ask them to repeat everything slowly", "Give up listening and read the transcript", "Focus on key words and context clues; ask for clarification only when the meaning is unclear", "Avoid speaking with them"], answer: 2 },
+      { q: "'Would you' in fast British English often sounds like:", options: ["'would you' — always clear", "'wudja'", "'would ya'", "'wouldoo'"], answer: 1 },
+    ],
+  },
+  l30: {
+    concept: "C2 argumentation: state your position clearly → support with evidence → anticipate and concede valid counterpoints → rebut weak ones → close with the broader significance of your position.",
+    examples: [
+      '"While I understand your perspective, the data consistently suggests otherwise." (concession + rebuttal)',
+      '"I take your point on cost — however, the long-term ROI makes this investment sound." (acknowledge → pivot)',
+      '"In conclusion, the evidence supports X, and here\'s why this matters for our team..." (strong close)',
+    ],
+    practice: "Choose a workplace issue. Argue one side for 3 minutes, then argue the other side for 3 minutes. Record both.",
+    exercises: [
+      { q: "Which sentence BEST introduces a counterargument?", options: ["You are wrong.", "That makes no sense.", "While I understand your perspective, the data suggests a different conclusion.", "My point is better than yours."], answer: 2 },
+      { q: "'Conceding a point' in debate means:", options: ["Agreeing with everything the other person says", "Stopping the debate", "Acknowledging that part of the opposing argument is valid before returning to your own position", "Repeating your point louder"], answer: 2 },
+      { q: "Which is the STRONGEST way to end an argument?", options: ["So obviously I am right.", "Well, that's just my opinion.", "In conclusion, the evidence consistently supports this position, and here's why it matters: [impact].", "I think we should just agree to disagree."], answer: 2 },
+    ],
   },
 };
+
+// ── Quiz section ──────────────────────────────────────────────────────────────
+function QuizSection({
+  exercises,
+  onScore,
+}: {
+  exercises: Exercise[];
+  onScore: (score: number) => void;
+}) {
+  const [answers, setAnswers]   = useState<Record<number, number>>({});
+  const [checked, setChecked]   = useState(false);
+  const [quizScore, setQuizScore] = useState<number | null>(null);
+
+  const allAnswered = exercises.every((_, i) => answers[i] !== undefined);
+
+  function handleCheck() {
+    const correct = exercises.filter((ex, i) => answers[i] === ex.answer).length;
+    const score   = Math.round((correct / exercises.length) * 100);
+    setChecked(true);
+    setQuizScore(score);
+    onScore(score);
+  }
+
+  function handleReset() {
+    setAnswers({});
+    setChecked(false);
+    setQuizScore(null);
+  }
+
+  return (
+    <div className="border border-primary/20 rounded-xl overflow-hidden">
+      <div className="px-4 py-2.5 bg-primary/5 border-b border-primary/10 flex items-center justify-between">
+        <span className="text-xs font-extrabold text-primary uppercase tracking-widest">
+          Test Yourself
+        </span>
+        {quizScore !== null && (
+          <span className={`text-xs font-bold ${quizScore >= 70 ? "text-green-600" : "text-amber-600"}`}>
+            {quizScore}% — {exercises.filter((ex, i) => answers[i] === ex.answer).length}/{exercises.length} correct
+          </span>
+        )}
+      </div>
+      <div className="px-4 py-3 space-y-4 bg-white/60">
+        {exercises.map((ex, qi) => (
+          <div key={qi} className="space-y-2">
+            <p className="text-xs font-semibold text-secondary leading-snug">
+              {qi + 1}. {ex.q}
+            </p>
+            <div className="grid grid-cols-1 gap-1.5">
+              {ex.options.map((opt, oi) => {
+                const chosen  = answers[qi] === oi;
+                const correct = ex.answer === oi;
+                let cls = "border rounded-lg px-3 py-2 text-xs text-left transition-all cursor-pointer ";
+                if (!checked) {
+                  cls += chosen
+                    ? "bg-primary/10 border-primary text-primary font-semibold"
+                    : "bg-white border-border text-secondary hover:border-primary/40 hover:bg-primary/5";
+                } else {
+                  if (correct)            cls += "bg-green-50 border-green-400 text-green-800 font-semibold";
+                  else if (chosen)        cls += "bg-red-50 border-red-300 text-red-700";
+                  else                    cls += "bg-white border-border text-muted-foreground";
+                }
+                return (
+                  <button
+                    key={oi}
+                    className={cls}
+                    disabled={checked}
+                    onClick={() => setAnswers(a => ({ ...a, [qi]: oi }))}
+                  >
+                    <span className="font-mono text-muted-foreground mr-1.5">
+                      {["A", "B", "C", "D"][oi]}.
+                    </span>
+                    {opt}
+                    {checked && correct && (
+                      <CheckCircle2 className="inline w-3.5 h-3.5 ml-1.5 text-green-600" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        {!checked ? (
+          <Button
+            size="sm"
+            className="w-full font-bold mt-1"
+            disabled={!allAnswered}
+            onClick={handleCheck}
+          >
+            Check Answers
+          </Button>
+        ) : (
+          <div className="flex gap-2 items-center pt-1">
+            <div className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold text-center ${
+              quizScore! >= 70
+                ? "bg-green-50 border border-green-200 text-green-700"
+                : "bg-amber-50 border border-amber-200 text-amber-700"
+            }`}>
+              {quizScore! >= 70
+                ? "Great work! Score auto-filled below — adjust if needed."
+                : "Keep going! Review the highlighted answers and try again."}
+            </div>
+            {quizScore! < 70 && (
+              <Button size="sm" variant="outline" className="shrink-0 text-xs" onClick={handleReset}>
+                Retry
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ── Lesson card ───────────────────────────────────────────────────────────────
 function LessonCard({
@@ -963,6 +1413,7 @@ function LessonCard({
   const [expanded, setExpanded] = useState(lesson.status === "new lesson");
   const [aiContent, setAiContent] = useState<{ concept: string; examples: string[]; practice: string } | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
+  const [quizDone, setQuizDone] = useState(false);
   const { profile } = useStudentProfile();
 
   const loadAIContent = async () => {
@@ -1059,6 +1510,12 @@ function LessonCard({
                       <span className="text-amber-600 text-xs font-bold shrink-0 mt-0.5">Practice →</span>
                       <p className="text-xs text-amber-800 leading-relaxed">{content.practice}</p>
                     </div>
+                    {staticContent?.exercises && staticContent.exercises.length > 0 && (
+                      <QuizSection
+                        exercises={staticContent.exercises}
+                        onScore={v => { onScoreChange(v); setQuizDone(true); }}
+                      />
+                    )}
                   </>
                 )}
               </div>
@@ -1074,7 +1531,9 @@ function LessonCard({
         ) : (
           <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">How well did you recall this?</span>
+              <span className="text-muted-foreground">
+                {quizDone ? "Quiz score (adjust if needed):" : "How well did you recall this?"}
+              </span>
               <span className={`font-extrabold ${scoreCls}`}>{scoreLabel} ({score}%)</span>
             </div>
             <input

@@ -37,18 +37,42 @@ type LessonState = {
 type UserProgress = Record<string, LessonState>;
 
 const LESSON_BANK: Lesson[] = [
-  { id: "l1",  title: "Greetings & Introductions",         skill_type: "vocabulary", description: "Common phrases for meeting people at work, shops, and trains." },
-  { id: "l2",  title: "Present Simple Tense",              skill_type: "grammar",    description: "I am, You are, He is — daily routines and facts." },
-  { id: "l3",  title: "Listening: Ordering at a Shop",     skill_type: "listening",  description: "Understand and respond to a shopkeeper in English." },
-  { id: "l4",  title: "Speaking: Describe Your Day",       skill_type: "speaking",   description: "Talk about your morning routine in 4–5 sentences." },
-  { id: "l5",  title: "Workplace Vocabulary",              skill_type: "vocabulary", description: "200-word core set for offices, factories, and markets." },
-  { id: "l6",  title: "Past Simple Tense",                 skill_type: "grammar",    description: "What happened yesterday — regular and irregular verbs." },
-  { id: "l7",  title: "Listening: A Job Interview",        skill_type: "listening",  description: "Hear and understand common HR interview questions." },
-  { id: "l8",  title: "Speaking: Answer Interview Questions", skill_type: "speaking", description: "Practise 'Tell me about yourself' and 3 common follow-ups." },
-  { id: "l9",  title: "Numbers, Dates & Times",            skill_type: "vocabulary", description: "Dates for forms, bills, and schedules in English." },
-  { id: "l10", title: "Question Words",                    skill_type: "grammar",    description: "What, Who, Where, When, Why — asking for directions & help." },
-  { id: "l11", title: "Reading: A Job Advertisement",      skill_type: "reading",    description: "Extract key information from a real job posting." },
-  { id: "l12", title: "Speaking: Phone & Video Calls",     skill_type: "speaking",   description: "Opening, holding, and closing a professional call." },
+  // ── A1 Foundation ──────────────────────────────────────────────────────────
+  { id: "l1",  title: "Greetings & Introductions",           skill_type: "vocabulary", description: "Common phrases for meeting people at work, shops, and trains." },
+  { id: "l2",  title: "Present Simple Tense",                skill_type: "grammar",    description: "I am, You are, He is — daily routines and facts." },
+  { id: "l3",  title: "Listening: Ordering at a Shop",       skill_type: "listening",  description: "Understand and respond to a shopkeeper in English." },
+  { id: "l4",  title: "Speaking: Describe Your Day",         skill_type: "speaking",   description: "Talk about your morning routine in 4–5 sentences." },
+  { id: "l13", title: "Basic Prepositions of Place",         skill_type: "vocabulary", description: "In, on, at, under, next to — essential for giving directions." },
+  { id: "l14", title: "Common Action Verbs",                 skill_type: "vocabulary", description: "Go, come, take, give, want, need — the 20 verbs you use every day." },
+  // ── A2 Elementary ──────────────────────────────────────────────────────────
+  { id: "l5",  title: "Workplace Vocabulary",                skill_type: "vocabulary", description: "200-word core set for offices, factories, and markets." },
+  { id: "l6",  title: "Past Simple Tense",                   skill_type: "grammar",    description: "What happened yesterday — regular and irregular verbs." },
+  { id: "l9",  title: "Numbers, Dates & Times",              skill_type: "vocabulary", description: "Dates for forms, bills, and schedules in English." },
+  { id: "l10", title: "Question Words",                      skill_type: "grammar",    description: "What, Who, Where, When, Why — asking for directions & help." },
+  { id: "l15", title: "Present Continuous Tense",            skill_type: "grammar",    description: "I am working, she is calling — actions happening right now." },
+  { id: "l16", title: "Comparatives & Superlatives",         skill_type: "grammar",    description: "Bigger, better, the best — comparing jobs, salaries, and options." },
+  // ── B1 Intermediate ────────────────────────────────────────────────────────
+  { id: "l7",  title: "Listening: A Job Interview",          skill_type: "listening",  description: "Hear and understand common HR interview questions." },
+  { id: "l8",  title: "Speaking: Answer Interview Questions",skill_type: "speaking",   description: "Practise 'Tell me about yourself' and 3 common follow-ups." },
+  { id: "l11", title: "Reading: A Job Advertisement",        skill_type: "reading",    description: "Extract key information from a real job posting." },
+  { id: "l12", title: "Speaking: Phone & Video Calls",       skill_type: "speaking",   description: "Opening, holding, and closing a professional call." },
+  { id: "l17", title: "Expressing Opinions Politely",        skill_type: "speaking",   description: "I think, In my view, I agree/disagree — professional debate language." },
+  { id: "l18", title: "Writing Professional Emails",         skill_type: "reading",    description: "Subject lines, salutations, clear body text, and polite sign-offs." },
+  // ── B2 Upper-Intermediate ──────────────────────────────────────────────────
+  { id: "l19", title: "Conditional Sentences",               skill_type: "grammar",    description: "If I get this job, I will… / If I had studied harder, I would have… " },
+  { id: "l20", title: "Formal vs. Informal Register",        skill_type: "vocabulary", description: "When to say 'commence' vs 'start', 'assist' vs 'help' — register switching." },
+  { id: "l21", title: "Listening: Meetings & Presentations", skill_type: "listening",  description: "Follow team meetings, extract action points, and catch polite disagreement." },
+  { id: "l22", title: "Speaking: Salary Negotiation",        skill_type: "speaking",   description: "Ask for more, counter an offer, and reach agreement — all professionally." },
+  // ── C1 Advanced ───────────────────────────────────────────────────────────
+  { id: "l23", title: "Passive Voice & Reported Speech",     skill_type: "grammar",    description: "The report was submitted. She said that… — essential for formal writing." },
+  { id: "l24", title: "Idiomatic Expressions at Work",       skill_type: "vocabulary", description: "Hit the ground running, think outside the box — and when not to use them." },
+  { id: "l25", title: "Reading: Business Articles",          skill_type: "reading",    description: "Skim, scan, and critically analyse articles from Economic Times or BBC." },
+  { id: "l26", title: "Presenting Ideas with Confidence",    skill_type: "speaking",   description: "Structure a 3-minute business presentation using signposting language." },
+  // ── C2 Mastery ────────────────────────────────────────────────────────────
+  { id: "l27", title: "Nuance & Precision in Vocabulary",    skill_type: "vocabulary", description: "Subtle differences — affect vs effect, imply vs infer, comprise vs consist of." },
+  { id: "l28", title: "Advanced Grammar: Complex Structures",skill_type: "grammar",    description: "Subjunctive mood, inversion, cleft sentences — writing that impresses." },
+  { id: "l29", title: "Listening: Accents & Rapid Speech",   skill_type: "listening",  description: "Understand British, American, and Australian accents at natural speed." },
+  { id: "l30", title: "Debate & Critical Argumentation",     skill_type: "speaking",   description: "Build, counter, and concede arguments fluently in any professional forum." },
 ];
 
 const LESSON_IDS = new Set(LESSON_BANK.map(l => l.id));
