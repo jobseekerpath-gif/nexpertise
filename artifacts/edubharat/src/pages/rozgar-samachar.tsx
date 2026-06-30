@@ -611,7 +611,7 @@ function RozgarSamacharContent() {
   const [searchInput, setSearchInput] = useState(filters.keyword);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const { data: allJobs, isLoading: jobsLoading, error: jobsError, reload } = useRozgarJobs(studentProfile);
+  const { data: allJobs, isLoading: jobsLoading, error: jobsError, reload, source: jobsSource } = useRozgarJobs(studentProfile, filters.keyword);
   const {
     data: livePulse,
     isLoading: livePulseLoading,
@@ -1123,7 +1123,9 @@ function RozgarSamacharContent() {
                 {jobsLoading ? (
                   <div className="text-center py-16">
                     <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground">Finding the best jobs for your profile…</p>
+                    <p className="text-sm text-muted-foreground">
+                      {filters.keyword ? `Searching live listings for "${filters.keyword}"…` : "Finding the best jobs for your profile…"}
+                    </p>
                   </div>
                 ) : jobsError ? (
                   <div className="text-center py-16">
@@ -1140,8 +1142,18 @@ function RozgarSamacharContent() {
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <p className="text-sm text-muted-foreground">{filteredJobs.length} job{filteredJobs.length !== 1 ? "s" : ""} found</p>
+                      {jobsSource === "search" && (
+                        <Badge variant="outline" className="text-[10px] rounded-full text-emerald-700 border-emerald-200 bg-emerald-50">
+                          🔴 Live listings
+                        </Badge>
+                      )}
+                      {jobsSource === "live" && (
+                        <Badge variant="outline" className="text-[10px] rounded-full text-blue-700 border-blue-200 bg-blue-50">
+                          📡 Live feed
+                        </Badge>
+                      )}
                     </div>
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                       {filteredJobs.map(job => (
