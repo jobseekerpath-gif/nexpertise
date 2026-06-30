@@ -19,6 +19,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: 'square.grid.2x2', selected: 'square.grid.2x2.fill' }} />
         <Label>Tools</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="jobs">
+        <Icon sf={{ default: 'briefcase', selected: 'briefcase.fill' }} />
+        <Label>Jobs</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="progress">
         <Icon sf={{ default: 'chart.line.uptrend.xyaxis', selected: 'chart.line.uptrend.xyaxis' }} />
         <Label>Progress</Label>
@@ -74,6 +78,14 @@ function ClassicTabLayout() {
           title: 'Tools',
           tabBarIcon: ({ color }) =>
             isIOS ? <SymbolView name="grid" tintColor={color} size={24} /> : <Feather name="grid" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="jobs"
+        options={{
+          title: 'Jobs',
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="briefcase" tintColor={color} size={24} /> : <Feather name="briefcase" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
