@@ -26,3 +26,5 @@
 - [Live-chat recognition loop](live-chat-recognition-loop.md) — ONE startContinuous in toggleLiveChat (via ref); TTS onEnd uses blockFor() only — never stop()+startContinuous there.
 - [Journey AI content endpoint](journey-ai-content.md) — GET /journey/lesson-content/:lessonId; in-memory cache capped at 200 entries (FIFO eviction); useEffect([expanded]) triggers fetch; static LESSON_CONTENT is immediate fallback.
 - [Sticky bars below nav](sticky-bars.md) — use sticky top-16 z-20 -mx-4 px-4 bg-white/95 backdrop-blur-sm border-b; works when page container has overflow-y-auto and is the scroll root.
+- [TTS global singleton](tts-global-singleton.md) — module-level _audio/_abort/_url + _stopListeners in use-edge-tts.ts; globalStop() always runs before speak(); relinquish ownerRef before calling globalStop() on unmount.
+- [Tailwind dynamic classes](tailwind-dynamic-classes.md) — never build class strings with template literals (e.g. opacity-${val}); Tailwind JIT won't detect them. Always use full class strings or ternary of two complete class strings.
