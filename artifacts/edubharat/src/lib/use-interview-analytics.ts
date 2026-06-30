@@ -36,7 +36,7 @@ export type InterviewAnalytics = {
   sessions: InterviewSession[];
   totalInterviews: number;
   averageScore: number;
-  scoreTrend: { label: string; score: number }[];
+  scoreTrend: { label: string; score: number; type: string }[];
   latestBreakdown: { label: string; value: number; color: string }[] | null;
   latestReport: InterviewReport | null;
   pastInterviews: InterviewSession[];
@@ -110,10 +110,20 @@ export function useInterviewAnalytics(): InterviewAnalytics {
     return withScore
       .slice(0, 10)
       .reverse()
-      .map((s, i) => ({
-        label: `#${i + 1} ${s.interviewType ?? s.role ?? "Interview"}`.slice(0, 20),
-        score: Math.min(100, Math.max(0, s.overallScore ?? 0)),
-      }));
+      .map((s, i) => {
+        const type = s.interviewType ?? s.role ?? "Interview";
+        // Show short date + type (e.g. "Jun 30 · HR")
+        const date = s.completedAt ?? s.createdAt;
+        const d = new Date(date);
+        const month = d.toLocaleString("en-IN", { month: "short" });
+        const day = d.getDate();
+        const label = `${day} ${month}`;
+        return {
+          label,
+          score: Math.min(100, Math.max(0, s.overallScore ?? 0)),
+          type,
+        };
+      });
   }, [withScore]);
 
   const latest = sessions[0] ?? null;
