@@ -5,12 +5,15 @@ import { Resend } from "resend";
 import crypto from "crypto";
 import { db, usersTable, otpsTable } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
+import { mergeGuestProgress } from "./journey";
 
 declare module "express-session" {
   interface SessionData {
     userId: number;
     userEmail: string;
     userName?: string;
+    /** Temporary: guest ID to merge on next successful login (Google OAuth flow) */
+    pendingGuestId?: string;
   }
 }
 
@@ -155,6 +158,9 @@ router.get("/auth/config", (_req, res) => {
 // without requiring a server restart when REPLIT_DOMAINS changes.
 router.get("/auth/google", (req, res, next) => {
   const callbackURL = getCallbackURL();
+  // Stash any guest ID so we can merge progress after OAuth completes.
+  const guestId = req.query["guestId"] as string | undefined;
+  if (guestId) req.session.pendingGuestId = guestId;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   passport.authenticate("google", {
     scope: ["profile", "email"],
@@ -172,12 +178,19 @@ router.get(
       callbackURL,
     } as any)(req, res, next);
   },
-  (req, res) => {
+  async (req, res) => {
     if (req.user) {
       const u = req.user as { id: number; email: string; name?: string };
       req.session.userId = u.id;
       req.session.userEmail = u.email;
       req.session.userName = u.name ?? undefined;
+
+      // Merge any guest progress that was saved before login
+      const pendingGuestId = req.session.pendingGuestId;
+      if (pendingGuestId) {
+        delete req.session.pendingGuestId;
+        await mergeGuestProgress(pendingGuestId, String(u.id));
+      }
     }
     res.redirect("/");
   }
@@ -230,7 +243,7 @@ router.post("/auth/otp/send", async (req, res) => {
 });
 
 router.post("/auth/otp/verify", async (req, res) => {
-  const { email, code } = req.body as { email?: string; code?: string };
+  const { email, code, guestId } = req.body as { email?: string; code?: string; guestId?: string };
   if (!email || !code) {
     res.status(400).json({ error: "Email and code required" });
     return;
@@ -269,6 +282,11 @@ router.post("/auth/otp/verify", async (req, res) => {
     req.session.userId = user[0].id;
     req.session.userEmail = user[0].email;
     req.session.userName = user[0].name ?? undefined;
+
+    // Merge any lesson progress the user built up as a guest
+    if (guestId) {
+      await mergeGuestProgress(guestId, String(user[0].id));
+    }
 
     res.json({ success: true, user: { id: user[0].id, email: user[0].email, name: user[0].name } });
   } catch (err) {

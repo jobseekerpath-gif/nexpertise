@@ -8,6 +8,7 @@ import { PageMeta } from "@/components/page-meta";
 import { RoadmapTimeline } from "@/components/roadmap-timeline";
 import { LEVEL_TO_STAGE, mapEnglishLevel } from "@/lib/english-roadmap";
 import { useStudentProfile } from "@/lib/use-student-profile";
+import { useAuth } from "@/lib/use-auth";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import {
   BookOpen, CheckCircle2, RotateCcw, ChevronRight, ChevronUp, ChevronDown,
@@ -77,7 +78,10 @@ function SkillBadge({ type }: { type: string }) {
 }
 
 export default function LearningJourneyPage() {
-  const userId = getGuestId();
+  const { user } = useAuth();
+  // Authenticated users are identified by their numeric DB ID so progress
+  // follows them across devices; guests use the localStorage guest ID.
+  const userId = user ? String(user.id) : getGuestId();
 
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);

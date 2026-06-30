@@ -33,8 +33,10 @@ export function useAuth() {
     setUser(null);
   }, []);
 
-  const loginWithGoogle = useCallback(() => {
-    window.location.href = `${BASE}/api/auth/google`;
+  const loginWithGoogle = useCallback((guestId?: string) => {
+    const url = new URL(`${BASE}/api/auth/google`, window.location.href);
+    if (guestId) url.searchParams.set("guestId", guestId);
+    window.location.href = url.toString();
   }, []);
 
   const sendOtp = useCallback(async (email: string) => {
@@ -47,11 +49,11 @@ export function useAuth() {
     return res.json() as Promise<{ success?: boolean; error?: string; dev?: string }>;
   }, []);
 
-  const verifyOtp = useCallback(async (email: string, code: string) => {
+  const verifyOtp = useCallback(async (email: string, code: string, guestId?: string) => {
     const res = await fetch(`${BASE}/api/auth/otp/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, code }),
+      body: JSON.stringify({ email, code, ...(guestId ? { guestId } : {}) }),
       credentials: "include",
     });
     const data = (await res.json()) as { success?: boolean; user?: AuthUser; error?: string };

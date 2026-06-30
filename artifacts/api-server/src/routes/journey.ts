@@ -156,6 +156,68 @@ async function saveLesson(
   }
 }
 
+/**
+ * mergeGuestProgress — copy all lesson_progress rows from a guest ID into an
+ * authenticated user's rows.  Called once at login/signup so the learner's
+ * SM-2 schedule carries over to their account.
+ *
+ * Conflict resolution: if the authenticated user already has a row for the
+ * same lesson (e.g. they previously studied on another device), keep whichever
+ * has the higher repetition count; on a tie, prefer the more-recently-scheduled
+ * due_date so the SM-2 curve is not reset.
+ */
+export async function mergeGuestProgress(guestId: string, userId: string): Promise<void> {
+  if (!guestId || !userId || guestId === userId) return;
+  try {
+    const guestRows = await db
+      .select()
+      .from(lessonProgressTable)
+      .where(eq(lessonProgressTable.userId, guestId));
+
+    if (guestRows.length === 0) return;
+
+    const userRows = await db
+      .select()
+      .from(lessonProgressTable)
+      .where(eq(lessonProgressTable.userId, userId));
+
+    const userMap = new Map(userRows.map(r => [r.lessonId, r]));
+
+    for (const guestRow of guestRows) {
+      const existing = userMap.get(guestRow.lessonId);
+      // Skip if the authenticated user already has more practice on this lesson
+      if (existing && existing.repetitions >= guestRow.repetitions) continue;
+
+      await db
+        .insert(lessonProgressTable)
+        .values({
+          userId,
+          lessonId: guestRow.lessonId,
+          ease: guestRow.ease,
+          interval: guestRow.interval,
+          repetitions: guestRow.repetitions,
+          dueDate: guestRow.dueDate,
+          lastScore: guestRow.lastScore ?? undefined,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [lessonProgressTable.userId, lessonProgressTable.lessonId],
+          set: {
+            ease: guestRow.ease,
+            interval: guestRow.interval,
+            repetitions: guestRow.repetitions,
+            dueDate: guestRow.dueDate,
+            lastScore: guestRow.lastScore ?? undefined,
+            updatedAt: new Date(),
+          },
+        });
+    }
+  } catch (err) {
+    // Non-fatal — authenticated user keeps their existing progress
+    console.error("[journey] mergeGuestProgress error", err);
+  }
+}
+
 // ------------------------------------------------------------------
 // GET /journey/next?userId=<id>
 // Returns up to 5 interleaved lessons (due reviews first, then new)

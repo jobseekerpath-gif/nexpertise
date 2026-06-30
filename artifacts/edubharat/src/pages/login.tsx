@@ -76,7 +76,9 @@ function LoginContent() {
     if (!otp.trim()) { setError("Please enter the OTP"); return; }
     setLoading(true);
     setError("");
-    const result = await verifyOtp(email, otp);
+    // Pass any guest ID so the server can merge lesson progress into the account
+    const guestId = localStorage.getItem("edubharat_guest_id") ?? undefined;
+    const result = await verifyOtp(email, otp, guestId);
     setLoading(false);
     if (result.error) {
       setError(result.error);
@@ -161,7 +163,9 @@ function LoginContent() {
             <Button
               variant="outline"
               className="w-full h-12 font-semibold text-base border-2 disabled:opacity-60"
-              onClick={googleReady ? loginWithGoogle : copyCallbackUrl}
+              onClick={googleReady
+                ? () => loginWithGoogle(localStorage.getItem("edubharat_guest_id") ?? undefined)
+                : copyCallbackUrl}
               title={!googleReady ? "Google login not yet configured — see setup instructions above" : undefined}
               data-testid="button-google-login"
             >
