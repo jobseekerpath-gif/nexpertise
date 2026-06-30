@@ -143,6 +143,13 @@ export const webVitalsTable = pgTable("web_vitals", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const jobSearchCacheTable = pgTable("job_search_cache", {
+  cacheKey: text("cache_key").primaryKey(),
+  items: text("items").notNull(), // JSON array of LiveItem
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertOtpSchema = createInsertSchema(otpsTable).omit({ id: true, createdAt: true });
 export const insertLearningProgressSchema = createInsertSchema(learningProgressTable).omit({ id: true, createdAt: true });

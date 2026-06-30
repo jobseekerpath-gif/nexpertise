@@ -16,8 +16,15 @@
  *   3. Remotive API     — free remote-job listings, tech-focused
  *
  * Returns items in RozgarLiveItem format (compatible with enrichJob / filterJobs).
+ *
+ * Cache strategy:
+ *   L1 — in-process Map  (fastest; lost on restart)
+ *   L2 — PostgreSQL job_search_cache table (survives restarts, shared across instances)
+ *   TTL: 5 minutes for both layers
  */
 import { Router, type Request, type Response } from "express";
+import { db, jobSearchCacheTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router = Router();
 
@@ -40,7 +47,44 @@ type LiveItem = {
 // ─── Cache ────────────────────────────────────────────────────────────────────
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const cache = new Map<string, { expiresAt: number; items: LiveItem[] }>();
+
+/** L1: in-process memory cache (fastest, lost on restart) */
+const l1Cache = new Map<string, { expiresAt: number; items: LiveItem[] }>();
+
+/** L2: PostgreSQL cache (survives restarts) */
+async function dbCacheGet(key: string): Promise<LiveItem[] | null> {
+  try {
+    const rows = await db
+      .select()
+      .from(jobSearchCacheTable)
+      .where(eq(jobSearchCacheTable.cacheKey, key))
+      .limit(1);
+    const row = rows[0];
+    if (!row) return null;
+    if (new Date(row.expiresAt).getTime() < Date.now()) return null;
+    return JSON.parse(row.items) as LiveItem[];
+  } catch {
+    return null; // DB unavailable — fall through to live fetch
+  }
+}
+
+async function dbCacheSet(key: string, items: LiveItem[]): Promise<void> {
+  try {
+    const expiresAt = new Date(Date.now() + CACHE_TTL_MS);
+    await db
+      .insert(jobSearchCacheTable)
+      .values({ cacheKey: key, items: JSON.stringify(items), expiresAt })
+      .onConflictDoUpdate({
+        target: jobSearchCacheTable.cacheKey,
+        set: {
+          items: JSON.stringify(items),
+          expiresAt,
+        },
+      });
+  } catch {
+    // Non-fatal — the in-memory L1 still works
+  }
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -421,9 +465,20 @@ router.get("/jobs/search", async (req: Request, res: Response) => {
   const page = Math.max(1, parseInt((req.query["page"] as string) || "1", 10));
 
   const key = JSON.stringify({ q, city, experience, sector, skills: skills.join(","), page });
-  const hit = cache.get(key);
-  if (hit && hit.expiresAt > Date.now()) {
-    res.json({ items: hit.items, source: "cache", total: hit.items.length });
+
+  // ── L1: in-process memory ──
+  const l1 = l1Cache.get(key);
+  if (l1 && l1.expiresAt > Date.now()) {
+    res.json({ items: l1.items, source: "cache", total: l1.items.length });
+    return;
+  }
+
+  // ── L2: PostgreSQL cache ──
+  const dbItems = await dbCacheGet(key);
+  if (dbItems) {
+    // Warm L1 from DB hit
+    l1Cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, items: dbItems });
+    res.json({ items: dbItems, source: "cache", total: dbItems.length });
     return;
   }
 
@@ -474,7 +529,9 @@ router.get("/jobs/search", async (req: Request, res: Response) => {
   const source = sources.length > 0 ? sources.join("+") : "none";
 
   if (scored.length > 0) {
-    cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, items: scored });
+    // Write to both cache layers (non-blocking)
+    l1Cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, items: scored });
+    void dbCacheSet(key, scored);
   }
 
   const errorField =
