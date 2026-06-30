@@ -667,6 +667,16 @@ function RozgarSamacharContent() {
   const enrichedJobs = useMemo(() => allJobs.map(enrichJob), [allJobs]);
   const filteredJobs = useMemo(() => filterJobs(enrichedJobs, filters, studentProfile).filter(j => !hiddenJobIds.has(j.jobId)), [enrichedJobs, filters, studentProfile, hiddenJobIds]);
 
+  // Source breakdown for the "X verified listings · Y from Adzuna · Z from news" summary
+  const sourceCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of allJobs) {
+      const src = item.source || "Other";
+      counts[src] = (counts[src] ?? 0) + 1;
+    }
+    return counts;
+  }, [allJobs]);
+
   const visibleLivePulse = useMemo(() => (livePulse?.items ?? []).filter(item => !hiddenJobIds.has(makeJobId(item.link))).slice(0, 3), [livePulse, hiddenJobIds]);
 
   const update = (key: keyof Profile) => (val: string) => setProfile(p => ({ ...p, [key]: val }));
@@ -1061,6 +1071,23 @@ function RozgarSamacharContent() {
                     </Select>
                   </div>
 
+                  {/* Source summary — shown once results are ready */}
+                  {!jobsLoading && allJobs.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span className="font-semibold text-emerald-700 flex items-center gap-1">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        {allJobs.length} verified listing{allJobs.length !== 1 ? "s" : ""}
+                      </span>
+                      {Object.entries(sourceCounts)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([src, count]) => (
+                          <span key={src} className="rounded-full bg-muted px-2 py-0.5 border">
+                            {count} from {src}
+                          </span>
+                        ))}
+                    </div>
+                  )}
+
                   {/* Active filter chips */}
                   {activeCount > 0 && (
                     <div className="flex flex-wrap items-center gap-2">
@@ -1162,10 +1189,14 @@ function RozgarSamacharContent() {
                 ) : (
                   <>
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <p className="text-sm text-muted-foreground">{filteredJobs.length} job{filteredJobs.length !== 1 ? "s" : ""} found</p>
+                      <p className="text-sm text-muted-foreground">
+                        {filteredJobs.length === allJobs.length
+                          ? `${filteredJobs.length} job${filteredJobs.length !== 1 ? "s" : ""}`
+                          : `${filteredJobs.length} of ${allJobs.length} jobs`}
+                      </p>
                       {jobsSource === "search" && (
                         <Badge variant="outline" className="text-[10px] rounded-full text-emerald-700 border-emerald-200 bg-emerald-50">
-                          🔴 Live listings
+                          🟢 Live results
                         </Badge>
                       )}
                       {jobsSource === "live" && (
