@@ -16,7 +16,8 @@ import { useGeminiStream } from "@/lib/use-gemini-stream";
 import {
   BookOpen, CheckCircle2, RotateCcw, ChevronRight, ChevronUp, ChevronDown,
   Flame, Clock, Star, Brain, Mic, Headphones, Eye, Map, Zap, Loader2,
-  Trophy, Lock, ChevronRight as ArrowRight, Target,
+  Trophy, Lock, ChevronRight as ArrowRight, Target, Users, Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -123,6 +124,48 @@ function MasteryBadge({ level }: { level: "bronze" | "silver" | "gold" }) {
     <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
       {cfg.emoji} {cfg.label}
     </span>
+  );
+}
+
+// ── Daily session psychology helpers ─────────────────────────────────────────
+const DAILY_GOAL = 3;          // lessons that count as "today's goal"
+const XP_PER_LESSON = 20;
+
+// Deterministic-per-day social-proof number so it stays stable across renders
+// but feels alive day to day (FOMO nudge).
+function learnersToday(): number {
+  const d = new Date();
+  const seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  return 900 + ((seed * 7919) % 1900); // ~900–2800
+}
+
+// Circular daily-goal ring (SVG strokeDashoffset for accuracy)
+function DailyGoalRing({ done, goal }: { done: number; goal: number }) {
+  const size = 56, stroke = 6, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  const pct = goal > 0 ? Math.min(done / goal, 1) : 0;
+  const met = done >= goal;
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor"
+          className="text-muted/30" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke}
+          strokeLinecap="round"
+          className={met ? "text-green-500 transition-all duration-500" : "text-primary transition-all duration-500"}
+          stroke="currentColor"
+          strokeDasharray={c} strokeDashoffset={c * (1 - pct)} />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+        {met ? (
+          <CheckCircle2 className="w-5 h-5 text-green-500" />
+        ) : (
+          <>
+            <span className="text-sm font-extrabold text-secondary">{done}</span>
+            <span className="text-[9px] text-muted-foreground">/ {goal}</span>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -244,6 +287,8 @@ export default function LearningJourneyPage() {
   const [activeTab,  setActiveTab]  = useState<"queue" | "all" | "roadmap">("queue");
   // Which CEFR level card is expanded in the roadmap
   const [expandedLevel, setExpandedLevel] = useState<string | null>(null);
+  // XP earned in the current focus session (resets on each fresh queue load)
+  const [sessionXP, setSessionXP] = useState(0);
 
   const { profile } = useStudentProfile();
   const { text: planText, isStreaming: planStreaming, stream: streamPlan } = useGeminiStream();
@@ -275,6 +320,8 @@ export default function LearningJourneyPage() {
       setAllLessons(progData.lessons ?? []);
       setSummary(progData.summary ?? null);
       setSubmitted({});
+      setScores({});
+      setSessionXP(0);
     } catch {
       /* silently ignore — empty state handles it */
     } finally {
@@ -286,19 +333,34 @@ export default function LearningJourneyPage() {
 
   const handleSubmit = useCallback(async (lessonId: string) => {
     const score = scores[lessonId] ?? 0;
+    const lesson = lessons.find(l => l.id === lessonId);
     setSubmitting(s => ({ ...s, [lessonId]: true }));
     try {
-      await fetch(`${BASE}/api/journey/submit-result`, {
+      const res = await fetch(`${BASE}/api/journey/submit-result`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ lesson_id: lessonId, score, userId }),
       });
+      // Only advance the session when the server actually saved the result —
+      // otherwise client and backend would silently diverge for the session.
+      if (!res.ok) return;
+      // Advance the focus session in place — no full reload, so the next
+      // lesson slides in immediately instead of resetting the whole queue.
+      const isReview = lesson?.status === "due for review";
       setSubmitted(s => ({ ...s, [lessonId]: true }));
-      setTimeout(() => { void loadNext(); }, 800);
+      setSessionXP(x => x + XP_PER_LESSON);
+      // Optimistically bump headline stats so the goal ring feels alive.
+      // A new lesson moves into "studied"; a review was already counted as
+      // studied, so only clear it from the overdue bucket.
+      setSummary(prev => prev ? {
+        ...prev,
+        studied: isReview ? prev.studied : prev.studied + 1,
+        overdue: isReview ? Math.max(0, prev.overdue - 1) : prev.overdue,
+      } : prev);
     } finally {
       setSubmitting(s => ({ ...s, [lessonId]: false }));
     }
-  }, [scores, userId, loadNext]);
+  }, [scores, userId, lessons]);
 
   // Group allLessons by CEFR level for the "All Lessons" view
   const lessonsByLevel = useMemo(() => {
@@ -419,39 +481,153 @@ export default function LearningJourneyPage() {
           </button>
         </div>
 
-        {/* ══════════════ TODAY'S QUEUE ══════════════ */}
+        {/* ══════════════ TODAY'S FOCUS — one lesson at a time ══════════════ */}
         {activeTab === "queue" && (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {loading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-32 bg-muted rounded-2xl animate-pulse" />
-              ))
+              <>
+                <div className="h-20 bg-muted rounded-2xl animate-pulse" />
+                <div className="h-72 bg-muted rounded-2xl animate-pulse" />
+              </>
             ) : lessons.length === 0 ? (
               <Card className="border shadow-sm">
                 <CardContent className="p-8 text-center space-y-3">
                   <div className="text-4xl">🎉</div>
                   <p className="font-semibold text-secondary">You're all caught up!</p>
                   <p className="text-sm text-muted-foreground">
-                    No lessons are due right now. Come back tomorrow for your next review.
+                    No lessons are due right now. Come back tomorrow for your next review —
+                    {summary && summary.streak > 0
+                      ? ` keep your ${summary.streak}-day streak alive!`
+                      : " start a streak tomorrow!"}
                   </p>
                   <Button variant="outline" size="sm" onClick={() => void loadNext()}>
                     <RotateCcw className="w-3.5 h-3.5 mr-1.5" />Refresh
                   </Button>
                 </CardContent>
               </Card>
-            ) : (
-              lessons.map(lesson => (
-                <LessonCard
-                  key={lesson.id}
-                  lesson={lesson}
-                  score={scores[lesson.id] ?? 0}
-                  onScoreChange={v => setScores(s => ({ ...s, [lesson.id]: v }))}
-                  onSubmit={() => void handleSubmit(lesson.id)}
-                  submitting={submitting[lesson.id] ?? false}
-                  submitted={submitted[lesson.id] ?? false}
-                />
-              ))
-            )}
+            ) : (() => {
+              const dueCount   = lessons.length;
+              const doneCount  = lessons.filter(l => submitted[l.id]).length;
+              const goal       = Math.min(DAILY_GOAL, dueCount);
+              const goalMet    = doneCount >= goal;
+              const current    = lessons.find(l => !submitted[l.id]);
+              const position   = doneCount + 1; // 1-based index of the current lesson
+
+              return (
+                <>
+                  {/* ── Session header: goal ring + streak loss-aversion + FOMO ── */}
+                  <Card className="border shadow-sm overflow-hidden">
+                    <CardContent className="p-4 flex items-center gap-4">
+                      <DailyGoalRing done={doneCount} goal={goal} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-secondary">
+                          {goalMet
+                            ? "Daily goal smashed! 🎉"
+                            : `Today's goal: ${goal} lesson${goal > 1 ? "s" : ""}`}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                          <Users className="w-3 h-3 text-primary" />
+                          {learnersToday().toLocaleString("en-IN")} learners studied today
+                        </p>
+                      </div>
+                      {sessionXP > 0 && (
+                        <div className="text-right shrink-0">
+                          <div className="flex items-center gap-1 text-primary font-extrabold text-lg">
+                            <Zap className="w-4 h-4 fill-primary" />+{sessionXP}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground -mt-0.5">XP today</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* ── Loss-aversion nudges ── */}
+                  {summary && summary.streak > 0 && !goalMet && (
+                    <div className="flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3.5 py-2.5">
+                      <Flame className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+                      <p className="text-xs text-orange-800 leading-snug">
+                        <span className="font-bold">{summary.streak}-day streak</span> on the line —
+                        finish today's goal before midnight or you lose it.
+                      </p>
+                    </div>
+                  )}
+                  {overdue > 0 && (
+                    <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-800 leading-snug">
+                        <span className="font-bold">{overdue} lesson{overdue > 1 ? "s are" : " is"} fading</span> from
+                        memory. Review now to lock in what you've learned.
+                      </p>
+                    </div>
+                  )}
+
+                  {current ? (
+                    <>
+                      {/* Position indicator + dots */}
+                      <div className="flex items-center justify-between px-0.5">
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          Lesson {position} of {dueCount}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {lessons.map((l, i) => (
+                            <span
+                              key={l.id}
+                              className={`h-1.5 rounded-full transition-all ${
+                                submitted[l.id]
+                                  ? "w-1.5 bg-green-500"
+                                  : i === doneCount
+                                  ? "w-5 bg-primary"
+                                  : "w-1.5 bg-muted"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Momentum nudge once the goal is met but lessons remain */}
+                      {goalMet && (
+                        <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3.5 py-2.5">
+                          <Sparkles className="w-4 h-4 text-primary shrink-0" />
+                          <p className="text-xs text-primary leading-snug">
+                            You're on fire! {dueCount - doneCount} more queued —
+                            keep the momentum and get ahead of tomorrow.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* The single focused lesson */}
+                      <LessonCard
+                        key={current.id}
+                        lesson={current}
+                        score={scores[current.id] ?? 0}
+                        onScoreChange={v => setScores(s => ({ ...s, [current.id]: v }))}
+                        onSubmit={() => void handleSubmit(current.id)}
+                        submitting={submitting[current.id] ?? false}
+                        submitted={false}
+                      />
+                    </>
+                  ) : (
+                    /* ── Session complete celebration ── */
+                    <Card className="border-primary/30 shadow-sm bg-gradient-to-b from-primary/5 to-transparent">
+                      <CardContent className="p-8 text-center space-y-3">
+                        <div className="text-5xl">🏆</div>
+                        <p className="font-display text-xl font-extrabold text-secondary">
+                          Session complete!
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          You finished {doneCount} lesson{doneCount > 1 ? "s" : ""} and earned{" "}
+                          <span className="font-bold text-primary">+{sessionXP} XP</span>.
+                          {summary && summary.streak > 0 && ` Your ${summary.streak}-day streak is safe. 🔥`}
+                        </p>
+                        <Button onClick={() => void loadNext()} className="font-bold">
+                          <RotateCcw className="w-3.5 h-3.5 mr-1.5" />Check for more
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
 
