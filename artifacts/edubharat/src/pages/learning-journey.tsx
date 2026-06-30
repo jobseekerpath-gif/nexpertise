@@ -1068,7 +1068,7 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
                     : <><Zap className="w-4 h-4 mr-2" />Generate My 30-Day Plan</>}
                 </Button>
                 {planText && (
-                  <div className="rounded-xl border bg-white p-4 max-h-[60vh] overflow-y-auto">
+                  <div className="rounded-xl border bg-white p-4">
                     <PlanRenderer text={planText} />
                     {planStreaming && (
                       <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground">
