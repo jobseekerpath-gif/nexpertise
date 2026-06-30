@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useSafeBottomPadding } from '@/hooks/useSafeBottomPadding';
 import { Header } from '@/components/Header';
@@ -15,6 +16,7 @@ export default function ProgressScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const bottomPadding = useSafeBottomPadding();
+  const router = useRouter();
   const [progress, setProgress] = useState<Progress | null>(null);
 
   useFocusEffect(
@@ -69,6 +71,32 @@ export default function ProgressScreen() {
         </View>
       </View>
 
+      {/* Interview History shortcut */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Interview History</Text>
+        <TouchableOpacity
+          activeOpacity={0.75}
+          onPress={() => router.push('/interviews')}
+          style={[
+            styles.historyCard,
+            { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="View interview history"
+        >
+          <View style={[styles.historyIcon, { backgroundColor: colors.tools.interview + '18', borderRadius: colors.radius - 2 }]}>
+            <Feather name="mic" size={20} color={colors.tools.interview} />
+          </View>
+          <View style={styles.historyText}>
+            <Text style={[styles.historyTitle, { color: colors.foreground }]}>View all interviews</Text>
+            <Text style={[styles.historySub, { color: colors.mutedForeground }]}>
+              Scores, breakdowns &amp; transcripts
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+        </TouchableOpacity>
+      </View>
+
       {overall === 0 && (
         <EmptyState icon="activity" title="No activity yet" subtitle="Start using any tool to see your progress grow." />
       )}
@@ -111,4 +139,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     fontSize: 14,
   },
+  historyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  historyIcon: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyText: { flex: 1 },
+  historyTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  historySub: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 2 },
 });
