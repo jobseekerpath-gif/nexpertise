@@ -174,6 +174,110 @@ function JobCard({
   );
 }
 
+// ─── Trending Searches ────────────────────────────────────────────────────────
+
+const TRENDING_SEARCHES: { label: string; icon: string }[] = [
+  { label: 'Software Developer', icon: '💻' },
+  { label: 'Data Entry', icon: '📋' },
+  { label: 'Bank PO', icon: '🏦' },
+  { label: 'Government Jobs', icon: '🏛️' },
+  { label: 'Data Analyst', icon: '📊' },
+  { label: 'Customer Support', icon: '🎧' },
+  { label: 'Digital Marketing', icon: '📱' },
+  { label: 'Content Writer', icon: '✍️' },
+  { label: 'Accountant', icon: '🧾' },
+  { label: 'HR Executive', icon: '🤝' },
+  { label: 'Sales Executive', icon: '📈' },
+  { label: 'Graphic Designer', icon: '🎨' },
+];
+
+function TrendingSearches({
+  colors,
+  onSelect,
+}: {
+  colors: ReturnType<typeof useColors>;
+  onSelect: (label: string) => void;
+}) {
+  return (
+    <View style={trendingStyles.container}>
+      <View style={trendingStyles.header}>
+        <Feather name="trending-up" size={14} color={colors.tools.rozgar} />
+        <Text style={[trendingStyles.heading, { color: colors.foreground }]}>
+          Popular searches
+        </Text>
+      </View>
+      <Text style={[trendingStyles.sub, { color: colors.mutedForeground }]}>
+        Tap a category to search instantly
+      </Text>
+      <View style={trendingStyles.grid}>
+        {TRENDING_SEARCHES.map((item) => (
+          <TouchableOpacity
+            key={item.label}
+            onPress={() => onSelect(item.label)}
+            activeOpacity={0.75}
+            style={[
+              trendingStyles.chip,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: colors.radius,
+              },
+            ]}
+          >
+            <Text style={trendingStyles.chipEmoji}>{item.icon}</Text>
+            <Text style={[trendingStyles.chipLabel, { color: colors.foreground }]}>
+              {item.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const trendingStyles = StyleSheet.create({
+  container: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  heading: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+  },
+  sub: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
+    marginBottom: 14,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chipEmoji: {
+    fontSize: 14,
+  },
+  chipLabel: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: 13,
+  },
+});
+
 // ─── Experience Filter ────────────────────────────────────────────────────────
 
 const EXP_OPTIONS: { value: string; label: string }[] = [
@@ -227,6 +331,30 @@ export default function JobsScreen() {
     const { saved } = await toggleSavedJob(job);
     setSavedJobs(await getSavedJobs());
   }, []);
+
+  const handleTrendingSelect = useCallback((label: string) => {
+    setQuery(label);
+    setSearched(true);
+    setLoading(true);
+    setError(null);
+    searchQueryRef.current = label;
+    getProfile().then((profile) => {
+      searchJobs({
+        q: label,
+        city: city.trim(),
+        skills: profile.skills || '',
+        experience,
+      })
+        .then((results) => {
+          if (searchQueryRef.current === label) setJobs(results);
+        })
+        .catch(() => {
+          setError('Could not load jobs. Please check your connection and try again.');
+          setJobs([]);
+        })
+        .finally(() => setLoading(false));
+    });
+  }, [city, experience]);
 
   const handleSearch = useCallback(async () => {
     setLoading(true);
@@ -419,11 +547,7 @@ export default function JobsScreen() {
           {error ? (
             <EmptyState icon="wifi-off" title="Search failed" subtitle={error} />
           ) : loading ? null : !searched ? (
-            <EmptyState
-              icon="briefcase"
-              title="Search for jobs"
-              subtitle="Enter a role or keyword above and tap Search to find live opportunities across India."
-            />
+            <TrendingSearches colors={colors} onSelect={handleTrendingSelect} />
           ) : jobs.length === 0 ? (
             <EmptyState
               icon="search"
