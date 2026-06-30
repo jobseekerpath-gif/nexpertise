@@ -130,6 +130,24 @@ export const lessonProgressTable = pgTable("lesson_progress", {
   uniqueIndex("lesson_progress_user_lesson_idx").on(table.userId, table.lessonId),
 ]);
 
+/**
+ * lesson_activity — append-only event log; one row per submission.
+ * Used exclusively for streak calculation so we can see which calendar
+ * days had at least one study session, even when the same lesson is
+ * reviewed many times.  The upsert in lesson_progress overwrites rows so
+ * it cannot serve this purpose.
+ */
+export const lessonActivityTable = pgTable("lesson_activity", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  lessonId: text("lesson_id").notNull(),
+  score: integer("score"),
+  completedAt: timestamp("completed_at").defaultNow().notNull(),
+});
+
+export const insertLessonActivitySchema = createInsertSchema(lessonActivityTable).omit({ id: true, completedAt: true });
+export type LessonActivity = typeof lessonActivityTable.$inferSelect;
+
 export const webVitalsTable = pgTable("web_vitals", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => usersTable.id),

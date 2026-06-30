@@ -41,6 +41,7 @@ type Summary = {
   total: number;
   studied: number;
   overdue: number;
+  streak: number;
 };
 
 type ProgressLesson = Lesson & {
@@ -48,6 +49,7 @@ type ProgressLesson = Lesson & {
   due_date: string | null;
   overdue: boolean;
   repetitions: number;
+  mastery: "bronze" | "silver" | "gold" | null;
 };
 
 const SKILL_ICON: Record<string, React.ElementType> = {
@@ -73,6 +75,21 @@ function SkillBadge({ type }: { type: string }) {
     <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${cls}`}>
       <Icon className="w-3 h-3" />
       {type.charAt(0).toUpperCase() + type.slice(1)}
+    </span>
+  );
+}
+
+const MASTERY_CONFIG = {
+  bronze: { label: "Bronze", emoji: "🥉", cls: "bg-amber-100 text-amber-800 border-amber-300" },
+  silver: { label: "Silver", emoji: "🥈", cls: "bg-slate-100 text-slate-700 border-slate-300" },
+  gold:   { label: "Gold",   emoji: "🏆", cls: "bg-yellow-100 text-yellow-800 border-yellow-300" },
+} as const;
+
+function MasteryBadge({ level }: { level: "bronze" | "silver" | "gold" }) {
+  const cfg = MASTERY_CONFIG[level];
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
+      {cfg.emoji} {cfg.label}
     </span>
   );
 }
@@ -169,7 +186,15 @@ export default function LearningJourneyPage() {
 
         {/* Stats row */}
         {summary && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
+            <Card className="border shadow-sm">
+              <CardContent className="p-4 text-center">
+                <div className="text-2xl font-extrabold text-orange-500 flex items-center justify-center gap-1">
+                  <Flame className="w-5 h-5" />{summary.streak}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">Day streak</div>
+              </CardContent>
+            </Card>
             <Card className="border shadow-sm">
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-extrabold text-primary">{studied}</div>
@@ -185,7 +210,7 @@ export default function LearningJourneyPage() {
             <Card className="border shadow-sm">
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-extrabold text-secondary">{total - studied}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Not yet started</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Not started</div>
               </CardContent>
             </Card>
           </div>
@@ -308,10 +333,8 @@ export default function LearningJourneyPage() {
                       )}
                     </div>
                   </div>
-                  {lesson.repetitions > 0 && (
-                    <Badge variant="secondary" className="text-xs shrink-0">
-                      ×{lesson.repetitions}
-                    </Badge>
+                  {lesson.mastery && (
+                    <MasteryBadge level={lesson.mastery} />
                   )}
                 </div>
               ))

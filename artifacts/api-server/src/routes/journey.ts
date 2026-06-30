@@ -13,7 +13,7 @@
  * constraint on user_id so any string ID is accepted.
  */
 import { Router, type Request, type Response } from "express";
-import { db, lessonProgressTable } from "@workspace/db";
+import { db, lessonProgressTable, lessonActivityTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { generateTextWithFallback } from "./ai";
 
@@ -314,6 +314,12 @@ router.post("/journey/submit-result", async (req: Request, res: Response) => {
 
   await saveLesson(userId, lesson_id, newState);
 
+  // Append an activity-log row so streak calculation has a full per-day history.
+  // This runs fire-and-forget; a failure here must never block the response.
+  db.insert(lessonActivityTable)
+    .values({ userId, lessonId: lesson_id, score: numScore })
+    .catch((err: unknown) => console.error("[journey] lessonActivity insert error", err));
+
   res.json({ ok: true, next_review: due_date, interval_days: interval });
 });
 
@@ -409,12 +415,71 @@ Create lesson content tailored to this student. Return ONLY valid JSON with thes
   }
 });
 
+// ---------------------------------------------------------------------------
+// Mastery level — derived from SM-2 repetitions + ease factor
+// ---------------------------------------------------------------------------
+function computeMastery(repetitions: number, ease: number): "bronze" | "silver" | "gold" | null {
+  if (repetitions === 0) return null;
+  if (repetitions >= 5 && ease >= 2.5) return "gold";
+  if (repetitions >= 3) return "silver";
+  return "bronze";
+}
+
+// ---------------------------------------------------------------------------
+// Streak — consecutive calendar days ending today (or yesterday) on which the
+// user completed at least one lesson.
+//
+// Uses lesson_activity (append-only event log) — NOT lesson_progress.
+// lesson_progress is an upsert table (one row per lesson), so its updatedAt
+// only holds the most-recent study date for that lesson; prior days are lost.
+// lesson_activity appends a row on every submit-result call, giving a full
+// history of which calendar days had at least one study session.
+// ---------------------------------------------------------------------------
+async function computeStreak(userId: string): Promise<number> {
+  try {
+    const rows = await db
+      .select({ completedAt: lessonActivityTable.completedAt })
+      .from(lessonActivityTable)
+      .where(eq(lessonActivityTable.userId, userId));
+
+    if (rows.length === 0) return 0;
+
+    // Unique YYYY-MM-DD strings, sorted newest first
+    const dates = Array.from(
+      new Set(rows.map(r => r.completedAt.toISOString().slice(0, 10)))
+    ).sort().reverse();
+
+    const today = todayStr();
+    const yesterday = addDays(today, -1);
+
+    // Streak must touch today or yesterday — otherwise it's broken
+    if (dates[0] !== today && dates[0] !== yesterday) return 0;
+
+    let streak = 1;
+    let current = dates[0];
+    for (let i = 1; i < dates.length; i++) {
+      if (dates[i] === addDays(current, -1)) {
+        streak++;
+        current = dates[i];
+      } else {
+        break;
+      }
+    }
+    return streak;
+  } catch {
+    return 0;
+  }
+}
+
 // ------------------------------------------------------------------
 // GET /journey/progress?userId=<id>  — full state for all lessons
 // ------------------------------------------------------------------
 router.get("/journey/progress", async (req: Request, res: Response) => {
   const userId = (req.query["userId"] as string) || "guest";
-  const progress = await loadUserProgress(userId);
+  const [progress, streak] = await Promise.all([
+    loadUserProgress(userId),
+    computeStreak(userId),
+  ]);
   const today = todayStr();
 
   const items = LESSON_BANK.map(lesson => {
@@ -426,13 +491,17 @@ router.get("/journey/progress", async (req: Request, res: Response) => {
       due_date: state?.due_date ?? null,
       overdue: state ? state.due_date <= today : false,
       repetitions: state?.repetitions ?? 0,
+      mastery: state ? computeMastery(state.repetitions, state.ease) : null,
     };
   });
 
   const studied = items.filter(l => l.studied).length;
   const overdue = items.filter(l => l.overdue).length;
 
-  res.json({ lessons: items, summary: { total: LESSON_BANK.length, studied, overdue } });
+  res.json({
+    lessons: items,
+    summary: { total: LESSON_BANK.length, studied, overdue, streak },
+  });
 });
 
 export default router;
