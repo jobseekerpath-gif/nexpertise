@@ -179,7 +179,7 @@ export function useSpeechRecognition(language = "English") {
         recognition.onend = () => {
           setInterimTranscript("");
           if (shouldContinueRef.current) {
-            setTimeout(spawnRecognition, 200);
+            setTimeout(spawnRecognition, 120);
           } else {
             setStatus("idle");
           }

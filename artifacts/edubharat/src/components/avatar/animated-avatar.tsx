@@ -42,7 +42,7 @@ function FallbackSVG({
   const sz = sizeClasses[size] ?? sizeClasses.md;
 
   return (
-    <div className={`${sz.container} relative rounded-full overflow-hidden bg-gradient-to-b from-orange-50 via-white to-primary/10 border-2 border-primary/20`}>
+    <div className={`${sz.container} relative rounded-2xl overflow-hidden bg-gradient-to-b from-orange-50 via-white to-primary/10 border-2 border-primary/20`}>
       <svg viewBox="0 0 200 200" className="w-full h-full">
         <defs>
           <radialGradient id="skin-fb" cx="50%" cy="40%" r="60%">
@@ -104,30 +104,9 @@ export function AnimatedAvatar({
   return (
     <div className="flex flex-col items-center gap-1.5">
       <div className="relative">
-        {/* Speaking ring */}
-        {isSpeaking && (
-          <span
-            className="absolute inset-0 rounded-full border-4 border-primary animate-ping opacity-30 pointer-events-none"
-          />
-        )}
-        {/* Thinking ring */}
-        {isThinking && !isSpeaking && (
-          <span
-            className="absolute inset-0 rounded-full border-2 border-dashed border-primary/50 animate-spin pointer-events-none"
-            style={{ animationDuration: "3s" }}
-          />
-        )}
-
         {hasImage ? (
           <div
-            className={`${sz.container} rounded-full overflow-hidden shadow-lg relative`}
-            style={{
-              border: isSpeaking
-                ? "3px solid #F97316"
-                : isThinking
-                  ? "3px solid #94a3b8"
-                  : "3px solid #e2e8f0",
-            }}
+            className={`${sz.container} rounded-2xl overflow-hidden shadow-lg relative`}
           >
             <img
               src={imageSrc}

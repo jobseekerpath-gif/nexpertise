@@ -272,7 +272,7 @@ function InterviewAceContent() {
       speech.pause();
       setCoachSpeaking(true);
       void synth.speak(text, "English", () => {
-        speech.blockFor(1100);
+        speech.blockFor(800);
         setCoachSpeaking(false);
       }, opts);
     },
@@ -560,11 +560,12 @@ Next: <your follow-up question>`,
         return next;
       });
       clearAutoSubmitTimer();
-      // 900ms silence → auto-submit (faster than 1500ms for a more conversational feel)
+      // 800ms silence → auto-submit: snappy, human-paced turn-taking while
+      // still leaving room for short thinking pauses mid-answer.
       autoSubmitRef.current = setTimeout(() => {
         const latest = answerRef.current.trim();
         if (latest) void submitCurrentAnswer(latest);
-      }, 900);
+      }, 800);
     });
     return () => { clearAutoSubmitTimer(); };
   }, [phase, currentQ, autoListenEnabled, speech, isStreaming, synth.isSpeaking, isRecording, coachSpeaking, submitCurrentAnswer, clearAutoSubmitTimer]);

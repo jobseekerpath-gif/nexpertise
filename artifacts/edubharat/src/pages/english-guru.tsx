@@ -396,7 +396,7 @@ function EnglishGuruContent() {
             // toggleLiveChat resumes automatically once blockFor expires.
             // Do NOT call stop() or startContinuous() here; that creates a second
             // competing loop which cancels the first and kills subsequent turns.
-            speech.blockFor(1200);
+            speech.blockFor(800);
             setConvFlowState("user-speaking");
           } else {
             setConvFlowState("idle");
