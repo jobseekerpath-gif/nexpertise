@@ -468,6 +468,21 @@ function EnglishGuruContent() {
       <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
         {/* Sidebar */}
         <aside className="order-2 lg:order-1 space-y-4 lg:sticky lg:top-20 self-start">
+          {/* Student Name — placed at the very top of the sidebar */}
+          <Card className="border shadow-sm">
+            <CardContent className="pt-4 pb-3 space-y-3">
+              <label className="block space-y-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Student Name</span>
+                <Input
+                  value={profile.name}
+                  onChange={(e) => updateProfile({ name: e.target.value })}
+                  placeholder={user?.name ?? "Your name"}
+                  className="h-9 text-sm"
+                />
+              </label>
+            </CardContent>
+          </Card>
+
           {/* Desktop avatar card */}
           <div className="hidden lg:flex flex-col items-center py-6 px-4 bg-card rounded-2xl border shadow-sm">
             <AnimatedAvatar
@@ -524,20 +539,6 @@ function EnglishGuruContent() {
               <Users className="w-3.5 h-3.5" />
             </Button>
           </div>
-
-          <Card className="border shadow-sm">
-            <CardContent className="pt-4 pb-3 space-y-3">
-              <label className="block space-y-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Student Name</span>
-                <Input
-                  value={profile.name}
-                  onChange={(e) => updateProfile({ name: e.target.value })}
-                  placeholder={user?.name ?? "Your name"}
-                  className="h-9 text-sm"
-                />
-              </label>
-            </CardContent>
-          </Card>
         </aside>
 
         {/* Main content */}
