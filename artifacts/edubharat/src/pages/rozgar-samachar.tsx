@@ -644,7 +644,17 @@ function RozgarSamacharContent() {
   const [searchInput, setSearchInput] = useState(filters.keyword);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const { data: allJobs, isLoading: jobsLoading, error: jobsError, reload, source: jobsSource } = useRozgarJobs(studentProfile, filters.keyword);
+  const hasFilters = !!(
+    filters.keyword.trim() ||
+    filters.city.trim() ||
+    filters.workMode !== "all" ||
+    filters.sector !== "all" ||
+    filters.experience !== "all" ||
+    filters.employmentType !== "all" ||
+    (filters.salaryBand && filters.salaryBand !== "any")
+  );
+
+  const { data: allJobs, isLoading: jobsLoading, error: jobsError, reload, source: jobsSource } = useRozgarJobs(studentProfile, filters.keyword, hasFilters);
   const {
     data: livePulse,
     isLoading: livePulseLoading,
@@ -671,7 +681,16 @@ function RozgarSamacharContent() {
     }));
   }, [studentProfile]);
 
-  useEffect(() => { void loadLivePulse("top_jobs", profile); }, [loadLivePulse]);
+  useEffect(() => {
+    if (hasFilters) void loadLivePulse("top_jobs", profile);
+  }, [
+    hasFilters,
+    loadLivePulse,
+    profile.location,
+    profile.careerGoal,
+    profile.status,
+    profile.industry,
+  ]);
 
   // Sync filters to URL
   useEffect(() => {
@@ -1167,93 +1186,113 @@ function RozgarSamacharContent() {
                   )}
                 </div>
 
-                {/* Live pulse */}
-                <div className="rounded-2xl border bg-background p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                {/* Gate: prompt until filters are applied */}
+                {!hasFilters ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Search className="w-7 h-7 text-primary" />
+                    </div>
                     <div>
-                      <p className="text-xs uppercase tracking-wider text-muted-foreground font-bold">Live hiring pulse</p>
-                      <p className="text-sm text-secondary">Fresh items from job APIs and official career pages.</p>
+                      <p className="font-semibold text-secondary text-lg">Search to find jobs</p>
+                      <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+                        Enter a job title, skill, or company above — or open <strong>Filters</strong> to narrow by location, experience, or sector.
+                      </p>
                     </div>
-                    {livePulseLoading && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
-                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => loadLivePulse("top_jobs", profile)}>
-                      <Calendar className="w-3.5 h-3.5 mr-1" />Refresh
+                    <Button variant="outline" size="sm" onClick={() => setFilterOpen(true)}>
+                      Open Filters
                     </Button>
-                  </div>
-                  {livePulseError && <p className="text-xs text-muted-foreground">{livePulseError}</p>}
-                  {visibleLivePulse.length > 0 ? (
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {visibleLivePulse.map(item => (
-                        <JobCard
-                          key={makeJobId(item.link)}
-                          item={enrichJob(item)}
-                          onSave={handleSaveJob}
-                          onUnsave={handleUnsaveJob}
-                          onShare={handleShare}
-                          onHide={handleHide}
-                          saved={isJobSaved(makeJobId(item.link))}
-                          matchScore={computeMatchScore(enrichJob(item), studentProfile)}
-                        />
-                      ))}
-                    </div>
-                  ) : !livePulseLoading && !livePulseError ? (
-                    <p className="text-xs text-muted-foreground">No live items yet — try refreshing.</p>
-                  ) : null}
-                </div>
-
-                {/* Job results */}
-                {jobsLoading ? (
-                  <div className="text-center py-16">
-                    <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground">
-                      {filters.keyword ? `Searching live listings for "${filters.keyword}"…` : "Finding the best jobs for your profile…"}
-                    </p>
-                  </div>
-                ) : jobsError ? (
-                  <div className="text-center py-16">
-                    <p className="font-semibold text-secondary">Could not load jobs</p>
-                    <p className="text-sm text-muted-foreground mt-1">{jobsError}</p>
-                    <Button variant="outline" className="mt-4" onClick={() => reload()}>Try again</Button>
-                  </div>
-                ) : filteredJobs.length === 0 ? (
-                  <div className="text-center py-16">
-                    <Search className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-                    <p className="font-semibold text-secondary">No jobs match your filters</p>
-                    <p className="text-sm text-muted-foreground mt-1">Try clearing filters or widening your search.</p>
-                    <Button variant="outline" className="mt-4" onClick={clearFilters}>Clear filters</Button>
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <p className="text-sm text-muted-foreground">
-                        {filteredJobs.length === allJobs.length
-                          ? `${filteredJobs.length} job${filteredJobs.length !== 1 ? "s" : ""}`
-                          : `${filteredJobs.length} of ${allJobs.length} jobs`}
-                      </p>
-                      {jobsSource === "search" && (
-                        <Badge variant="outline" className="text-[10px] rounded-full text-emerald-700 border-emerald-200 bg-emerald-50">
-                          🟢 Live results
-                        </Badge>
-                      )}
-                      {jobsSource === "live" && (
-                        <Badge variant="outline" className="text-[10px] rounded-full text-blue-700 border-blue-200 bg-blue-50">
-                          📡 Live feed
-                        </Badge>
-                      )}
+                    {/* Live pulse */}
+                    <div className="rounded-2xl border bg-background p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground font-bold">Live hiring pulse</p>
+                          <p className="text-sm text-secondary">Fresh items from job APIs and official career pages.</p>
+                        </div>
+                        {livePulseLoading && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+                        <Button variant="ghost" size="sm" className="text-xs" onClick={() => loadLivePulse("top_jobs", profile)}>
+                          <Calendar className="w-3.5 h-3.5 mr-1" />Refresh
+                        </Button>
+                      </div>
+                      {livePulseError && <p className="text-xs text-muted-foreground">{livePulseError}</p>}
+                      {visibleLivePulse.length > 0 ? (
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                          {visibleLivePulse.map(item => (
+                            <JobCard
+                              key={makeJobId(item.link)}
+                              item={enrichJob(item)}
+                              onSave={handleSaveJob}
+                              onUnsave={handleUnsaveJob}
+                              onShare={handleShare}
+                              onHide={handleHide}
+                              saved={isJobSaved(makeJobId(item.link))}
+                              matchScore={computeMatchScore(enrichJob(item), studentProfile)}
+                            />
+                          ))}
+                        </div>
+                      ) : !livePulseLoading && !livePulseError ? (
+                        <p className="text-xs text-muted-foreground">No live items yet — try refreshing.</p>
+                      ) : null}
                     </div>
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                      {filteredJobs.map(job => (
-                        <JobCard
-                          key={job.jobId}
-                          item={job}
-                          onSave={handleSaveJob}
-                          onUnsave={handleUnsaveJob}
-                          onShare={handleShare}
-                          onHide={handleHide}
-                          saved={isJobSaved(job.jobId)}
-                          matchScore={job.matchScore}
-                        />
-                      ))}
-                    </div>
+
+                    {/* Job results */}
+                    {jobsLoading ? (
+                      <div className="text-center py-16">
+                        <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-3" />
+                        <p className="text-sm text-muted-foreground">
+                          {filters.keyword ? `Searching live listings for "${filters.keyword}"…` : "Finding jobs for your filters…"}
+                        </p>
+                      </div>
+                    ) : jobsError ? (
+                      <div className="text-center py-16">
+                        <p className="font-semibold text-secondary">Could not load jobs</p>
+                        <p className="text-sm text-muted-foreground mt-1">{jobsError}</p>
+                        <Button variant="outline" className="mt-4" onClick={() => reload()}>Try again</Button>
+                      </div>
+                    ) : filteredJobs.length === 0 ? (
+                      <div className="text-center py-16">
+                        <Search className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                        <p className="font-semibold text-secondary">No jobs match your filters</p>
+                        <p className="text-sm text-muted-foreground mt-1">Try clearing filters or widening your search.</p>
+                        <Button variant="outline" className="mt-4" onClick={clearFilters}>Clear filters</Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <p className="text-sm text-muted-foreground">
+                            {filteredJobs.length === allJobs.length
+                              ? `${filteredJobs.length} job${filteredJobs.length !== 1 ? "s" : ""}`
+                              : `${filteredJobs.length} of ${allJobs.length} jobs`}
+                          </p>
+                          {jobsSource === "search" && (
+                            <Badge variant="outline" className="text-[10px] rounded-full text-emerald-700 border-emerald-200 bg-emerald-50">
+                              🟢 Live results
+                            </Badge>
+                          )}
+                          {jobsSource === "live" && (
+                            <Badge variant="outline" className="text-[10px] rounded-full text-blue-700 border-blue-200 bg-blue-50">
+                              📡 Live feed
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          {filteredJobs.map(job => (
+                            <JobCard
+                              key={job.jobId}
+                              item={job}
+                              onSave={handleSaveJob}
+                              onUnsave={handleUnsaveJob}
+                              onShare={handleShare}
+                              onHide={handleHide}
+                              saved={isJobSaved(job.jobId)}
+                              matchScore={job.matchScore}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>

@@ -108,7 +108,7 @@ async function fetchFromLive(profile: StudentProfile): Promise<RozgarLiveItem[]>
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useRozgarJobs(profile: StudentProfile, keyword = "") {
+export function useRozgarJobs(profile: StudentProfile, keyword = "", enabled = true) {
   const [state, setState] = useState<JobFetchState>({
     data: [],
     isLoading: false,
@@ -181,9 +181,14 @@ export function useRozgarJobs(profile: StudentProfile, keyword = "") {
   ]);
 
   useEffect(() => {
+    if (!enabled) {
+      abortRef.current?.abort();
+      setState({ data: [], isLoading: false, error: null, source: null });
+      return;
+    }
     void load();
     return () => { abortRef.current?.abort(); };
-  }, [load]);
+  }, [load, enabled]);
 
   return { data: state.data, isLoading: state.isLoading, error: state.error, source: state.source, reload: load };
 }
