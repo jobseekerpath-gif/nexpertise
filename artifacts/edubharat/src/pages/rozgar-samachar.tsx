@@ -378,21 +378,23 @@ function SectionCard({
   const visibleLiveItems = (liveData?.items ?? []).filter(item => !hiddenJobIds.has(makeJobId(item.link)));
 
   return (
-    <Card className="overflow-hidden border shadow-sm rounded-2xl">
+    <div className={`space-y-2 ${expanded ? "col-span-full" : ""}`}>
       <button
-        className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/60 transition-colors"
+        className={`w-full flex items-center gap-2 p-3 rounded-xl border text-left transition-colors ${
+          expanded
+            ? "bg-primary/10 border-primary/40 text-primary"
+            : "bg-card hover:bg-muted/60 border-border"
+        }`}
         onClick={load}
         data-testid={`section-${section.id}`}
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="text-2xl shrink-0">{section.emoji}</span>
-          <span className="font-semibold text-secondary truncate">{section.title}</span>
-          {isStreaming && <Loader2 className="w-4 h-4 animate-spin text-primary ml-2 shrink-0" />}
-        </div>
-        {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
+        <span className="text-xl shrink-0">{section.emoji}</span>
+        <span className="font-semibold text-secondary text-xs leading-tight line-clamp-2">{section.title}</span>
+        {isStreaming && <Loader2 className="w-3 h-3 animate-spin text-primary ml-auto shrink-0" />}
       </button>
       {expanded && (VACANCY_SECTIONS.has(section.id) ? (liveLoading || visibleLiveItems.length > 0 || Boolean(liveError)) : (text || isStreaming || liveLoading || visibleLiveItems.length > 0 || Boolean(liveError))) && (
-        <CardContent className="px-5 pb-5 pt-0 border-t bg-muted/20">
+        <Card className="overflow-hidden border shadow-sm rounded-2xl">
+          <CardContent className="p-5 bg-muted/20">
           {(liveLoading || visibleLiveItems.length > 0 || liveError) && (
             <div className="mb-4 rounded-2xl border bg-background p-4">
               <div className="flex items-center justify-between gap-3 mb-3">
@@ -436,8 +438,9 @@ function SectionCard({
             <div className="text-sm text-secondary leading-relaxed whitespace-pre-wrap">{text}</div>
           )}
         </CardContent>
+      </Card>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -1340,7 +1343,7 @@ function RozgarSamacharContent() {
                     </div>
                   </div>
                 )}
-                <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 items-start">
                   {SECTIONS.filter(s => activeFilterTab === "all" || SECTION_CATEGORIES[activeFilterTab].includes(s.id)).map(section => (
                     <SectionCard
                       key={section.id}
