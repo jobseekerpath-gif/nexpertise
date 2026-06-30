@@ -483,8 +483,8 @@ function EnglishGuruContent() {
             )}
           </div>
 
-          {/* Mobile avatar bar */}
-          <div className="flex lg:hidden items-center gap-3 p-3 bg-card rounded-xl border shadow-sm">
+          {/* Mobile avatar bar — hidden; portrait is now at the top of main content */}
+          <div className="hidden items-center gap-3 p-3 bg-card rounded-xl border shadow-sm">
             <AnimatedAvatar
               name={tutor.name}
               subtitle={tutor.role}
@@ -522,6 +522,40 @@ function EnglishGuruContent() {
 
         {/* Main content */}
         <main className="order-1 lg:order-2 min-w-0">
+          {/* ── MOBILE TUTOR HERO — prominent portrait at top of page ── */}
+          <div className="lg:hidden flex flex-col items-center py-5 px-4 mb-4 bg-card rounded-2xl border shadow-sm">
+            <AnimatedAvatar
+              name={tutor.name}
+              subtitle={tutor.role}
+              isSpeaking={synth.isSpeaking}
+              isThinking={isStreaming}
+              gender={tutor.gender}
+              size="xl"
+              imageSrc={tutor.imageSrc}
+            />
+            <p className="font-bold text-lg text-secondary mt-3">{tutor.name}</p>
+            <p className="text-sm text-primary">{tutor.role}</p>
+            <p className="text-xs text-muted-foreground text-center mt-1.5 italic leading-snug px-4">"{tutor.intro}"</p>
+            <div className="mt-2 flex flex-wrap justify-center gap-1">
+              {tutor.languages.slice(0, 3).map(l => (
+                <span key={l} className="text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground">{l}</span>
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3 font-semibold rounded-full text-xs"
+              onClick={() => setShowTutorPicker(true)}
+            >
+              <Users className="w-3.5 h-3.5 mr-1.5" />Change Teacher
+            </Button>
+            {liveChat && (
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-green-600 font-semibold animate-pulse">
+                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Live Chat ON
+              </div>
+            )}
+          </div>
+
           {/* ── STICKY PROFILE BAR — always visible at top without scrolling ── */}
           <div className="sticky top-16 z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2 mb-5 bg-background/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-secondary truncate">{profile.name || user?.name || "Guest"}</span>
@@ -557,7 +591,7 @@ function EnglishGuruContent() {
               <MessageCircle className="w-4 h-4 text-green-600" />
               Live Conversation with {tutor.name}
             </h2>
-            <Card className={`flex flex-col overflow-hidden border-2 transition-all ${liveChat ? "border-green-400 bg-green-50/30 h-[62vh]" : "border-green-200/70 bg-green-50/10"}`}>
+            <Card className={`flex flex-col overflow-hidden border-2 transition-all h-[72vh] ${liveChat ? "border-green-400 bg-green-50/30" : "border-green-200/70 bg-green-50/10"}`}>
             <CardContent className="pt-4 pb-4 space-y-3 flex min-h-0 flex-1 flex-col">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
