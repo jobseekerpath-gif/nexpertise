@@ -122,37 +122,115 @@ async function loadUserProgress(userId: string): Promise<UserProgress> {
   }
 }
 
-async function saveLesson(
-  userId: string,
-  lessonId: string,
-  state: LessonState,
-): Promise<void> {
-  try {
-    await db
-      .insert(lessonProgressTable)
-      .values({
-        userId,
-        lessonId,
+// ---------------------------------------------------------------------------
+// In-memory retry buffer for failed DB writes.
+//
+// Keyed by `userId|lessonId` (Map) so only the LATEST state is retained per
+// lesson — a stale queued entry can never overwrite a newer successful write.
+//
+// On a successful direct write, the key is removed from the map (dedup).
+// On overflow (> RETRY_BUFFER_MAX unique keys), the oldest inserted key is
+// evicted with a warning.  A background loop retries every 30 seconds.
+// ---------------------------------------------------------------------------
+const RETRY_BUFFER_MAX = 20;
+const RETRY_INTERVAL_MS = 30_000;
+
+/** Map<`userId|lessonId`, state> — insertion-order preserved by JS Map */
+const retryBuffer = new Map<string, LessonState>();
+
+function retryKey(userId: string, lessonId: string): string {
+  return `${userId}|${lessonId}`;
+}
+
+function enqueueRetry(userId: string, lessonId: string, state: LessonState): void {
+  const key = retryKey(userId, lessonId);
+  // If the key already exists, updating it moves it to the tail in insertion
+  // order, so delete-then-set gives us accurate LRU eviction of *other* keys.
+  retryBuffer.delete(key);
+
+  if (retryBuffer.size >= RETRY_BUFFER_MAX) {
+    // Evict the oldest key (first in insertion order)
+    const oldestKey = retryBuffer.keys().next().value;
+    if (oldestKey !== undefined) {
+      retryBuffer.delete(oldestKey);
+      const [evictedUser, evictedLesson] = oldestKey.split("|");
+      console.warn(
+        `[journey] retry buffer full (${RETRY_BUFFER_MAX}); dropped oldest entry userId=${evictedUser} lessonId=${evictedLesson}`,
+      );
+    }
+  }
+
+  retryBuffer.set(key, state);
+}
+
+async function writeLessonToDB(userId: string, lessonId: string, state: LessonState): Promise<void> {
+  await db
+    .insert(lessonProgressTable)
+    .values({
+      userId,
+      lessonId,
+      ease: String(state.ease),
+      interval: state.interval,
+      repetitions: state.repetitions,
+      dueDate: state.due_date,
+      lastScore: state.last_score ?? undefined,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: [lessonProgressTable.userId, lessonProgressTable.lessonId],
+      set: {
         ease: String(state.ease),
         interval: state.interval,
         repetitions: state.repetitions,
         dueDate: state.due_date,
         lastScore: state.last_score ?? undefined,
         updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [lessonProgressTable.userId, lessonProgressTable.lessonId],
-        set: {
-          ease: String(state.ease),
-          interval: state.interval,
-          repetitions: state.repetitions,
-          dueDate: state.due_date,
-          lastScore: state.last_score ?? undefined,
-          updatedAt: new Date(),
-        },
-      });
-  } catch {
-    // Swallow — progress will be lost for this request only, no crash
+      },
+    });
+}
+
+async function flushRetryBuffer(): Promise<void> {
+  if (retryBuffer.size === 0) return;
+  // Snapshot the keys so new failures added during this flush don't extend it
+  const keys = [...retryBuffer.keys()];
+  for (const key of keys) {
+    const state = retryBuffer.get(key);
+    if (!state) continue; // evicted while we were iterating
+    const [userId, lessonId] = key.split("|") as [string, string];
+    try {
+      await writeLessonToDB(userId, lessonId, state);
+      // Only delete if the map still holds the exact same object we just wrote.
+      // If a newer state was enqueued during the await (event-loop turn), the
+      // reference will differ — leave the newer entry intact.
+      if (retryBuffer.get(key) === state) {
+        retryBuffer.delete(key);
+      }
+    } catch {
+      // Still failing — leave it in the map (already holds the latest state)
+    }
+  }
+}
+
+// Start background retry loop (fire-and-forget; never crashes the server)
+setInterval(() => {
+  flushRetryBuffer().catch((err: unknown) =>
+    console.error("[journey] retry flush error", err),
+  );
+}, RETRY_INTERVAL_MS);
+
+async function saveLesson(
+  userId: string,
+  lessonId: string,
+  state: LessonState,
+): Promise<void> {
+  try {
+    await writeLessonToDB(userId, lessonId, state);
+    // On success, clear any queued entry for this lesson — it would be stale now
+    retryBuffer.delete(retryKey(userId, lessonId));
+  } catch (err) {
+    // DB unavailable — queue for retry so progress is not lost
+    console.warn("[journey] saveLesson failed, queuing for retry", { userId, lessonId, err });
+    enqueueRetry(userId, lessonId, state);
   }
 }
 
