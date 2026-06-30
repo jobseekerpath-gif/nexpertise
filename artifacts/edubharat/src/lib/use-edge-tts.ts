@@ -90,7 +90,7 @@ export function useEdgeTTS() {
 
         // Edge voices are already at natural speed; small adjustment allowed
         const rate = options.rate;
-        if (rate && rate !== 1.0) audio.playbackRate = Math.max(0.8, Math.min(rate, 1.2));
+        if (rate && rate !== 1.0) audio.playbackRate = Math.max(0.8, Math.min(rate, 2.0));
 
         setIsSpeaking(true);
 

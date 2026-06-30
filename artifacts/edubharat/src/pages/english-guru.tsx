@@ -401,7 +401,7 @@ function EnglishGuruContent() {
           } else {
             setConvFlowState("idle");
           }
-        }, { rate: 1.15 });
+        }, { rate: 1.2 });
       } else {
         // AI gave no response — release the pause block so the existing loop
         // resumes listening. No new startContinuous needed.
@@ -516,26 +516,6 @@ function EnglishGuruContent() {
                   className="h-9 text-sm"
                 />
               </label>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Native Language</span>
-                <Select value={uiLang} onValueChange={(value) => { setUiLang(value); updateProfile({ preferredLanguage: value }); }}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="English">🇬🇧 English</SelectItem>
-                    <SelectItem value="Hindi">🇮🇳 Hindi</SelectItem>
-                    {INDIAN_LANGUAGES.filter(l => l !== "Hindi").map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </label>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">My Level</span>
-                <Select value={level} onValueChange={setLevel}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {["Beginner", "Intermediate", "Advanced"].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </label>
             </CardContent>
           </Card>
         </aside>
@@ -588,19 +568,6 @@ function EnglishGuruContent() {
                     <p className="text-sm font-bold text-secondary">Live Conversation</p>
                     <p className="text-xs text-muted-foreground">Speak in {uiLang}, AI responds naturally</p>
                   </div>
-                  {/* Inline teacher/voice selector — compact scrollable dropdown */}
-                  <Select value={tutorId} onValueChange={id => { handleSelectTutor(id); }}>
-                    <SelectTrigger className="h-8 text-xs max-w-[140px] rounded-full border-green-300 bg-green-50 shrink-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TUTORS.map(t => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
                 <Button
                   onClick={toggleLiveChat}

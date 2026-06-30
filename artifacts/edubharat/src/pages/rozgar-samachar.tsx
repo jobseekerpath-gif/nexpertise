@@ -819,14 +819,36 @@ function RozgarSamacharContent() {
   return (
     <div className="rozgar-theme min-h-full overflow-y-auto container mx-auto px-4 py-4 max-w-[1400px] bg-gradient-to-br from-teal-50/50 via-white to-indigo-50/50">
       <div className="flex min-h-full flex-col gap-4">
-        {/* ── Sticky profile bar ── */}
+        {/* ── Sticky profile + filter bar ── */}
         <div className="sticky top-16 z-20 -mx-4 px-4 py-2 bg-white/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-semibold text-secondary truncate">{profile.name || "Guest"}</span>
-          <span className="text-muted-foreground/40">•</span>
-          <span className="text-xs text-muted-foreground">{profile.location}</span>
-          <span className="text-muted-foreground/40">•</span>
-          <span className="text-xs text-muted-foreground">{profile.careerGoal}</span>
-          <Button variant="ghost" size="sm" className="h-6 text-xs px-2 ml-auto rounded-full" onClick={() => setShowProfile(!showProfile)}>
+          <span className="text-sm font-semibold text-secondary truncate shrink-0">{profile.name || "Guest"}</span>
+          <span className="text-muted-foreground/40 shrink-0">•</span>
+          <div className="relative shrink-0">
+            <MapPin className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              placeholder="City"
+              value={filters.city}
+              onChange={e => updateFilters({ city: e.target.value })}
+              className="h-7 text-xs pl-6 w-[100px] rounded-full border border-dashed border-input bg-background px-3 focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+          <Select value={filters.sector} onValueChange={v => updateFilters({ sector: v as FilterState["sector"] })}>
+            <SelectTrigger className="h-7 text-xs w-[110px] rounded-full border-dashed shrink-0"><SelectValue placeholder="Sector" /></SelectTrigger>
+            <SelectContent>{SECTORS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={filters.experience} onValueChange={v => updateFilters({ experience: v as FilterState["experience"] })}>
+            <SelectTrigger className="h-7 text-xs w-[110px] rounded-full border-dashed shrink-0"><SelectValue placeholder="Experience" /></SelectTrigger>
+            <SelectContent>{EXPERIENCES.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={filters.workMode} onValueChange={v => updateFilters({ workMode: v as FilterState["workMode"] })}>
+            <SelectTrigger className="h-7 text-xs w-[110px] rounded-full border-dashed shrink-0"><SelectValue placeholder="Work Mode" /></SelectTrigger>
+            <SelectContent>{WORK_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+          </Select>
+          {activeCount > 0 && (
+            <Button variant="ghost" size="sm" className="h-6 text-xs px-2 rounded-full shrink-0" onClick={clearFilters}>Clear</Button>
+          )}
+          <Button variant="ghost" size="sm" className="h-6 text-xs px-2 ml-auto rounded-full shrink-0" onClick={() => setShowProfile(!showProfile)}>
             <Settings className="w-3 h-3 mr-1" />Profile
           </Button>
         </div>
@@ -945,8 +967,6 @@ function RozgarSamacharContent() {
               </Card>
             )}
 
-            {filterSidebar}
-
             <div className="rounded-2xl border bg-muted/30 p-4 shadow-sm">
               <p className="text-xs uppercase tracking-wider text-muted-foreground font-bold">Today's brief</p>
               <p className="mt-1 text-sm text-secondary leading-relaxed">
@@ -1032,7 +1052,6 @@ function RozgarSamacharContent() {
                         className="pl-9 h-11 text-sm rounded-xl"
                       />
                     </div>
-                    {filterSheet}
                     <Select value={filters.sort} onValueChange={v => updateFilters({ sort: v as FilterState["sort"] })}>
                       <SelectTrigger className="h-11 text-sm rounded-xl w-full sm:w-[180px]">
                         <span className="text-muted-foreground mr-1">Sort:</span>

@@ -445,7 +445,7 @@ In 2-3 natural spoken sentences: greet them by first name (${candidateName.split
     // during the 300ms window between phase="interview" and speakCoach start.
     const pitchVariation = coach.gender === "male" ? 0.88 : 1.08;
     setCoachSpeaking(true);
-    setTimeout(() => speakCoach(opening, { voiceGender: coach.gender, pitch: pitchVariation, rate: 0.90 }), 300);
+    setTimeout(() => speakCoach(opening, { voiceGender: coach.gender, pitch: pitchVariation, rate: 1.1 }), 300);
   }, [typeMeta, experience, duration, coach, stream, resetStream, speakCoach, buildProfileSummary, profile.name]);
 
   const toggleRecording = useCallback(() => {
@@ -479,7 +479,7 @@ In 2-3 natural spoken sentences: greet them by first name (${candidateName.split
     ));
 
     if (isFinalQuestion) {
-      speakCoach("Thank you for that. It was great speaking with you — we'll wrap up here and put together your report.", { voiceGender: coach.gender, rate: 0.90 });
+      speakCoach("Thank you for that. It was great speaking with you — we'll wrap up here and put together your report.", { voiceGender: coach.gender, rate: 1.1 });
       setTimeout(() => setPhase("report"), 1500);
       return;
     }
@@ -511,9 +511,9 @@ Next: <your follow-up question>`,
       setAnswer("");
       setIsRecording(false);
       const pitchVariation = coach.gender === "male" ? 0.88 + Math.random() * 0.06 : 1.06 + Math.random() * 0.06;
-      speakCoach(`${acknowledgment} ${nextQuestion}`, { voiceGender: coach.gender, pitch: pitchVariation, rate: 0.90 });
+      speakCoach(`${acknowledgment} ${nextQuestion}`, { voiceGender: coach.gender, pitch: pitchVariation, rate: 1.1 });
     } else {
-      speakCoach("Thank you. That was a great session. Generating your full report now.", { voiceGender: coach.gender, rate: 0.90 });
+      speakCoach("Thank you. That was a great session. Generating your full report now.", { voiceGender: coach.gender, rate: 1.1 });
       setTimeout(() => setPhase("report"), 1200);
     }
   }, [currentQ, currentIdx, experience, duration, elapsedSeconds, coach, stream, resetStream, synth, typeMeta, buildProfileSummary, buildTranscript, clearAutoSubmitTimer, speech]);
@@ -533,7 +533,7 @@ Next: <your follow-up question>`,
     resetStream();
     // Guard against the 300ms window before speakCoach fires
     setCoachSpeaking(true);
-    setTimeout(() => speakCoach(questions[nextIdx]!.question, { voiceGender: coach.gender, rate: 0.90 }), 300);
+    setTimeout(() => speakCoach(questions[nextIdx]!.question, { voiceGender: coach.gender, rate: 1.1 }), 300);
   }, [currentIdx, questions, resetStream, speakCoach, clearAutoSubmitTimer]);
 
   const endEarly = useCallback(() => {
@@ -779,6 +779,14 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
               {EXPERIENCE_LEVELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={String(duration)} onValueChange={v => setDuration(Number(v))}>
+            <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DURATIONS.map(d => <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
         <div className="text-center mb-8 pt-2">
           <h1 className="text-4xl font-display font-bold text-secondary mb-2">Interview Ace</h1>
@@ -831,47 +839,11 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
 
         <Card className="max-w-lg mx-auto shadow-xl border-none">
           <CardHeader>
-            <CardTitle>Configure Your Session</CardTitle>
-            <CardDescription>Duration-based · Adaptive questions · Detailed AI report</CardDescription>
+            <CardTitle>Ready to begin?</CardTitle>
+            <CardDescription>
+              {typeMeta.icon} {typeMeta.label} · {experience} · {duration} min with {coach.name}
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <label className="block space-y-2">
-              <span className="text-sm font-semibold">Interview Type</span>
-              <Select value={type} onValueChange={setType}>
-                <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
-                <SelectContent>{INTERVIEW_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.icon} {t.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </label>
-            <label className="block space-y-2">
-              <span className="text-sm font-semibold">Experience Level</span>
-              <Select value={experience} onValueChange={setExperience}>
-                <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
-                <SelectContent>{EXPERIENCE_LEVELS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
-              </Select>
-            </label>
-            <label className="block space-y-2">
-              <span className="text-sm font-semibold">Interview Duration</span>
-              <div className="grid grid-cols-3 gap-2">
-                {DURATIONS.map(d => (
-                  <button
-                    key={d.value}
-                    onClick={() => setDuration(d.value)}
-                    className={`rounded-xl border-2 p-3 text-left transition-all ${
-                      duration === d.value
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-card hover:border-primary/40"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 text-sm font-bold text-secondary">
-                      <Clock className="w-4 h-4" />
-                      {d.label}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">{d.value} minutes</p>
-                  </button>
-                ))}
-              </div>
-            </label>
-          </CardContent>
           <CardFooter>
             <Button className="w-full h-12 font-bold text-base shadow-md shadow-primary/20" onClick={startSession} disabled={isStreaming}>
               {isStreaming
@@ -1099,7 +1071,7 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
               <p className="text-white text-sm sm:text-base font-semibold leading-snug">{currentQ.question}</p>
               <button
                 className="mt-2 text-primary/70 hover:text-primary text-xs flex items-center gap-1 mx-auto"
-                onClick={() => speakCoach(currentQ.question, { voiceGender: coach.gender, pitch: coach.gender === "male" ? 0.88 : 1.08, rate: 0.90 })}
+                onClick={() => speakCoach(currentQ.question, { voiceGender: coach.gender, pitch: coach.gender === "male" ? 0.88 : 1.08, rate: 1.1 })}
               >
                 <Volume2 className="w-3 h-3" /> Repeat question
               </button>
