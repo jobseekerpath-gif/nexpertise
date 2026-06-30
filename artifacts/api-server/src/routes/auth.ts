@@ -16,23 +16,59 @@ declare module "express-session" {
 
 const router: IRouter = Router();
 
-function getCallbackURL() {
-  const domains = process.env["REPLIT_DOMAINS"]?.split(",") ?? [];
-  const prodDomain = domains.find((d) => d.endsWith(".replit.app")) ?? domains[0];
+/**
+ * Determine the Google OAuth callback URL.
+ *
+ * Priority order:
+ *  1. GOOGLE_CALLBACK_URL env var — explicit override, most stable for production.
+ *  2. REPLIT_DOMAINS — prefer *.replit.app (deployment), then accept *.replit.dev
+ *     (dev preview), then any first domain.
+ *  3. localhost fallback for pure local dev.
+ */
+function getCallbackURL(): string {
+  // Explicit override always wins
+  const explicit = process.env["GOOGLE_CALLBACK_URL"];
+  if (explicit) return explicit;
+
+  const raw = process.env["REPLIT_DOMAINS"] ?? "";
+  const domains = raw.split(",").map((d) => d.trim()).filter(Boolean);
+
+  const prodDomain =
+    domains.find((d) => d.endsWith(".replit.app")) ??
+    domains.find((d) => d.endsWith(".replit.dev")) ??
+    domains[0];
+
   return prodDomain
     ? `https://${prodDomain}/api/auth/google/callback`
     : `http://localhost:${process.env["PORT"] ?? 8080}/api/auth/google/callback`;
 }
 
+// Log the callback URL once at startup so it's easy to read in workflow logs.
+const _startupCallbackURL = getCallbackURL();
+console.log(`[auth] Google OAuth callback URL: ${_startupCallbackURL}`);
+console.log(`[auth] To fix redirect_uri_mismatch, add this URL to Google Cloud Console`);
+console.log(`[auth]   → APIs & Services → Credentials → OAuth 2.0 Client → Authorized redirect URIs`);
+console.log(`[auth] Or set the GOOGLE_CALLBACK_URL secret to lock it to a stable URL.`);
+
 function setupPassport() {
   // Support both underscore and space variants of secret names
   const clientID = process.env["GOOGLE_CLIENT_ID"] ?? process.env["GOOGLE CLIENT ID"];
   const clientSecret = process.env["GOOGLE_CLIENT_SECRET"] ?? process.env["GOOGLE CLIENT SECRET"];
-  if (!clientID || !clientSecret) return;
+  if (!clientID || !clientSecret) {
+    console.warn("[auth] GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set — Google login disabled");
+    return;
+  }
 
   passport.use(
     new GoogleStrategy(
-      { clientID, clientSecret, callbackURL: getCallbackURL() },
+      {
+        clientID,
+        clientSecret,
+        // callbackURL is set here as a default but we ALSO pass it dynamically
+        // in the authenticate() middleware calls below so it always reflects the
+        // current environment (useful when the domain changes).
+        callbackURL: getCallbackURL(),
+      },
       async (_accessToken, _refreshToken, profile, done) => {
         try {
           const email = profile.emails?.[0]?.value;
@@ -94,11 +130,48 @@ function setupPassport() {
 
 setupPassport();
 
-router.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
+/**
+ * GET /api/auth/config
+ * Returns public configuration info for the login page:
+ * - Whether Google OAuth is configured
+ * - The exact callback URL that must be registered in Google Console
+ * - Whether email (Resend) is configured for OTP sending
+ */
+router.get("/auth/config", (_req, res) => {
+  const hasGoogleId = !!(process.env["GOOGLE_CLIENT_ID"] ?? process.env["GOOGLE CLIENT ID"]);
+  const hasGoogleSecret = !!(process.env["GOOGLE_CLIENT_SECRET"] ?? process.env["GOOGLE CLIENT SECRET"]);
+  const hasResend = !!process.env["RESEND_API_KEY"];
+
+  res.json({
+    googleConfigured: hasGoogleId && hasGoogleSecret,
+    googleCallbackUrl: getCallbackURL(),
+    otpEmailConfigured: hasResend,
+    // In dev mode, OTP code is returned in the /auth/otp/send response
+    otpDevMode: !hasResend,
+  });
+});
+
+// Pass callbackURL dynamically so both dev-preview and production domains work
+// without requiring a server restart when REPLIT_DOMAINS changes.
+router.get("/auth/google", (req, res, next) => {
+  const callbackURL = getCallbackURL();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+    callbackURL,
+  } as any)(req, res, next);
+});
 
 router.get(
   "/auth/google/callback",
-  passport.authenticate("google", { failureRedirect: "/login?error=google_failed" }),
+  (req, res, next) => {
+    const callbackURL = getCallbackURL();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    passport.authenticate("google", {
+      failureRedirect: "/login?error=google_failed",
+      callbackURL,
+    } as any)(req, res, next);
+  },
   (req, res) => {
     if (req.user) {
       const u = req.user as { id: number; email: string; name?: string };
@@ -122,6 +195,13 @@ router.post("/auth/otp/send", async (req, res) => {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
   try {
+    // Invalidate any existing unused OTPs for this email before issuing a new one
+    // so only the most-recently issued code is ever valid.
+    await db
+      .update(otpsTable)
+      .set({ used: true })
+      .where(and(eq(otpsTable.email, email), eq(otpsTable.used, false)));
+
     await db.insert(otpsTable).values({ email, code: hashed, expiresAt, used: false });
 
     const resendKey = process.env["RESEND_API_KEY"];
@@ -138,12 +218,14 @@ router.post("/auth/otp/send", async (req, res) => {
           <p style="color:#64748b">This code expires in 10 minutes. Do not share it with anyone.</p>
         </div>`,
       });
+      res.json({ success: true });
+    } else {
+      // Dev mode: return the code in the response (no email configured)
+      res.json({ success: true, dev: code });
     }
-
-    res.json({ success: true, dev: !resendKey ? code : undefined });
   } catch (err) {
     req.log.error({ err }, "OTP send error");
-    res.status(500).json({ error: "Failed to send OTP" });
+    res.status(500).json({ error: "Failed to send OTP. Please try again." });
   }
 });
 
@@ -158,9 +240,11 @@ router.post("/auth/otp/verify", async (req, res) => {
   const now = new Date();
 
   try {
-    const otps = await db
-      .select()
-      .from(otpsTable)
+    // Atomic: mark the OTP as used in a single UPDATE…RETURNING so concurrent
+    // verify requests can't both succeed against the same code.
+    const consumed = await db
+      .update(otpsTable)
+      .set({ used: true })
       .where(
         and(
           eq(otpsTable.email, email),
@@ -169,14 +253,12 @@ router.post("/auth/otp/verify", async (req, res) => {
           gt(otpsTable.expiresAt, now)
         )
       )
-      .limit(1);
+      .returning();
 
-    if (otps.length === 0) {
-      res.status(400).json({ error: "Invalid or expired code" });
+    if (consumed.length === 0) {
+      res.status(400).json({ error: "Invalid or expired code. Please request a new OTP." });
       return;
     }
-
-    await db.update(otpsTable).set({ used: true }).where(eq(otpsTable.id, otps[0].id));
 
     let user = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
     if (user.length === 0) {
@@ -191,7 +273,7 @@ router.post("/auth/otp/verify", async (req, res) => {
     res.json({ success: true, user: { id: user[0].id, email: user[0].email, name: user[0].name } });
   } catch (err) {
     req.log.error({ err }, "OTP verify error");
-    res.status(500).json({ error: "Verification failed" });
+    res.status(500).json({ error: "Verification failed. Please try again." });
   }
 });
 

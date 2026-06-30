@@ -67,12 +67,12 @@ export function OverviewTab() {
     const interviewReadiness = interviews.averageScore;
 
     return [
-      { subject: "Grammar", A: Math.min(100, Math.max(0, grammar || 50)), fullMark: 100 },
-      { subject: "Vocabulary", A: Math.min(100, Math.max(0, vocabulary || 50)), fullMark: 100 },
-      { subject: "Pronunciation", A: Math.min(100, Math.max(0, pronunciation || 50)), fullMark: 100 },
-      { subject: "Confidence", A: Math.min(100, Math.max(0, confidence || 50)), fullMark: 100 },
-      { subject: "Listening", A: Math.min(100, Math.max(0, listening || 50)), fullMark: 100 },
-      { subject: "Interview Readiness", A: Math.min(100, Math.max(0, interviewReadiness || 50)), fullMark: 100 },
+      { subject: "Grammar", A: Math.min(100, Math.max(0, grammar || 0)), fullMark: 100 },
+      { subject: "Vocabulary", A: Math.min(100, Math.max(0, vocabulary || 0)), fullMark: 100 },
+      { subject: "Pronunciation", A: Math.min(100, Math.max(0, pronunciation || 0)), fullMark: 100 },
+      { subject: "Confidence", A: Math.min(100, Math.max(0, confidence || 0)), fullMark: 100 },
+      { subject: "Listening", A: Math.min(100, Math.max(0, listening || 0)), fullMark: 100 },
+      { subject: "Interview Readiness", A: Math.min(100, Math.max(0, interviewReadiness || 0)), fullMark: 100 },
     ];
   }, [learning, interviews]);
 

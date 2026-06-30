@@ -756,8 +756,31 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
   // ── Setup ──────────────────────────────────────────────────────────────────
   if (phase === "setup") {
     return (
-      <div className="min-h-full overflow-y-auto container mx-auto px-4 py-8 max-w-4xl">
-        <div className="text-center mb-8">
+      <div className="min-h-full overflow-y-auto container mx-auto px-4 max-w-4xl">
+        {/* ── STICKY PROFILE BAR — visible at top without scrolling ── */}
+        <div className="sticky top-16 z-20 -mx-4 px-4 py-2.5 bg-white/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap mb-6">
+          <span className="text-sm font-semibold text-secondary truncate">
+            {profile.name || user?.name || "Guest"}
+          </span>
+          <span className="text-muted-foreground/40">•</span>
+          <Select value={type} onValueChange={setType}>
+            <SelectTrigger className="h-7 text-xs w-[160px] rounded-full border-dashed">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {INTERVIEW_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.icon} {t.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={experience} onValueChange={setExperience}>
+            <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {EXPERIENCE_LEVELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="text-center mb-8 pt-2">
           <h1 className="text-4xl font-display font-bold text-secondary mb-2">Interview Ace</h1>
           <p className="text-muted-foreground">AI mock interviews with instant feedback · Voice-powered · India-focused</p>
         </div>

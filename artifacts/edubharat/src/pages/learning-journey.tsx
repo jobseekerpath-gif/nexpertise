@@ -488,10 +488,43 @@ function LessonCard({
   submitted: boolean;
 }) {
   const Icon = SKILL_ICON[lesson.skill_type] ?? BookOpen;
-  const content = LESSON_CONTENT[lesson.id as keyof typeof LESSON_CONTENT];
+  const staticContent = LESSON_CONTENT[lesson.id as keyof typeof LESSON_CONTENT];
   // New lessons expand by default so learners see the material immediately;
   // review cards start collapsed since the learner has seen the content before.
   const [expanded, setExpanded] = useState(lesson.status === "new lesson");
+  const [aiContent, setAiContent] = useState<{ concept: string; examples: string[]; practice: string } | null>(null);
+  const [loadingAI, setLoadingAI] = useState(false);
+  const { profile } = useStudentProfile();
+
+  // Fetch AI-personalised lesson content from the server (server caches per profile key)
+  const loadAIContent = async () => {
+    if (aiContent !== null || loadingAI) return;
+    setLoadingAI(true);
+    try {
+      const params = new URLSearchParams({
+        level: profile.englishLevel || "Beginner",
+        goal: profile.careerGoal || "Private Job",
+        nativeLang: profile.preferredLanguage || "Hindi",
+        name: profile.name || "",
+        skills: Array.isArray(profile.skills) ? profile.skills.join(", ") : (typeof profile.skills === "string" ? profile.skills : ""),
+      });
+      const res = await fetch(`${BASE}/api/journey/lesson-content/${lesson.id}?${params}`);
+      if (res.ok) {
+        const d = await res.json() as { concept: string; examples: string[]; practice: string };
+        setAiContent(d);
+      }
+    } catch { /* silently fall back to static content */ } finally {
+      setLoadingAI(false);
+    }
+  };
+
+  // Trigger fetch the first time this card becomes visible (new lessons auto-open on mount)
+  useEffect(() => {
+    if (expanded && aiContent === null && !loadingAI) void loadAIContent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
+
+  const content = aiContent ?? staticContent;
 
   return (
     <Card className={`border shadow-sm transition-all ${submitted ? "opacity-60" : ""}`}>
@@ -516,14 +549,15 @@ function LessonCard({
         </div>
 
         {/* Expandable lesson content — teaches the concept before the recall check */}
-        {content && (
+        {(content || loadingAI) && (
           <div className="border border-primary/20 rounded-xl overflow-hidden">
             <button
               className="w-full flex items-center justify-between px-4 py-2.5 bg-primary/5 hover:bg-primary/10 transition-colors text-left"
               onClick={() => setExpanded(e => !e)}
             >
-              <span className="text-xs font-semibold text-primary">
+              <span className="text-xs font-semibold text-primary flex items-center gap-1.5">
                 {expanded ? "Hide lesson" : "Show lesson content"}
+                {loadingAI && <Loader2 className="w-3 h-3 animate-spin" />}
               </span>
               {expanded
                 ? <ChevronUp className="w-3.5 h-3.5 text-primary" />
@@ -531,24 +565,35 @@ function LessonCard({
             </button>
             {expanded && (
               <div className="px-4 py-3 space-y-3 bg-white/60">
-                {/* Core concept */}
-                <p className="text-xs text-secondary leading-relaxed">{content.concept}</p>
-                {/* Examples */}
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Examples</p>
-                  <ul className="space-y-1.5">
-                    {content.examples.map((ex, i) => (
-                      <li key={i} className="text-xs text-secondary leading-relaxed pl-3 border-l-2 border-primary/30">
-                        {ex}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                {/* Practice prompt */}
-                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  <span className="text-amber-600 text-xs font-bold shrink-0 mt-0.5">Practice →</span>
-                  <p className="text-xs text-amber-800 leading-relaxed">{content.practice}</p>
-                </div>
+                {/* Loading skeleton while AI personalises content */}
+                {loadingAI && !content && (
+                  <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    Personalising for your profile…
+                  </div>
+                )}
+                {content && (
+                  <>
+                    {/* Core concept */}
+                    <p className="text-xs text-secondary leading-relaxed">{content.concept}</p>
+                    {/* Examples */}
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Examples</p>
+                      <ul className="space-y-1.5">
+                        {content.examples.map((ex, i) => (
+                          <li key={i} className="text-xs text-secondary leading-relaxed pl-3 border-l-2 border-primary/30">
+                            {ex}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    {/* Practice prompt */}
+                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      <span className="text-amber-600 text-xs font-bold shrink-0 mt-0.5">Practice →</span>
+                      <p className="text-xs text-amber-800 leading-relaxed">{content.practice}</p>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

@@ -358,20 +358,22 @@ router.post("/resume/improved", async (req, res) => {
       return;
     }
 
-    const prompt = `You are an expert resume writer for India's job market. Rewrite the following resume to be ATS-optimised for a "${targetRole || "General"}" role (${experienceLevel || "Fresher"} level).
+    const prompt = `You are a warm, experienced career coach rewriting a resume for an Indian job-seeker targeting a "${targetRole || "General"}" role at the ${experienceLevel || "Fresher"} level.
 
 ORIGINAL RESUME:
 ${resumeTextToImprove}
 
-RULES:
-1. Keep ALL real information — do not invent experience or qualifications
-2. Fix grammar, punctuation, and phrasing
-3. Use strong action verbs (Developed, Led, Achieved, Implemented...)
-4. Add relevant keywords for "${targetRole || "General"}" that ATS scanners look for
-5. Structure clearly: Contact | Summary | Skills | Experience | Education | Certifications
-6. Keep bullet points crisp (one achievement per line, start with verb)
-7. Remove irrelevant personal info (religion, caste, date of birth, photo note)
-8. Write only plain text — no markdown, no *, no #, no ---
+Write the improved resume as a polished, human document — not a template. Guidelines:
+- Write the professional summary in first person ("I bring…", "I led…") with a natural, confident voice — not robotic HR-speak like "dynamic professional" or "results-driven individual"
+- Vary sentence rhythm: mix short punchy achievements with slightly longer contextual ones
+- Where the original mentions numbers or outcomes, keep and sharpen them (e.g. "increased sales" → "grew monthly sales by 23%"). Never invent new numbers.
+- Keep ALL real information — do not fabricate experience, qualifications, or credentials
+- Fix grammar and phrasing naturally, like an editor, not a keyword-stuffer
+- Add relevant keywords for "${targetRole || "General"}" woven naturally into the text — not dumped in a wall of comma-separated skills
+- Structure: Contact → Summary → Skills → Experience → Education → Certifications (only sections that exist in the original)
+- Achievement bullets: start with a strong verb, include impact wherever stated in the original
+- Remove irrelevant personal info (religion, caste, date of birth, photo note, marital status)
+- Write only plain text — no markdown, no *, no #, no ---
 
 Return ONLY the improved resume text. Nothing else.`;
 

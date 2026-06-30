@@ -13,6 +13,7 @@
  *   (user_id, lesson_id) → { ease, interval, repetitions, due_date, last_score }
  */
 import { Router, type Request, type Response } from "express";
+import { generateTextWithFallback } from "./ai";
 
 const router = Router();
 
@@ -195,6 +196,81 @@ router.post("/journey/submit-result", (req: Request, res: Response) => {
   progress[lesson_id] = { ease, interval, repetitions, due_date, last_score: numScore };
 
   res.json({ ok: true, next_review: due_date, interval_days: interval });
+});
+
+// -----------------------------------------------------------------------
+// In-memory lesson-content cache: key = `${lessonId}|${level}|${goal}`
+// Max 200 entries; evict oldest when full to prevent unbounded growth.
+// -----------------------------------------------------------------------
+const CONTENT_CACHE = new Map<string, { concept: string; examples: string[]; practice: string }>();
+const CACHE_MAX = 200;
+function cacheSet(key: string, value: { concept: string; examples: string[]; practice: string }) {
+  if (CONTENT_CACHE.size >= CACHE_MAX) {
+    // Evict the oldest inserted entry (Maps preserve insertion order)
+    const firstKey = CONTENT_CACHE.keys().next().value;
+    if (firstKey !== undefined) CONTENT_CACHE.delete(firstKey);
+  }
+  CONTENT_CACHE.set(key, value);
+}
+
+// ------------------------------------------------------------------
+// GET /journey/lesson-content/:lessonId — AI-generated lesson content
+// ------------------------------------------------------------------
+router.get("/journey/lesson-content/:lessonId", async (req: Request, res: Response) => {
+  const { lessonId } = req.params as { lessonId: string };
+  const lesson = LESSON_BANK.find(l => l.id === lessonId);
+  if (!lesson) { res.status(404).json({ error: "Lesson not found" }); return; }
+
+  const level = (req.query["level"] as string) || "Beginner";
+  const goal = (req.query["goal"] as string) || "Private Job";
+  const nativeLang = (req.query["nativeLang"] as string) || "Hindi";
+  const name = (req.query["name"] as string) || "";
+  const skills = (req.query["skills"] as string) || "";
+
+  const cacheKey = `${lessonId}|${level}|${goal}|${nativeLang}`;
+  const cached = CONTENT_CACHE.get(cacheKey);
+  if (cached) { res.json(cached); return; }
+
+  try {
+    const profileCtx = [
+      name && `Name: ${name}`,
+      `English level: ${level}`,
+      `Career goal: ${goal}`,
+      `Native language: ${nativeLang}`,
+      skills && `Skills: ${skills}`,
+    ].filter(Boolean).join(" | ");
+
+    const raw = await generateTextWithFallback({
+      prompt: `You are a warm, practical English teacher for Indian job-seekers.
+
+Lesson: "${lesson.title}"
+Skill: ${lesson.skill_type}
+Description: ${lesson.description}
+Student: ${profileCtx}
+
+Create lesson content tailored to this student. Return ONLY valid JSON with these exact keys:
+{
+  "concept": "2–3 plain sentences explaining the core idea. Use Indian contexts — office, shop, phone call, interview. No jargon.",
+  "examples": [
+    "Example 1 with context label in brackets",
+    "Example 2 — different scenario",
+    "Example 3 — career/job relevant"
+  ],
+  "practice": "One specific task the student can do right now in 30–60 seconds. Tie it to ${goal}."
+}`,
+      maxTokens: 450,
+      log: req.log,
+    });
+
+    // Strip accidental markdown fences
+    const clean = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    const content = JSON.parse(clean) as { concept: string; examples: string[]; practice: string };
+    cacheSet(cacheKey, content);
+    res.json(content);
+  } catch (err) {
+    req.log.error({ err }, "Lesson content AI error");
+    res.status(500).json({ error: "Could not generate lesson content" });
+  }
 });
 
 // ------------------------------------------------------------------

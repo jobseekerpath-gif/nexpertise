@@ -542,30 +542,42 @@ function EnglishGuruContent() {
 
         {/* Main content */}
         <main className="order-1 lg:order-2 min-w-0">
-          {/* ── MODE SELECTOR STRIP — always visible above Live Chat ── */}
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
-            {MODES.map(m => {
-              const MIcon = m.icon;
-              const active = mode === m.value;
-              return (
-                <button
-                  key={m.value}
-                  onClick={() => { setMode(m.value as Mode); setResult(""); resetAI(); setLiveChat(false); speech.stop(); setConvFlowState("idle"); }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all
-                    ${active
-                      ? "bg-orange-500 text-white border-orange-500 shadow-sm"
-                      : "bg-white text-muted-foreground border-border hover:border-orange-300 hover:text-orange-600"
-                    }`}
-                >
-                  <MIcon className="w-3 h-3 shrink-0" />
-                  {m.label}
-                </button>
-              );
-            })}
+          {/* ── STICKY PROFILE BAR — always visible at top without scrolling ── */}
+          <div className="sticky top-16 z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2 mb-5 bg-background/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-secondary truncate">{profile.name || user?.name || "Guest"}</span>
+            <span className="text-muted-foreground/40">•</span>
+            <Select value={uiLang} onValueChange={(v) => { setUiLang(v); updateProfile({ preferredLanguage: v }); }}>
+              <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="English">🇬🇧 English</SelectItem>
+                <SelectItem value="Hindi">🇮🇳 Hindi</SelectItem>
+                {INDIAN_LANGUAGES.filter(l => l !== "Hindi").map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={level} onValueChange={setLevel}>
+              <SelectTrigger className="h-7 text-xs w-[110px] rounded-full border-dashed">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {["Beginner", "Intermediate", "Advanced"].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {liveChat && (
+              <span className="ml-auto text-xs text-green-600 font-semibold animate-pulse flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />Live Chat
+              </span>
+            )}
           </div>
 
-          {/* ── LIVE CONVERSATION TILE — always visible, not mode-gated ── */}
-          <Card className={`flex flex-col overflow-hidden border-2 mb-5 transition-all ${liveChat ? "border-green-400 bg-green-50/30 h-[62vh]" : "border-green-200/70 bg-green-50/10"}`}>
+          {/* ── LIVE CONVERSATION — top section with its own heading ── */}
+          <section className="mb-6">
+            <h2 className="text-base font-display font-bold text-secondary mb-3 flex items-center gap-2">
+              <MessageCircle className="w-4 h-4 text-green-600" />
+              Live Conversation with {tutor.name}
+            </h2>
+            <Card className={`flex flex-col overflow-hidden border-2 transition-all ${liveChat ? "border-green-400 bg-green-50/30 h-[62vh]" : "border-green-200/70 bg-green-50/10"}`}>
             <CardContent className="pt-4 pb-4 space-y-3 flex min-h-0 flex-1 flex-col">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
@@ -672,6 +684,29 @@ function EnglishGuruContent() {
               )}
             </CardContent>
           </Card>
+          </section>
+
+          {/* ── MODE SELECTOR STRIP — practice tool picker ── */}
+          <div className="flex items-center gap-2 mb-4 mt-2 flex-wrap">
+            {MODES.map(m => {
+              const MIcon = m.icon;
+              const active = mode === m.value;
+              return (
+                <button
+                  key={m.value}
+                  onClick={() => { setMode(m.value as Mode); setResult(""); resetAI(); setLiveChat(false); speech.stop(); setConvFlowState("idle"); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all
+                    ${active
+                      ? "bg-orange-500 text-white border-orange-500 shadow-sm"
+                      : "bg-white text-muted-foreground border-border hover:border-orange-300 hover:text-orange-600"
+                    }`}
+                >
+                  <MIcon className="w-3 h-3 shrink-0" />
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
 
           <div className="mb-5">
             <div className="flex items-center gap-3">

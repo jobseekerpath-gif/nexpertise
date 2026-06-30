@@ -819,6 +819,18 @@ function RozgarSamacharContent() {
   return (
     <div className="rozgar-theme min-h-full overflow-y-auto container mx-auto px-4 py-4 max-w-[1400px] bg-gradient-to-br from-teal-50/50 via-white to-indigo-50/50">
       <div className="flex min-h-full flex-col gap-4">
+        {/* ── Sticky profile bar ── */}
+        <div className="sticky top-16 z-20 -mx-4 px-4 py-2 bg-white/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold text-secondary truncate">{profile.name || "Guest"}</span>
+          <span className="text-muted-foreground/40">•</span>
+          <span className="text-xs text-muted-foreground">{profile.location}</span>
+          <span className="text-muted-foreground/40">•</span>
+          <span className="text-xs text-muted-foreground">{profile.careerGoal}</span>
+          <Button variant="ghost" size="sm" className="h-6 text-xs px-2 ml-auto rounded-full" onClick={() => setShowProfile(!showProfile)}>
+            <Settings className="w-3 h-3 mr-1" />Profile
+          </Button>
+        </div>
+
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b">
           <div className="flex items-center gap-4">
@@ -831,14 +843,7 @@ function RozgarSamacharContent() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="secondary" className="text-xs rounded-full px-3 py-1">
-              <User className="w-3 h-3 mr-1" />
-              {profile.name || "Anonymous"} • {profile.location}
-            </Badge>
             {profileSaved && <Badge variant="outline" className="text-xs rounded-full px-3 py-1">Profile ready</Badge>}
-            <Button variant="outline" size="sm" onClick={() => setShowProfile(!showProfile)} className="font-semibold rounded-full shadow-sm">
-              <Settings className="w-4 h-4 mr-1.5" />Profile
-            </Button>
           </div>
         </div>
 
@@ -1177,6 +1182,28 @@ function RozgarSamacharContent() {
                     ))}
                   </div>
                 </div>
+
+                {/* ── Career field tiles — only visible in Career tab ── */}
+                {activeFilterTab === "career" && (
+                  <div className="px-1">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-bold mb-2">Your Industry</p>
+                    <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+                      {INDUSTRIES.map(industry => (
+                        <button
+                          key={industry}
+                          onClick={() => setProfile(p => ({ ...p, industry }))}
+                          className={`shrink-0 px-3 py-2 rounded-xl border text-xs font-semibold transition-colors ${
+                            profile.industry === industry
+                              ? "bg-teal-600 text-white border-teal-600 shadow-sm"
+                              : "bg-card text-secondary hover:bg-teal-50 hover:border-teal-300"
+                          }`}
+                        >
+                          {industry}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-4">
                   {SECTIONS.filter(s => activeFilterTab === "all" || SECTION_CATEGORIES[activeFilterTab].includes(s.id)).map(section => (
                     <SectionCard

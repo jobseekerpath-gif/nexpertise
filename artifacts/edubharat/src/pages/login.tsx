@@ -1,11 +1,20 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useState, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useAuth } from "@/lib/use-auth";
-import { Loader2, Mail, ArrowRight, ShieldCheck } from "lucide-react";
+import { Loader2, Mail, ArrowRight, ShieldCheck, AlertTriangle, Copy, CheckCheck } from "lucide-react";
 import { PageMeta } from "@/components/page-meta";
+
+type AuthConfig = {
+  googleConfigured: boolean;
+  googleCallbackUrl: string;
+  otpEmailConfigured: boolean;
+  otpDevMode: boolean;
+};
+
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 export default function Login() {
   return (
@@ -18,14 +27,36 @@ export default function Login() {
 
 function LoginContent() {
   const [, navigate] = useLocation();
+  const search = useSearch();
   const { loginWithGoogle, sendOtp, verifyOtp } = useAuth();
 
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() => {
+    // Show error from Google OAuth redirect (e.g. ?error=google_failed)
+    const params = new URLSearchParams(search);
+    const e = params.get("error");
+    if (e === "google_failed") return "Google Sign-In failed. Please try again or use Email OTP below.";
+    return "";
+  });
   const [devCode, setDevCode] = useState<string | undefined>();
+  // Fail open: assume Google is configured until we hear otherwise.
+  // This prevents the button from being disabled on transient config-fetch errors.
+  const [config, setConfig] = useState<AuthConfig | null>(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    fetch(`${BASE}/api/auth/config`, { credentials: "include" })
+      .then(r => r.json())
+      .then((d: AuthConfig) => { setConfig(d); setConfigLoaded(true); })
+      .catch(() => {
+        // Config fetch failed — fail open so Google button still works
+        setConfigLoaded(true);
+      });
+  }, []);
 
   const handleSendOtp = async () => {
     if (!email.trim()) { setError("Please enter your email"); return; }
@@ -54,13 +85,71 @@ function LoginContent() {
     }
   };
 
+  const copyCallbackUrl = () => {
+    if (!config?.googleCallbackUrl) return;
+    void navigator.clipboard.writeText(config.googleCallbackUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Fail open: treat Google as ready until config explicitly says it isn't.
+  // This prevents a transient /api/auth/config failure from disabling the button.
+  const googleReady = configLoaded ? (config?.googleConfigured ?? true) : true;
+
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-8">
+      <div className="w-full max-w-md space-y-4">
+        <div className="text-center mb-6">
           <h1 className="text-4xl font-display font-extrabold text-primary mb-2">EduBharat</h1>
           <p className="text-muted-foreground">India's AI Career Ecosystem</p>
         </div>
+
+        {/* Google OAuth setup notice — shown when callback URL isn't registered */}
+        {config && !googleReady && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm space-y-2">
+            <div className="flex items-center gap-2 font-semibold text-amber-800">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              Google Sign-In needs one-time setup
+            </div>
+            <p className="text-amber-700 text-xs leading-relaxed">
+              Add this URL to your{" "}
+              <a
+                href="https://console.cloud.google.com/apis/credentials"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline font-medium"
+              >
+                Google Cloud Console
+              </a>{" "}
+              → OAuth 2.0 Client → Authorized redirect URIs:
+            </p>
+            <div className="flex items-center gap-2 bg-white rounded border border-amber-200 px-3 py-2">
+              <code className="text-xs text-amber-900 flex-1 break-all">{config.googleCallbackUrl}</code>
+              <button onClick={copyCallbackUrl} className="shrink-0 text-amber-600 hover:text-amber-800">
+                {copied ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-amber-600 text-xs">
+              Or set <code className="bg-amber-100 px-1 rounded">GOOGLE_CALLBACK_URL</code> in Replit Secrets to that URL for a stable redirect. Use Email OTP below in the meantime.
+            </p>
+          </div>
+        )}
+
+        {/* Google OAuth setup notice — configured but let user know it might still mismatch if URL changed */}
+        {config && googleReady && (
+          <details className="rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-500 p-3 cursor-pointer">
+            <summary className="font-medium text-slate-600 select-none">Google Sign-In configured ✓</summary>
+            <p className="mt-2 leading-relaxed">
+              If you see a redirect_uri_mismatch error, add this exact URL to Google Cloud Console → Authorized redirect URIs:
+            </p>
+            <div className="flex items-center gap-2 bg-white rounded border border-slate-200 px-2 py-1.5 mt-1.5">
+              <code className="flex-1 break-all">{config.googleCallbackUrl}</code>
+              <button onClick={copyCallbackUrl} className="shrink-0 text-slate-500 hover:text-slate-700">
+                {copied ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </details>
+        )}
 
         <Card className="shadow-xl border-none">
           <CardHeader className="text-center pb-2">
@@ -71,8 +160,9 @@ function LoginContent() {
             {/* Google OAuth */}
             <Button
               variant="outline"
-              className="w-full h-12 font-semibold text-base border-2"
-              onClick={loginWithGoogle}
+              className="w-full h-12 font-semibold text-base border-2 disabled:opacity-60"
+              onClick={googleReady ? loginWithGoogle : copyCallbackUrl}
+              title={!googleReady ? "Google login not yet configured — see setup instructions above" : undefined}
               data-testid="button-google-login"
             >
               <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
@@ -81,7 +171,7 @@ function LoginContent() {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
-              Continue with Google
+              {googleReady ? "Continue with Google" : "Google Sign-In (not configured)"}
             </Button>
 
             <div className="relative">
@@ -93,6 +183,11 @@ function LoginContent() {
 
             {step === "email" ? (
               <div className="space-y-3">
+                {config?.otpDevMode && (
+                  <div className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded p-2.5">
+                    <strong>Dev mode:</strong> OTP email not configured (no <code>RESEND_API_KEY</code>). The 6-digit code will appear on screen after you click Send OTP.
+                  </div>
+                )}
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
@@ -119,9 +214,11 @@ function LoginContent() {
                     OTP sent to <span className="font-semibold text-secondary">{email}</span>
                   </p>
                   {devCode && (
-                    <p className="text-xs text-yellow-600 mt-1 bg-yellow-50 p-2 rounded">
-                      Dev mode: code is <strong>{devCode}</strong> (Resend not configured)
-                    </p>
+                    <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                      <p className="text-xs text-amber-700 mb-1">Dev mode — your code is:</p>
+                      <p className="text-3xl font-bold tracking-[0.4em] text-amber-900">{devCode}</p>
+                      <p className="text-xs text-amber-600 mt-1">Configure RESEND_API_KEY to send real emails</p>
+                    </div>
                   )}
                 </div>
                 <Input
