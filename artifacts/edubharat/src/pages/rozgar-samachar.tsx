@@ -15,7 +15,9 @@ import { useSpeechSynthesis } from "@/lib/use-speech-synthesis";
 import { useStudentProfile, type StudentProfile } from "@/lib/use-student-profile";
 import { useSavedJobs, type SavedJob } from "@/lib/use-saved-jobs";
 import {
-  enrichJob, filterJobs, activeFilterCount, computeMatchScore, type EnrichedJob, type FilterState, DEFAULT_FILTERS, makeJobId,
+  enrichJob, filterJobs, activeFilterCount, computeMatchScore,
+  type EnrichedJob, type FilterState, type SalaryBand,
+  DEFAULT_FILTERS, makeJobId, SALARY_BANDS,
 } from "@/lib/rozgar-utils";
 import { useToast } from "@/hooks/use-toast";
 import { PageMeta } from "@/components/page-meta";
@@ -477,14 +479,16 @@ function SavedJobCard({ job, onUnsave }: { job: SavedJob; onUnsave: (id: string)
 
 // ─── Filter panel content ──────────────────────────────────────────────────────
 
-function FilterPanel({
+function FilterPanelInner({
   filters,
   onChange,
   onClear,
+  hasSalaryData,
 }: {
   filters: FilterState;
   onChange: (patch: Partial<FilterState>) => void;
   onClear: () => void;
+  hasSalaryData: boolean;
 }) {
   return (
     <div className="space-y-5">
@@ -538,16 +542,45 @@ function FilterPanel({
         </Select>
       </label>
 
-      <label className="block space-y-2">
-        <span className="text-xs font-bold text-muted-foreground">Salary range (LPA)</span>
-        <div className="flex items-center gap-2">
-          <Input type="number" min={0} placeholder="Min" value={filters.salaryMin} onChange={e => onChange({ salaryMin: e.target.value })} className="h-10 text-sm rounded-xl" />
-          <span className="text-muted-foreground">-</span>
-          <Input type="number" min={0} placeholder="Max" value={filters.salaryMax} onChange={e => onChange({ salaryMax: e.target.value })} className="h-10 text-sm rounded-xl" />
+      <div className="block space-y-2">
+        <div className="flex items-center justify-between">
+          <span className={`text-xs font-bold ${hasSalaryData ? "text-muted-foreground" : "text-muted-foreground/40"}`}>
+            Salary Range
+          </span>
+          {!hasSalaryData && (
+            <span className="text-[10px] text-muted-foreground/50 italic">No salary data in results</span>
+          )}
         </div>
-      </label>
+        <div className="flex flex-wrap gap-1.5">
+          {SALARY_BANDS.map(band => {
+            const isActive = (filters.salaryBand ?? "any") === band.value;
+            const disabled = !hasSalaryData && band.value !== "any";
+            return (
+              <button
+                key={band.value}
+                onClick={() => !disabled && onChange({ salaryBand: band.value as SalaryBand })}
+                disabled={disabled}
+                className={[
+                  "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                  isActive
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : disabled
+                    ? "bg-muted/40 text-muted-foreground/40 border-border/40 cursor-not-allowed"
+                    : "bg-background text-foreground border-border hover:bg-muted",
+                ].join(" ")}
+              >
+                {band.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
+}
+
+function FilterPanel(props: { filters: FilterState; onChange: (patch: Partial<FilterState>) => void; onClear: () => void; hasSalaryData: boolean }) {
+  return <FilterPanelInner {...props} />;
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -649,8 +682,7 @@ function RozgarSamacharContent() {
     if (filters.sector !== "all") params.set("sector", filters.sector);
     if (filters.experience !== "all") params.set("experience", filters.experience);
     if (filters.employmentType !== "all") params.set("type", filters.employmentType);
-    if (filters.salaryMin) params.set("salaryMin", filters.salaryMin);
-    if (filters.salaryMax) params.set("salaryMax", filters.salaryMax);
+    if ((filters.salaryBand ?? "any") !== "any") params.set("salaryBand", filters.salaryBand);
     if (filters.sort !== "relevance") params.set("sort", filters.sort);
     const qs = params.toString();
     window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
@@ -715,12 +747,15 @@ function RozgarSamacharContent() {
 
   const activeCount = activeFilterCount(filters);
 
+  // True when at least one job in the current result set has salary data — used to enable/grey the salary filter
+  const hasSalaryData = useMemo(() => enrichedJobs.some(j => j.salaryMin > 0 || j.salaryMax > 0), [enrichedJobs]);
+
   // Filter panel for desktop sidebar
   const filterSidebar = (
     <div className="hidden lg:block">
       <Card className="rounded-2xl border shadow-sm sticky top-20">
         <CardContent className="p-5">
-          <FilterPanel filters={filters} onChange={updateFilters} onClear={clearFilters} />
+          <FilterPanel filters={filters} onChange={updateFilters} onClear={clearFilters} hasSalaryData={hasSalaryData} />
         </CardContent>
       </Card>
     </div>
@@ -745,7 +780,7 @@ function RozgarSamacharContent() {
           <SheetTitle>Filter jobs</SheetTitle>
         </SheetHeader>
         <div className="py-4">
-          <FilterPanel filters={filters} onChange={updateFilters} onClear={clearFilters} />
+          <FilterPanel filters={filters} onChange={updateFilters} onClear={clearFilters} hasSalaryData={hasSalaryData} />
         </div>
         <SheetClose asChild>
           <Button className="w-full mt-2">Show {filteredJobs.length} jobs</Button>
@@ -1121,10 +1156,10 @@ function RozgarSamacharContent() {
                           <button onClick={() => updateFilters({ employmentType: "all" })} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
                         </Badge>
                       )}
-                      {(filters.salaryMin || filters.salaryMax) && (
+                      {(filters.salaryBand ?? "any") !== "any" && (
                         <Badge variant="secondary" className="rounded-full text-xs pl-2 pr-1 py-1 gap-1">
-                          <IndianRupee className="w-3 h-3" />{filters.salaryMin || "0"}-{filters.salaryMax || "∞"} LPA
-                          <button onClick={() => updateFilters({ salaryMin: "", salaryMax: "" })} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+                          <IndianRupee className="w-3 h-3" />{SALARY_BANDS.find(b => b.value === filters.salaryBand)?.label ?? filters.salaryBand}
+                          <button onClick={() => updateFilters({ salaryBand: "any" })} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
                         </Badge>
                       )}
                       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={clearFilters}>Clear all</Button>
@@ -1315,8 +1350,7 @@ function readFiltersFromUrl(): FilterState {
     sector: VALID_SECTORS.has(sector) ? sector : "all",
     experience: VALID_EXPERIENCES.has(experience) ? experience : "all",
     employmentType: VALID_EMPLOYMENT_TYPES.has(employmentType) ? employmentType : "all",
-    salaryMin: params.get("salaryMin") || "",
-    salaryMax: params.get("salaryMax") || "",
+    salaryBand: (["any","0-3","3-6","6-12","12+"].includes(params.get("salaryBand") ?? "")) ? (params.get("salaryBand") as SalaryBand) : "any",
     sort: VALID_SORTS.has(sort) ? sort : "relevance",
   };
 }

@@ -14,6 +14,25 @@ export type EnrichedJob = RozgarLiveItem & {
   matchScore?: number;
 };
 
+export type SalaryBand = "any" | "0-3" | "3-6" | "6-12" | "12+";
+
+export const SALARY_BANDS: { value: SalaryBand; label: string }[] = [
+  { value: "any",  label: "Any" },
+  { value: "0-3",  label: "₹0–3 LPA" },
+  { value: "3-6",  label: "₹3–6 LPA" },
+  { value: "6-12", label: "₹6–12 LPA" },
+  { value: "12+",  label: "₹12+ LPA" },
+];
+
+/** Min/max in LPA for each band (Infinity = no upper limit). */
+export const SALARY_BAND_RANGES: Record<SalaryBand, { min: number; max: number }> = {
+  "any":  { min: 0,  max: Infinity },
+  "0-3":  { min: 0,  max: 3 },
+  "3-6":  { min: 3,  max: 6 },
+  "6-12": { min: 6,  max: 12 },
+  "12+":  { min: 12, max: Infinity },
+};
+
 export type FilterState = {
   keyword: string;
   city: string;
@@ -21,8 +40,7 @@ export type FilterState = {
   sector: "all" | "government" | "private" | "startup";
   experience: "all" | "fresher" | "junior" | "mid" | "senior";
   employmentType: "all" | "full-time" | "part-time" | "internship" | "contract";
-  salaryMin: string;
-  salaryMax: string;
+  salaryBand: SalaryBand;
   sort: "relevance" | "newest" | "salary" | "match";
 };
 
@@ -33,8 +51,7 @@ export const DEFAULT_FILTERS: FilterState = {
   sector: "all",
   experience: "all",
   employmentType: "all",
-  salaryMin: "",
-  salaryMax: "",
+  salaryBand: "any",
   sort: "match",
 };
 
@@ -229,8 +246,9 @@ export function computeMatchScore(job: EnrichedJob, profile: StudentProfile): nu
 export function filterJobs(jobs: EnrichedJob[], filters: FilterState, profile: StudentProfile): EnrichedJob[] {
   const keyword = filters.keyword.trim().toLowerCase();
   const city = filters.city.trim().toLowerCase();
-  const salaryMin = Number(filters.salaryMin) || 0;
-  const salaryMax = Number(filters.salaryMax) || Infinity;
+  const bandRange = SALARY_BAND_RANGES[filters.salaryBand ?? "any"];
+  const salaryMin = bandRange.min;
+  const salaryMax = bandRange.max;
 
   let result = jobs.filter(job => {
     const text = normalizeText(job.title, job.company, job.summary, job.location, job.source, job.jobType);
@@ -240,8 +258,11 @@ export function filterJobs(jobs: EnrichedJob[], filters: FilterState, profile: S
     if (filters.sector !== "all" && job.sector !== "unknown" && job.sector !== filters.sector) return false;
     if (filters.experience !== "all" && job.experience !== "unknown" && job.experience !== filters.experience) return false;
     if (filters.employmentType !== "all" && job.employmentType !== "unknown" && job.employmentType !== filters.employmentType) return false;
-    if (job.salaryMax && job.salaryMax < salaryMin) return false;
-    if (job.salaryMin && salaryMax && job.salaryMin > salaryMax) return false;
+    // Salary band filter — only exclude when the job has salary data AND it falls outside the band
+    if (filters.salaryBand !== "any") {
+      if (job.salaryMax > 0 && job.salaryMax < salaryMin) return false;
+      if (job.salaryMin > 0 && salaryMax !== Infinity && job.salaryMin > salaryMax) return false;
+    }
     return true;
   });
 
@@ -280,7 +301,6 @@ export function activeFilterCount(filters: FilterState): number {
   if (filters.sector !== "all") count++;
   if (filters.experience !== "all") count++;
   if (filters.employmentType !== "all") count++;
-  if (filters.salaryMin) count++;
-  if (filters.salaryMax) count++;
+  if ((filters.salaryBand ?? "any") !== "any") count++;
   return count;
 }
