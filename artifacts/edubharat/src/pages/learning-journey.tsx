@@ -176,15 +176,79 @@ function parseBold(text: string): React.ReactNode[] {
   );
 }
 
+// Parse a single pipe-delimited table row into cell strings.
+// Returns null if it doesn't look like a table row.
+function parseTableRow(line: string): string[] | null {
+  if (!line.startsWith("|")) return null;
+  const cells = line.split("|").map(c => c.trim());
+  // remove the empty strings that come from leading/trailing pipes
+  return cells.filter((_, idx) => idx !== 0 && idx !== cells.length - 1);
+}
+
+function isSeparatorRow(cells: string[]): boolean {
+  return cells.every(c => /^[-:]+$/.test(c));
+}
+
 function PlanRenderer({ text }: { text: string }) {
   const lines = text.split("\n");
   const nodes: React.ReactNode[] = [];
+  let i = 0;
 
-  for (let i = 0; i < lines.length; i++) {
+  while (i < lines.length) {
     const raw = lines[i];
     const line = raw.trim();
-    if (!line) continue;
 
+    if (!line) { i++; continue; }
+
+    // ── Markdown table: collect all consecutive pipe rows ──────────────────
+    if (line.startsWith("|")) {
+      const tableLines: string[][] = [];
+      let hasHeader = false;
+      let j = i;
+      while (j < lines.length && lines[j].trim().startsWith("|")) {
+        const cells = parseTableRow(lines[j].trim());
+        if (cells) {
+          if (isSeparatorRow(cells)) { hasHeader = true; }
+          else { tableLines.push(cells); }
+        }
+        j++;
+      }
+      if (tableLines.length > 0) {
+        const [headerRow, ...bodyRows] = tableLines;
+        nodes.push(
+          <div key={i} className="my-3 overflow-x-auto rounded-xl border border-border">
+            <table className="w-full text-xs border-collapse">
+              {hasHeader && headerRow && (
+                <thead>
+                  <tr className="bg-primary/8 border-b border-border">
+                    {headerRow.map((cell, ci) => (
+                      <th key={ci} className="px-3 py-2 text-left font-bold text-secondary whitespace-nowrap">
+                        {parseBold(cell)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+              )}
+              <tbody>
+                {(hasHeader ? bodyRows : tableLines).map((row, ri) => (
+                  <tr key={ri} className={ri % 2 === 0 ? "bg-white" : "bg-muted/30"}>
+                    {row.map((cell, ci) => (
+                      <td key={ci} className="px-3 py-1.5 text-secondary border-b border-border/50 align-top leading-snug">
+                        {parseBold(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      i = j;
+      continue;
+    }
+
+    // ── All other line types ───────────────────────────────────────────────
     if (line.startsWith("# ")) {
       nodes.push(
         <h2 key={i} className="text-base font-extrabold text-secondary mt-2 mb-1">
@@ -204,7 +268,7 @@ function PlanRenderer({ text }: { text: string }) {
     } else if (line.startsWith("### ")) {
       nodes.push(
         <div key={i} className="mt-3 mb-1 text-sm font-bold text-secondary border-l-[3px] border-primary pl-2.5">
-          {line.slice(4)}
+          {parseBold(line.slice(4))}
         </div>
       );
     } else if (line === "---") {
@@ -257,6 +321,8 @@ function PlanRenderer({ text }: { text: string }) {
         </p>
       );
     }
+
+    i++;
   }
 
   return <div className="space-y-0.5">{nodes}</div>;
@@ -302,8 +368,19 @@ export default function LearningJourneyPage() {
 
   const generatePlan = useCallback(() => {
     void streamPlan(
-      `Create a detailed 30-day English learning plan for an Indian ${level} learner at CEFR ${currentStage} level, targeting job interviews and professional communication. Format as 4 weeks: for Week 1 give day-by-day tasks (Day 1–7); for Weeks 2–4 give weekly themes with 3 daily activities. For each week: specify 15–40 minutes per day, practical Indian-context exercises, milestone to reach by week end, and one free resource. Keep it specific, achievable, and India-relevant.`,
-      `You are an experienced English teacher specialising in India's job market. Give actionable, specific, time-bound daily tasks.`,
+      `Create a detailed 30-day English learning plan for an Indian ${level} learner at CEFR ${currentStage} level, targeting job interviews and professional communication.
+
+Structure as 4 weeks. Use ONLY headings (##, ###), bullet points (- ), and bold text (**text**). Do NOT use markdown tables or pipe characters.
+
+For Week 1: list each day (### Day 1 – Title) with 3–4 bullet points covering vocabulary, speaking/listening, and a 2-minute activity. Keep each day under 30 minutes total.
+For Weeks 2–4: use a weekly theme (### Week N – Theme) with 3 daily bullet activities.
+
+End each week with:
+**Milestone:** one sentence on the skill unlocked.
+**Free Resource:** one specific free Indian-context resource.
+
+Keep every task specific, time-boxed, and India-relevant (job interviews, office talk, interviews on YouTube, etc.).`,
+      `You are an experienced English teacher for India's job market. Use only headings, bullet points, and bold — never markdown tables or pipe characters. Be specific and actionable.`,
     );
   }, [streamPlan, level, currentStage]);
 
