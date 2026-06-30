@@ -388,9 +388,9 @@ function EnglishGuruContent() {
         resetAI();
         const response = await stream(
           `${recentHistory}\n${teacherShort}:`,
-          `You are ${teacherShort}, a friendly Indian English coach casually chatting with ${profile.name || "a student"}. ${tutor.teachingStyle}. Reply ONLY in ${uiLang} — never switch languages. Use contractions (I'm, you're, that's). Sound warm and real — like a helpful friend, not a textbook. React naturally ("Oh nice!", "Hmm good point!", "That's right!") when it fits. If the student makes a grammar mistake, use the correct form naturally in your reply without formally pointing it out. No lists, no markdown, no symbols. Max 2 short sentences.`,
+          `You are ${teacherShort}, a friendly Indian English coach having a real conversation with ${profile.name || "a student"}. ${tutor.teachingStyle}. Reply ONLY in ${uiLang} — never switch languages. Use contractions (I'm, you're, that's). Sound warm and real — like a helpful friend, not a textbook. React naturally ("Oh nice!", "Hmm, that's a great point!", "That's right!") when it fits. If the student makes a grammar mistake, weave the correct form naturally into your reply without formally pointing it out. Give a complete, helpful response — finish every thought. No lists, no markdown, no symbols. Keep it to 2–4 natural sentences.`,
           undefined,
-          { maxTokens: 120 }
+          { maxTokens: 350 }
         );
         if (response) {
           const cleanResponse = stripMarkdownForSpeech(response);
@@ -468,7 +468,16 @@ function EnglishGuruContent() {
       <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
         {/* Sidebar */}
         <aside className="order-2 lg:order-1 space-y-4 lg:sticky lg:top-20 self-start">
-          {/* Student Name — placed at the very top of the sidebar */}
+          {/* Change Teacher — top of page CTA */}
+          <Button
+            variant="default"
+            className="w-full font-semibold rounded-xl"
+            onClick={() => setShowTutorPicker(true)}
+          >
+            <Users className="w-4 h-4 mr-2" />Change Teacher
+          </Button>
+
+          {/* Student Name */}
           <Card className="border shadow-sm">
             <CardContent className="pt-4 pb-3 space-y-3">
               <label className="block space-y-1.5">
@@ -497,15 +506,6 @@ function EnglishGuruContent() {
             <div className="mt-4 text-center px-2">
               <p className="text-xs text-muted-foreground leading-relaxed italic">"{tutor.intro}"</p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-4 w-full font-semibold rounded-full text-xs"
-              onClick={() => setShowTutorPicker(true)}
-            >
-              <Users className="w-3.5 h-3.5 mr-1.5" />
-              Change Teacher
-            </Button>
             <div className="mt-3 flex flex-wrap justify-center gap-1">
               {tutor.languages.map(l => (
                 <span key={l} className="text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground">{l}</span>
@@ -543,19 +543,16 @@ function EnglishGuruContent() {
 
         {/* Main content */}
         <main className="order-1 lg:order-2 min-w-0">
-          {/* ── MOBILE HERO — student greeting on top + compact tutor card ── */}
-          <div className="lg:hidden flex flex-col py-4 px-4 mb-4 bg-card rounded-2xl border shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <p className="font-bold text-base text-secondary">
-                Hi, {profile.name || user?.name || "there"} 👋
-              </p>
-              {liveChat && (
-                <span className="flex items-center gap-1 text-xs text-green-600 font-semibold animate-pulse shrink-0">
-                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Live
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
+          {/* ── MOBILE HERO — Change Teacher at top, then student greeting + tutor ── */}
+          <div className="lg:hidden flex flex-col mb-4 gap-2">
+            <Button
+              variant="default"
+              className="w-full font-semibold rounded-xl"
+              onClick={() => setShowTutorPicker(true)}
+            >
+              <Users className="w-4 h-4 mr-2" />Change Teacher
+            </Button>
+            <div className="flex items-center gap-3 py-3 px-4 bg-card rounded-2xl border shadow-sm">
               <AnimatedAvatar
                 name={tutor.name}
                 subtitle={tutor.role}
@@ -566,15 +563,13 @@ function EnglishGuruContent() {
                 imageSrc={tutor.imageSrc}
               />
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground italic leading-snug line-clamp-2">"{tutor.intro}"</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2 font-semibold rounded-full text-xs h-7"
-                  onClick={() => setShowTutorPicker(true)}
-                >
-                  <Users className="w-3 h-3 mr-1" />Change Teacher
-                </Button>
+                <p className="font-bold text-sm text-secondary leading-tight">{profile.name || user?.name ? `Hi, ${profile.name || user?.name} 👋` : "Hi there 👋"}</p>
+                <p className="text-xs text-muted-foreground italic leading-snug line-clamp-2 mt-0.5">"{tutor.intro}"</p>
+                {liveChat && (
+                  <span className="flex items-center gap-1 text-xs text-green-600 font-semibold animate-pulse mt-1">
+                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Live Chat ON
+                  </span>
+                )}
               </div>
             </div>
           </div>
