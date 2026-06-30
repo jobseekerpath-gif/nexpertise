@@ -283,6 +283,13 @@ function EnglishGuruContent() {
   const liveChatRef = useRef(liveChat);
   useEffect(() => { liveChatRef.current = liveChat; }, [liveChat]);
   const handleConvPhraseRef = useRef<((p: string) => void) | null>(null);
+  /**
+   * aiBusyRef — true from the moment a phrase is accepted until the AI finishes
+   * thinking AND speaking. Guards against a late/echoed recognition result
+   * re-triggering handleConvPhrase mid-reply, which would call globalStop() and
+   * cut the AI off abruptly. isStreaming alone doesn't cover the TTS window.
+   */
+  const aiBusyRef = useRef(false);
 
   useEffect(() => {
     if (user?.name && !profile.name) updateProfile({ name: user.name });
@@ -359,7 +366,8 @@ function EnglishGuruContent() {
 
   // Live chat phrase handler
   const handleConvPhrase = useCallback((phrase: string) => {
-    if (!phrase.trim() || isStreaming) return;
+    if (!phrase.trim() || isStreaming || aiBusyRef.current) return;
+    aiBusyRef.current = true;
     if (liveChatRef.current) {
       // Live voice mode: hard-stop the mic and block it for the whole
       // think+speak cycle so it can never capture the AI's own voice from the
@@ -372,45 +380,54 @@ function EnglishGuruContent() {
     }
     setConvFlowState("ai-thinking");
     void (async () => {
-      const userMsg = phrase.trim();
-      setConvHistory(h => [...h, { role: "user", text: userMsg }]);
-      const recentHistory = [...convHistoryRef.current.slice(-4), { role: "user" as const, text: userMsg }]
-        .map(m => `${m.role === "user" ? "Student" : teacherShort}: ${m.text}`).join("\n");
-      resetAI();
-      const response = await stream(
-        `${recentHistory}\n${teacherShort}:`,
-        `You are ${teacherShort}, a friendly Indian English coach casually chatting with ${profile.name || "a student"}. ${tutor.teachingStyle}. Reply ONLY in ${uiLang} — never switch languages. Use contractions (I'm, you're, that's). Sound warm and real — like a helpful friend, not a textbook. React naturally ("Oh nice!", "Hmm good point!", "That's right!") when it fits. If the student makes a grammar mistake, use the correct form naturally in your reply without formally pointing it out. No lists, no markdown, no symbols. Max 2 short sentences.`,
-        undefined,
-        { maxTokens: 120 }
-      );
-      if (response) {
-        const cleanResponse = stripMarkdownForSpeech(response);
-        setConvHistory(h => [...h, { role: "ai", text: cleanResponse }]);
-        track("English Guru", "Live Conversation");
-        setConvFlowState("ai-speaking");
-        // Always use uiLang for TTS — AI was instructed to respond in uiLang,
-        // so we should speak it in that language regardless of script detection.
-        speak(cleanResponse, uiLang, () => {
+      try {
+        const userMsg = phrase.trim();
+        setConvHistory(h => [...h, { role: "user", text: userMsg }]);
+        const recentHistory = [...convHistoryRef.current.slice(-4), { role: "user" as const, text: userMsg }]
+          .map(m => `${m.role === "user" ? "Student" : teacherShort}: ${m.text}`).join("\n");
+        resetAI();
+        const response = await stream(
+          `${recentHistory}\n${teacherShort}:`,
+          `You are ${teacherShort}, a friendly Indian English coach casually chatting with ${profile.name || "a student"}. ${tutor.teachingStyle}. Reply ONLY in ${uiLang} — never switch languages. Use contractions (I'm, you're, that's). Sound warm and real — like a helpful friend, not a textbook. React naturally ("Oh nice!", "Hmm good point!", "That's right!") when it fits. If the student makes a grammar mistake, use the correct form naturally in your reply without formally pointing it out. No lists, no markdown, no symbols. Max 2 short sentences.`,
+          undefined,
+          { maxTokens: 120 }
+        );
+        if (response) {
+          const cleanResponse = stripMarkdownForSpeech(response);
+          setConvHistory(h => [...h, { role: "ai", text: cleanResponse }]);
+          track("English Guru", "Live Conversation");
+          setConvFlowState("ai-speaking");
+          // Always use uiLang for TTS — AI was instructed to respond in uiLang,
+          // so we should speak it in that language regardless of script detection.
+          speak(cleanResponse, uiLang, () => {
+            aiBusyRef.current = false;
+            if (liveChatRef.current) {
+              // Only override the block — the single recognition loop started in
+              // toggleLiveChat resumes automatically once blockFor expires.
+              // Do NOT call stop() or startContinuous() here; that creates a second
+              // competing loop which cancels the first and kills subsequent turns.
+              speech.blockFor(800);
+              setConvFlowState("user-speaking");
+            } else {
+              setConvFlowState("idle");
+            }
+          }, { rate: 1.05 });
+        } else {
+          aiBusyRef.current = false;
+          // AI gave no response — release the pause block so the existing loop
+          // resumes listening. No new startContinuous needed.
           if (liveChatRef.current) {
-            // Only override the block — the single recognition loop started in
-            // toggleLiveChat resumes automatically once blockFor expires.
-            // Do NOT call stop() or startContinuous() here; that creates a second
-            // competing loop which cancels the first and kills subsequent turns.
-            speech.blockFor(800);
+            speech.blockFor(400);
             setConvFlowState("user-speaking");
           } else {
             setConvFlowState("idle");
           }
-        }, { rate: 1.2 });
-      } else {
-        // AI gave no response — release the pause block so the existing loop
-        // resumes listening. No new startContinuous needed.
-        if (liveChatRef.current) {
-          speech.blockFor(400);
-          setConvFlowState("user-speaking");
-        } else {
-          setConvFlowState("idle");
         }
+      } catch {
+        // Never leave the busy flag latched on an unexpected failure, or all
+        // future turns (live and typed) would be silently blocked.
+        aiBusyRef.current = false;
+        setConvFlowState(liveChatRef.current ? "user-speaking" : "idle");
       }
     })();
   }, [stream, resetAI, speak, track, isStreaming, speech, profile.name, tutor.teachingStyle, uiLang, teacherShort]);
@@ -423,6 +440,9 @@ function EnglishGuruContent() {
       setConvFlowState("idle");
       speech.stop();
       synth.stop();
+      // synth.stop() does not fire the speak() onEnd callback, so clear the
+      // busy flag here or the next session's first turn would be blocked.
+      aiBusyRef.current = false;
     } else {
       setLiveChat(true);
       setConvFlowState("user-speaking");
@@ -522,38 +542,40 @@ function EnglishGuruContent() {
 
         {/* Main content */}
         <main className="order-1 lg:order-2 min-w-0">
-          {/* ── MOBILE TUTOR HERO — prominent portrait at top of page ── */}
-          <div className="lg:hidden flex flex-col items-center py-5 px-4 mb-4 bg-card rounded-2xl border shadow-sm">
-            <AnimatedAvatar
-              name={tutor.name}
-              subtitle={tutor.role}
-              isSpeaking={synth.isSpeaking}
-              isThinking={isStreaming}
-              gender={tutor.gender}
-              size="xl"
-              imageSrc={tutor.imageSrc}
-            />
-            <p className="font-bold text-lg text-secondary mt-3">{tutor.name}</p>
-            <p className="text-sm text-primary">{tutor.role}</p>
-            <p className="text-xs text-muted-foreground text-center mt-1.5 italic leading-snug px-4">"{tutor.intro}"</p>
-            <div className="mt-2 flex flex-wrap justify-center gap-1">
-              {tutor.languages.slice(0, 3).map(l => (
-                <span key={l} className="text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground">{l}</span>
-              ))}
+          {/* ── MOBILE HERO — student greeting on top + compact tutor card ── */}
+          <div className="lg:hidden flex flex-col py-4 px-4 mb-4 bg-card rounded-2xl border shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <p className="font-bold text-base text-secondary">
+                Hi, {profile.name || user?.name || "there"} 👋
+              </p>
+              {liveChat && (
+                <span className="flex items-center gap-1 text-xs text-green-600 font-semibold animate-pulse shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Live
+                </span>
+              )}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-3 font-semibold rounded-full text-xs"
-              onClick={() => setShowTutorPicker(true)}
-            >
-              <Users className="w-3.5 h-3.5 mr-1.5" />Change Teacher
-            </Button>
-            {liveChat && (
-              <div className="mt-2 flex items-center gap-1.5 text-xs text-green-600 font-semibold animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Live Chat ON
+            <div className="flex items-center gap-3">
+              <AnimatedAvatar
+                name={tutor.name}
+                subtitle={tutor.role}
+                isSpeaking={synth.isSpeaking}
+                isThinking={isStreaming}
+                gender={tutor.gender}
+                size="sm"
+                imageSrc={tutor.imageSrc}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground italic leading-snug line-clamp-2">"{tutor.intro}"</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 font-semibold rounded-full text-xs h-7"
+                  onClick={() => setShowTutorPicker(true)}
+                >
+                  <Users className="w-3 h-3 mr-1" />Change Teacher
+                </Button>
               </div>
-            )}
+            </div>
           </div>
 
           {/* ── STICKY PROFILE BAR — always visible at top without scrolling ── */}
