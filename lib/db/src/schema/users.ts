@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, boolean, integer, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -115,6 +115,21 @@ export const analyticsEventsTable = pgTable("analytics_events", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const lessonProgressTable = pgTable("lesson_progress", {
+  id: serial("id").primaryKey(),
+  // TEXT so both authenticated user IDs (numeric strings) and guest IDs work
+  userId: text("user_id").notNull(),
+  lessonId: text("lesson_id").notNull(),
+  ease: text("ease").notNull().default("2.5"),     // stored as text to avoid float precision issues
+  interval: integer("interval").notNull().default(0),
+  repetitions: integer("repetitions").notNull().default(0),
+  dueDate: text("due_date").notNull(),             // ISO "YYYY-MM-DD"
+  lastScore: integer("last_score"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("lesson_progress_user_lesson_idx").on(table.userId, table.lessonId),
+]);
+
 export const webVitalsTable = pgTable("web_vitals", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => usersTable.id),
@@ -136,6 +151,7 @@ export const insertSavedJobSchema = createInsertSchema(savedJobsTable).omit({ id
 export const insertHistoryItemSchema = createInsertSchema(historyItemsTable).omit({ id: true, savedAt: true });
 export const insertAnalyticsEventSchema = createInsertSchema(analyticsEventsTable).omit({ id: true, createdAt: true });
 export const insertWebVitalSchema = createInsertSchema(webVitalsTable).omit({ id: true, createdAt: true });
+export const insertLessonProgressSchema = createInsertSchema(lessonProgressTable).omit({ id: true, updatedAt: true });
 
 export type User = typeof usersTable.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -146,3 +162,4 @@ export type SavedJob = typeof savedJobsTable.$inferSelect;
 export type HistoryItem = typeof historyItemsTable.$inferSelect;
 export type AnalyticsEvent = typeof analyticsEventsTable.$inferSelect;
 export type WebVital = typeof webVitalsTable.$inferSelect;
+export type LessonProgress = typeof lessonProgressTable.$inferSelect;

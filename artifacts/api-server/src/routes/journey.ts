@@ -8,11 +8,13 @@
  * Interleaving (Rohrer & Taylor research) mixes skill types so the same skill
  * never repeats back-to-back in the queue.
  *
- * State is stored in memory keyed by userId.
- * Swap PROGRESS for a real DB table once authentication is fully wired:
- *   (user_id, lesson_id) → { ease, interval, repetitions, due_date, last_score }
+ * Progress is stored in PostgreSQL (lesson_progress table).
+ * Guest users (userId starts with "guest_") use the same table — no foreign-key
+ * constraint on user_id so any string ID is accepted.
  */
 import { Router, type Request, type Response } from "express";
+import { db, lessonProgressTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { generateTextWithFallback } from "./ai";
 
 const router = Router();
@@ -33,9 +35,6 @@ type LessonState = {
 };
 
 type UserProgress = Record<string, LessonState>;
-
-// In-memory store — replace with DB query (user_id, lesson_id) table
-const PROGRESS = new Map<string, UserProgress>();
 
 const LESSON_BANK: Lesson[] = [
   { id: "l1",  title: "Greetings & Introductions",         skill_type: "vocabulary", description: "Common phrases for meeting people at work, shops, and trains." },
@@ -95,18 +94,75 @@ function sm2Update(
   return { ease: newEase, interval: newInterval, repetitions: newReps };
 }
 
-function getUserProgress(userId: string): UserProgress {
-  if (!PROGRESS.has(userId)) PROGRESS.set(userId, {});
-  return PROGRESS.get(userId)!;
+// ---------------------------------------------------------------------------
+// DB helpers — all wrapped so a DB error degrades gracefully to empty progress
+// ---------------------------------------------------------------------------
+
+async function loadUserProgress(userId: string): Promise<UserProgress> {
+  try {
+    const rows = await db
+      .select()
+      .from(lessonProgressTable)
+      .where(eq(lessonProgressTable.userId, userId));
+
+    const progress: UserProgress = {};
+    for (const row of rows) {
+      progress[row.lessonId] = {
+        ease: Number(row.ease),
+        interval: row.interval,
+        repetitions: row.repetitions,
+        due_date: row.dueDate,
+        last_score: row.lastScore ?? null,
+      };
+    }
+    return progress;
+  } catch {
+    // DB unavailable — return empty so the route still works
+    return {};
+  }
+}
+
+async function saveLesson(
+  userId: string,
+  lessonId: string,
+  state: LessonState,
+): Promise<void> {
+  try {
+    await db
+      .insert(lessonProgressTable)
+      .values({
+        userId,
+        lessonId,
+        ease: String(state.ease),
+        interval: state.interval,
+        repetitions: state.repetitions,
+        dueDate: state.due_date,
+        lastScore: state.last_score ?? undefined,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [lessonProgressTable.userId, lessonProgressTable.lessonId],
+        set: {
+          ease: String(state.ease),
+          interval: state.interval,
+          repetitions: state.repetitions,
+          dueDate: state.due_date,
+          lastScore: state.last_score ?? undefined,
+          updatedAt: new Date(),
+        },
+      });
+  } catch {
+    // Swallow — progress will be lost for this request only, no crash
+  }
 }
 
 // ------------------------------------------------------------------
 // GET /journey/next?userId=<id>
 // Returns up to 5 interleaved lessons (due reviews first, then new)
 // ------------------------------------------------------------------
-router.get("/journey/next", (req: Request, res: Response) => {
+router.get("/journey/next", async (req: Request, res: Response) => {
   const userId = (req.query["userId"] as string) || "guest";
-  const progress = getUserProgress(userId);
+  const progress = await loadUserProgress(userId);
   const today = todayStr();
 
   const due: Lesson[] = [];
@@ -166,7 +222,7 @@ router.get("/journey/next", (req: Request, res: Response) => {
 // POST /journey/submit-result
 // Body: { lesson_id, score (0–100), userId? }
 // ------------------------------------------------------------------
-router.post("/journey/submit-result", (req: Request, res: Response) => {
+router.post("/journey/submit-result", async (req: Request, res: Response) => {
   const { lesson_id, score, userId = "guest" } = (req.body ?? {}) as {
     lesson_id?: string;
     score?: number;
@@ -179,7 +235,7 @@ router.post("/journey/submit-result", (req: Request, res: Response) => {
   }
 
   const numScore = Math.min(100, Math.max(0, Number(score ?? 0)));
-  const progress = getUserProgress(userId);
+  const progress = await loadUserProgress(userId);
 
   const existing = progress[lesson_id] ?? { ease: 2.5, interval: 0, repetitions: 0 };
   const quality = Math.round((numScore / 100) * 5); // map 0-100 → 0-5
@@ -192,25 +248,43 @@ router.post("/journey/submit-result", (req: Request, res: Response) => {
   );
 
   const due_date = addDays(todayStr(), interval);
+  const newState: LessonState = { ease, interval, repetitions, due_date, last_score: numScore };
 
-  progress[lesson_id] = { ease, interval, repetitions, due_date, last_score: numScore };
+  await saveLesson(userId, lesson_id, newState);
 
   res.json({ ok: true, next_review: due_date, interval_days: interval });
 });
 
 // -----------------------------------------------------------------------
 // In-memory lesson-content cache: key = `${lessonId}|${level}|${goal}`
-// Max 200 entries; evict oldest when full to prevent unbounded growth.
+// Max 200 entries; evict oldest when full.
+// TTL: 24 hours — cached content is regenerated once per day so it stays fresh.
 // -----------------------------------------------------------------------
-const CONTENT_CACHE = new Map<string, { concept: string; examples: string[]; practice: string }>();
+type CacheEntry = {
+  content: { concept: string; examples: string[]; practice: string };
+  cachedAt: number; // Date.now() ms
+};
+const CONTENT_CACHE = new Map<string, CacheEntry>();
 const CACHE_MAX = 200;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function cacheGet(key: string): { concept: string; examples: string[]; practice: string } | undefined {
+  const entry = CONTENT_CACHE.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.cachedAt > CACHE_TTL_MS) {
+    CONTENT_CACHE.delete(key);
+    return undefined;
+  }
+  return entry.content;
+}
+
 function cacheSet(key: string, value: { concept: string; examples: string[]; practice: string }) {
   if (CONTENT_CACHE.size >= CACHE_MAX) {
     // Evict the oldest inserted entry (Maps preserve insertion order)
     const firstKey = CONTENT_CACHE.keys().next().value;
     if (firstKey !== undefined) CONTENT_CACHE.delete(firstKey);
   }
-  CONTENT_CACHE.set(key, value);
+  CONTENT_CACHE.set(key, { content: value, cachedAt: Date.now() });
 }
 
 // ------------------------------------------------------------------
@@ -228,7 +302,7 @@ router.get("/journey/lesson-content/:lessonId", async (req: Request, res: Respon
   const skills = (req.query["skills"] as string) || "";
 
   const cacheKey = `${lessonId}|${level}|${goal}|${nativeLang}`;
-  const cached = CONTENT_CACHE.get(cacheKey);
+  const cached = cacheGet(cacheKey);
   if (cached) { res.json(cached); return; }
 
   try {
@@ -276,9 +350,9 @@ Create lesson content tailored to this student. Return ONLY valid JSON with thes
 // ------------------------------------------------------------------
 // GET /journey/progress?userId=<id>  — full state for all lessons
 // ------------------------------------------------------------------
-router.get("/journey/progress", (req: Request, res: Response) => {
+router.get("/journey/progress", async (req: Request, res: Response) => {
   const userId = (req.query["userId"] as string) || "guest";
-  const progress = getUserProgress(userId);
+  const progress = await loadUserProgress(userId);
   const today = todayStr();
 
   const items = LESSON_BANK.map(lesson => {
