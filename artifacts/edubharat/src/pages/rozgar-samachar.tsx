@@ -423,8 +423,9 @@ function SectionCard({
           )}
           {!VACANCY_SECTIONS.has(section.id) && (
             <div className="flex justify-end gap-2 py-2 flex-wrap">
-              <Button variant="ghost" size="sm" className="text-xs" onClick={() => synth.speak(text, profile.language)}>
-                <Volume2 className="w-3.5 h-3.5 mr-1" />Listen
+              <Button variant="ghost" size="sm" className="text-xs" disabled={isStreaming || !text}
+                onClick={() => { synth.stop(); synth.speak(text, profile.language); }}>
+                <Volume2 className="w-3.5 h-3.5 mr-1" />{isStreaming ? "Loading…" : "Listen"}
               </Button>
               <Button variant="ghost" size="sm" className="text-xs" disabled={saved}
                 onClick={() => { save({ tool: "Rozgar Samachar", title: `${section.title} — ${new Date().toLocaleDateString("en-IN")}`, content: text }); setSaved(true); }}>

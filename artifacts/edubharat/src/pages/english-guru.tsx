@@ -460,7 +460,7 @@ function EnglishGuruContent() {
   }, [convInput, handleConvPhrase]);
 
   return (
-    <div className="min-h-full overflow-y-auto container mx-auto px-3 sm:px-4 py-4 sm:py-8 max-w-6xl">
+    <div className="min-h-full overflow-y-auto container mx-auto px-3 sm:px-4 pt-2 pb-8 max-w-6xl">
       {showTutorPicker && (
         <TutorSelector currentId={tutorId} onSelect={handleSelectTutor} onClose={() => setShowTutorPicker(false)} />
       )}
