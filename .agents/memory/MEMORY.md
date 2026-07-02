@@ -30,3 +30,5 @@
 - [Sticky bars below nav](sticky-bars.md) — use sticky top-16 z-20 -mx-4 px-4 bg-white/95 backdrop-blur-sm border-b; works when page container has overflow-y-auto and is the scroll root.
 - [TTS global singleton](tts-global-singleton.md) — module-level _audio/_abort/_url + _stopListeners in use-edge-tts.ts; globalStop() always runs before speak(); relinquish ownerRef before calling globalStop() on unmount.
 - [Tailwind dynamic classes](tailwind-dynamic-classes.md) — never build class strings with template literals (e.g. opacity-${val}); Tailwind JIT won't detect them. Always use full class strings or ternary of two complete class strings.
+- [Credit-based access system](credit-system.md) — credits gate only live features (live 5/hr, interview 2–5); free 99 signup; idempotent grants via unique (type,reference); Stripe confirm-on-return; guarded init.
+- [Schema reaches prod via push](schema-to-prod-push.md) — no runtime migrations; migrations/*.sql are stale. After any schema change, drizzle-kit push to the prod DB at deploy or prod 500s with "column does not exist".

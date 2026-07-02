@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -7,6 +8,8 @@ import { Card, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { INDIAN_LANGUAGES } from "@/lib/constants";
 import { useAuth } from "@/lib/use-auth";
+import { useToast } from "@/hooks/use-toast";
+import { useCredits, startLiveBlock, tickLiveBlock, LIVE_BLOCK_SECONDS } from "@/lib/use-credits";
 import { useHistory } from "@/lib/use-history";
 import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
@@ -232,6 +235,8 @@ export default function EnglishGuru() {
 
 function EnglishGuruContent() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const { balance } = useCredits();
   const { save } = useHistory();
   const { track } = useProgress();
   const { text: aiText, isStreaming, error: aiError, stream, reset: resetAI } = useGeminiStream();
@@ -438,7 +443,7 @@ function EnglishGuruContent() {
 
   useEffect(() => { handleConvPhraseRef.current = handleConvPhrase; }, [handleConvPhrase]);
 
-  const toggleLiveChat = useCallback(() => {
+  const toggleLiveChat = useCallback(async () => {
     if (liveChat) {
       setLiveChat(false);
       setConvFlowState("idle");
@@ -447,14 +452,53 @@ function EnglishGuruContent() {
       // synth.stop() does not fire the speak() onEnd callback, so clear the
       // busy flag here or the next session's first turn would be blocked.
       aiBusyRef.current = false;
-    } else {
-      setLiveChat(true);
-      setConvFlowState("user-speaking");
-      // Use ref so the callback always calls the latest handleConvPhrase even
-      // after its deps (e.g. isStreaming) change — avoids stale closures.
-      speech.startContinuous(p => handleConvPhraseRef.current?.(p));
+      return;
     }
-  }, [liveChat, speech, synth]);
+    // Starting live chat — requires sign-in and costs credits (5/hour).
+    if (!user) {
+      toast({ title: "Sign in to start live chat", description: "Get 99 free credits when you sign in.", variant: "destructive" });
+      return;
+    }
+    const charge = await startLiveBlock();
+    if (!charge.ok) {
+      if (charge.status === 402) {
+        toast({ title: "Not enough credits", description: "Live conversation uses 5 credits/hour. Top up to continue.", variant: "destructive" });
+      } else {
+        toast({ title: "Couldn't start live chat", description: charge.error ?? "Please try again.", variant: "destructive" });
+      }
+      return;
+    }
+    setLiveChat(true);
+    setConvFlowState("user-speaking");
+    // Use ref so the callback always calls the latest handleConvPhrase even
+    // after its deps (e.g. isStreaming) change — avoids stale closures.
+    speech.startContinuous(p => handleConvPhraseRef.current?.(p));
+  }, [liveChat, speech, synth, user, toast]);
+
+  // Keep a live reference to the "stop everything" action for the metering timer.
+  const stopLiveRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    stopLiveRef.current = () => {
+      setLiveChat(false);
+      setConvFlowState("idle");
+      speech.stop();
+      synth.stop();
+      aiBusyRef.current = false;
+    };
+  }, [speech, synth]);
+
+  // Meter live conversation: 1 credit per 12-minute block; end gracefully when credits run out.
+  useEffect(() => {
+    if (!liveChat) return;
+    const id = setInterval(async () => {
+      const r = await tickLiveBlock();
+      if (!r.ok && r.status === 402) {
+        stopLiveRef.current();
+        toast({ title: "Credits used up", description: "Your live conversation ended. Top up to keep chatting.", variant: "destructive" });
+      }
+    }, LIVE_BLOCK_SECONDS * 1000);
+    return () => clearInterval(id);
+  }, [liveChat, toast]);
 
   const handleConvSend = useCallback(async () => {
     const userMsg = convInput.trim();
@@ -635,6 +679,15 @@ function EnglishGuruContent() {
                   {liveChat ? <><StopCircle className="w-4 h-4 mr-1.5" />End Chat</> : <><Mic className="w-4 h-4 mr-1.5" />Start Live Chat</>}
                 </Button>
               </div>
+              {!liveChat && (
+                <p className="text-xs text-muted-foreground">
+                  {user ? (
+                    <>Uses <span className="font-semibold text-secondary">5 credits/hour</span> · Balance: <span className="font-semibold text-secondary">{balance ?? "…"}</span> · <Link href="/credits" className="text-primary font-semibold hover:underline">Top up</Link></>
+                  ) : (
+                    <><Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to get 99 free credits and start chatting</>
+                  )}
+                </p>
+              )}
               {liveChat && (
                 <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${convFlowState === "user-speaking" ? "bg-green-50 text-green-700 border border-green-200" : convFlowState === "ai-thinking" || convFlowState === "ai-speaking" ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-muted text-muted-foreground"}`}>
                   <span className={`w-2.5 h-2.5 rounded-full ${convFlowState === "user-speaking" ? "bg-green-500 animate-pulse" : convFlowState === "ai-thinking" ? "bg-yellow-500 animate-pulse" : convFlowState === "ai-speaking" ? "bg-blue-500 animate-pulse" : "bg-muted-foreground"}`} />

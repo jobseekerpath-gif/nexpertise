@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Bookmark, LogIn, LogOut, User, BarChart2, Menu, X, BookOpen, Mic, Newspaper, Settings, FileText, Route } from "lucide-react";
+import { Bookmark, LogIn, LogOut, User, BarChart2, Menu, X, BookOpen, Mic, Newspaper, Settings, FileText, Route, Coins } from "lucide-react";
 import { useHistory } from "@/lib/use-history";
 import { useAuth } from "@/lib/use-auth";
+import { useCredits } from "@/lib/use-credits";
 import { Button } from "@/components/ui/button";
 
 const NAV_LINKS = [
@@ -17,7 +18,11 @@ export function Navbar() {
   const [location] = useLocation();
   const { items } = useHistory();
   const { user, logout } = useAuth();
+  const { balance, authenticated, refetch: refetchCredits } = useCredits();
   const [open, setOpen] = useState(false);
+
+  // Keep the credit badge in sync when the user signs in or out.
+  useEffect(() => { void refetchCredits(); }, [user?.id, refetchCredits]);
 
   // Close menu on route change
   useEffect(() => { setOpen(false); }, [location]);
@@ -78,6 +83,17 @@ export function Navbar() {
               )}
             </Link>
 
+            {authenticated && (
+              <Link
+                href="/credits"
+                className="flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 px-3 py-1.5 text-sm font-bold hover:bg-amber-100 transition-colors"
+                title="Your credits"
+              >
+                <Coins className="w-4 h-4" />
+                {balance ?? "…"}
+              </Link>
+            )}
+
             {user ? (
               <div className="flex items-center gap-2">
                 <Link href="/profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
@@ -105,6 +121,12 @@ export function Navbar() {
 
           {/* Mobile: right side */}
           <div className="flex md:hidden items-center gap-3">
+            {authenticated && (
+              <Link href="/credits" className="flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 px-2.5 py-1 text-xs font-bold" title="Your credits">
+                <Coins className="w-3.5 h-3.5" />
+                {balance ?? "…"}
+              </Link>
+            )}
             {/* Saved badge */}
             {items.length > 0 && (
               <Link href="/history" className="relative p-2 min-h-11 min-w-11 flex items-center justify-center">
@@ -212,6 +234,21 @@ export function Navbar() {
           >
             <Settings className="w-4 h-4 shrink-0" />
             My Profile
+          </Link>
+
+          <Link
+            href="/credits"
+            className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-colors ${
+              isActive("/credits") ? "bg-primary/10 text-primary" : "text-secondary hover:bg-muted"
+            }`}
+          >
+            <Coins className="w-4 h-4 shrink-0" />
+            Credits
+            {authenticated && (
+              <span className="ml-auto inline-flex items-center gap-1 text-amber-600 font-bold">
+                <Coins className="w-3.5 h-3.5" />{balance ?? "…"}
+              </span>
+            )}
           </Link>
         </div>
 

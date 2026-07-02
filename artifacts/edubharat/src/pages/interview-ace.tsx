@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,6 +12,7 @@ import { useSpeechRecognition } from "@/lib/use-speech-recognition";
 import { useEdgeTTS } from "@/lib/use-edge-tts";
 import { useStudentProfile } from "@/lib/use-student-profile";
 import { useAuth } from "@/lib/use-auth";
+import { useCredits, chargeInterview, interviewCreditCost } from "@/lib/use-credits";
 import { AnimatedAvatar } from "@/components/avatar";
 import { INTERVIEW_COACHES } from "@/lib/tutors";
 import { useToast } from "@/hooks/use-toast";
@@ -281,6 +283,7 @@ function InterviewAceContent() {
   const { profile } = useStudentProfile();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { balance } = useCredits();
 
   const mapExperience = (raw: string): string => {
     if (/5\+|senior|6|7|8|9|10/i.test(raw)) return "5+ years";
@@ -334,6 +337,7 @@ function InterviewAceContent() {
   const typeMeta = INTERVIEW_TYPES.find(t => t.value === type)!;
   const currentQ = questions[currentIdx];
   const answeredCount = questions.filter(q => q.answer).length;
+  const interviewCost = interviewCreditCost(duration);
 
   useEffect(() => { answerRef.current = answer; }, [answer]);
 
@@ -415,6 +419,10 @@ function InterviewAceContent() {
   }, [questions]);
 
   const startSession = useCallback(async () => {
+    if (!user) {
+      toast({ title: "Sign in to start", description: "Get 99 free credits when you sign in.", variant: "destructive" });
+      return;
+    }
     resetStream();
     const candidateName = profile.name || "there";
     const full = await stream(
@@ -429,6 +437,20 @@ In 2-3 natural spoken sentences: greet them by first name (${candidateName.split
     );
     const opening = full.replace(/^\s*["']?|["']?\s*$/g, "").trim();
     if (!opening) return;
+    // Charge credits now that a real interview is starting.
+    const charge = await chargeInterview(duration);
+    if (!charge.ok) {
+      if (charge.status === 402) {
+        toast({
+          title: "Not enough credits",
+          description: `This interview needs ${interviewCreditCost(duration)} credits — you have ${charge.balance ?? 0}. Top up to continue.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Couldn't start interview", description: charge.error ?? "Please try again.", variant: "destructive" });
+      }
+      return;
+    }
     // The opening combines greeting + first question — store as first QA entry
     setQuestions([{ question: opening }]);
     setCurrentIdx(0);
@@ -446,7 +468,7 @@ In 2-3 natural spoken sentences: greet them by first name (${candidateName.split
     const pitchVariation = coach.gender === "male" ? 0.88 : 1.08;
     setCoachSpeaking(true);
     setTimeout(() => speakCoach(opening, { voiceGender: coach.gender, pitch: pitchVariation, rate: 1.1 }), 300);
-  }, [typeMeta, experience, duration, coach, stream, resetStream, speakCoach, buildProfileSummary, profile.name]);
+  }, [typeMeta, experience, duration, coach, stream, resetStream, speakCoach, buildProfileSummary, profile.name, user, toast]);
 
   const toggleRecording = useCallback(() => {
     if (autoListenEnabled) {
@@ -845,12 +867,19 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
               {typeMeta.icon} {typeMeta.label} · {experience} · {duration} min with {coach.name}
             </CardDescription>
           </CardHeader>
-          <CardFooter>
+          <CardFooter className="flex-col gap-2 items-stretch">
             <Button className="w-full h-12 font-bold text-base shadow-md shadow-primary/20" onClick={startSession} disabled={isStreaming}>
               {isStreaming
                 ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Preparing session...</>
                 : <><PlayCircle className="w-5 h-5 mr-2" />Begin with {coach.name}</>}
             </Button>
+            <p className="text-xs text-center text-muted-foreground">
+              {user ? (
+                <>Uses <span className="font-semibold text-secondary">{interviewCost} credits</span> · Balance: <span className="font-semibold text-secondary">{balance ?? "…"}</span> · <Link href="/credits" className="text-primary font-semibold hover:underline">Top up</Link></>
+              ) : (
+                <><Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to get 99 free credits</>
+              )}
+            </p>
           </CardFooter>
         </Card>
       </div>

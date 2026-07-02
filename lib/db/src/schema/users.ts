@@ -37,6 +37,9 @@ export const usersTable = pgTable("users", {
   resumeFileName: text("resume_file_name"),
   resumeAnalysis: text("resume_analysis"), // JSON object stored as text
   experienceSummary: text("experience_summary"),
+  // Credit-based access — 1 credit = ₹1. This balance is the source of truth for spend checks;
+  // credit_transactions below is the audit trail + idempotency guard.
+  credits: integer("credits").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -168,6 +171,25 @@ export const jobSearchCacheTable = pgTable("job_search_cache", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+/**
+ * credit_transactions — append-only ledger of every credit change.
+ * usersTable.credits holds the running balance; this table is the audit trail and,
+ * via the unique (type, reference) index, the idempotency guard for grants/purchases.
+ * Spends use a NULL reference (Postgres treats NULLs as distinct, so many are allowed).
+ */
+export const creditTransactionsTable = pgTable("credit_transactions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }).notNull(),
+  amount: integer("amount").notNull(), // + grant/purchase, - spend
+  balanceAfter: integer("balance_after").notNull(),
+  type: text("type").notNull(), // signup_grant | purchase | spend_interview | spend_live | refund | adjustment
+  description: text("description"),
+  reference: text("reference"), // e.g. Stripe checkout session id, or signup:<userId>
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("credit_tx_type_reference_idx").on(table.type, table.reference),
+]);
+
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertOtpSchema = createInsertSchema(otpsTable).omit({ id: true, createdAt: true });
 export const insertLearningProgressSchema = createInsertSchema(learningProgressTable).omit({ id: true, createdAt: true });
@@ -188,3 +210,4 @@ export type HistoryItem = typeof historyItemsTable.$inferSelect;
 export type AnalyticsEvent = typeof analyticsEventsTable.$inferSelect;
 export type WebVital = typeof webVitalsTable.$inferSelect;
 export type LessonProgress = typeof lessonProgressTable.$inferSelect;
+export type CreditTransaction = typeof creditTransactionsTable.$inferSelect;

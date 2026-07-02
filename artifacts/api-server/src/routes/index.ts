@@ -13,6 +13,7 @@ import ttsRouter from "./tts.js";
 import jobsRouter from "./jobs.js";
 import newsRouter from "./news.js";
 import journeyRouter from "./journey.js";
+import creditsRouter from "./credits.js";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(ttsRouter);
 router.use(jobsRouter);
 router.use(newsRouter);
 router.use(journeyRouter);
+router.use(creditsRouter);
 
 export default router;

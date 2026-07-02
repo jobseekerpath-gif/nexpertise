@@ -6,6 +6,7 @@ import crypto from "crypto";
 import { db, usersTable, otpsTable } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { mergeGuestProgress } from "./journey";
+import { ensureSignupGrant } from "../lib/credits";
 
 declare module "express-session" {
   interface SessionData {
@@ -112,6 +113,7 @@ function setupPassport() {
               googleId: profile.id,
             })
             .returning();
+          await ensureSignupGrant(inserted[0]!.id);
           return done(null, inserted[0]);
         } catch (err) {
           return done(err as Error);
@@ -276,6 +278,7 @@ router.post("/auth/otp/verify", async (req, res) => {
     let user = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
     if (user.length === 0) {
       const inserted = await db.insert(usersTable).values({ email, authProvider: "email" }).returning();
+      await ensureSignupGrant(inserted[0]!.id);
       user = inserted;
     }
 
