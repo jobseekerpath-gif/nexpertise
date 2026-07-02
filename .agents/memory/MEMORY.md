@@ -33,4 +33,4 @@
 - [Credit-based access system](credit-system.md) — credits gate only live features (live 5/hr, interview 2–5); free 99 signup; idempotent grants via unique (type,reference); Stripe confirm-on-return; guarded init.
 - [Stripe integration gotchas](stripe-integration-gotchas.md) — Replit connector key is settings.secret (not secret_key); esbuild bundling silently breaks stripe-replit-sync migrations, so copy dist/migrations into the build.
 - [Guest trial + auth gating](guest-trial.md) — device-local localStorage free trial (no credits); ALWAYS wait for useAuth().isLoading before the guest-vs-paid branch or signed-in users skip the charge.
-- [Schema reaches prod via push](schema-to-prod-push.md) — no runtime migrations; migrations/*.sql are stale. After any schema change, drizzle-kit push to the prod DB at deploy or prod 500s with "column does not exist".
+- [Schema reaches prod on Publish](schema-to-prod-push.md) — prod schema is applied ONLY by Replit's Publish flow (diffs dev→prod); NEVER manually push/DDL prod. Keep dev schema in sync (drizzle-kit push) so Publish carries it.
