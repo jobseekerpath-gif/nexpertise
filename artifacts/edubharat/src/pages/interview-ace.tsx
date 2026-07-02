@@ -13,6 +13,7 @@ import { useEdgeTTS } from "@/lib/use-edge-tts";
 import { useStudentProfile } from "@/lib/use-student-profile";
 import { useAuth } from "@/lib/use-auth";
 import { useCredits, chargeInterview, interviewCreditCost } from "@/lib/use-credits";
+import { useGuestTrial, guestInterviewsLeft, consumeGuestInterview } from "@/lib/guest-trial";
 import { AnimatedAvatar } from "@/components/avatar";
 import { INTERVIEW_COACHES } from "@/lib/tutors";
 import { useToast } from "@/hooks/use-toast";
@@ -281,9 +282,10 @@ function InterviewAceContent() {
     [speech, synth],
   );
   const { profile } = useStudentProfile();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const { balance } = useCredits();
+  const { interviewsLeft: guestInterviewsRemaining } = useGuestTrial();
 
   const mapExperience = (raw: string): string => {
     if (/5\+|senior|6|7|8|9|10/i.test(raw)) return "5+ years";
@@ -419,8 +421,15 @@ function InterviewAceContent() {
   }, [questions]);
 
   const startSession = useCallback(async () => {
-    if (!user) {
-      toast({ title: "Sign in to start", description: "Get 99 free credits when you sign in.", variant: "destructive" });
+    // Don't decide guest vs. paid until auth has resolved — otherwise a signed-in
+    // user could slip onto the free path before /api/auth/me returns.
+    if (authLoading) {
+      toast({ title: "One moment…", description: "Checking your account — please try again in a second." });
+      return;
+    }
+    // Guests get 2 free interviews (no signup); signed-in users spend credits.
+    if (!user && guestInterviewsLeft() <= 0) {
+      toast({ title: "Free interviews used up", description: "Sign in to get 99 free credits and keep practising.", variant: "destructive" });
       return;
     }
     resetStream();
@@ -437,19 +446,24 @@ In 2-3 natural spoken sentences: greet them by first name (${candidateName.split
     );
     const opening = full.replace(/^\s*["']?|["']?\s*$/g, "").trim();
     if (!opening) return;
-    // Charge credits now that a real interview is starting.
-    const charge = await chargeInterview(duration);
-    if (!charge.ok) {
-      if (charge.status === 402) {
-        toast({
-          title: "Not enough credits",
-          description: `This interview needs ${interviewCreditCost(duration)} credits — you have ${charge.balance ?? 0}. Top up to continue.`,
-          variant: "destructive",
-        });
-      } else {
-        toast({ title: "Couldn't start interview", description: charge.error ?? "Please try again.", variant: "destructive" });
+    // Now that a real interview is starting: guests consume a free trial slot,
+    // signed-in users are charged credits.
+    if (!user) {
+      consumeGuestInterview();
+    } else {
+      const charge = await chargeInterview(duration);
+      if (!charge.ok) {
+        if (charge.status === 402) {
+          toast({
+            title: "Not enough credits",
+            description: `This interview needs ${interviewCreditCost(duration)} credits — you have ${charge.balance ?? 0}. Top up to continue.`,
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "Couldn't start interview", description: charge.error ?? "Please try again.", variant: "destructive" });
+        }
+        return;
       }
-      return;
     }
     // The opening combines greeting + first question — store as first QA entry
     setQuestions([{ question: opening }]);
@@ -468,7 +482,7 @@ In 2-3 natural spoken sentences: greet them by first name (${candidateName.split
     const pitchVariation = coach.gender === "male" ? 0.88 : 1.08;
     setCoachSpeaking(true);
     setTimeout(() => speakCoach(opening, { voiceGender: coach.gender, pitch: pitchVariation, rate: 1.1 }), 300);
-  }, [typeMeta, experience, duration, coach, stream, resetStream, speakCoach, buildProfileSummary, profile.name, user, toast]);
+  }, [typeMeta, experience, duration, coach, stream, resetStream, speakCoach, buildProfileSummary, profile.name, user, authLoading, toast]);
 
   const toggleRecording = useCallback(() => {
     if (autoListenEnabled) {
@@ -876,8 +890,10 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
             <p className="text-xs text-center text-muted-foreground">
               {user ? (
                 <>Uses <span className="font-semibold text-secondary">{interviewCost} credits</span> · Balance: <span className="font-semibold text-secondary">{balance ?? "…"}</span> · <Link href="/credits" className="text-primary font-semibold hover:underline">Top up</Link></>
+              ) : guestInterviewsRemaining > 0 ? (
+                <><span className="font-semibold text-green-700">{guestInterviewsRemaining} free {guestInterviewsRemaining === 1 ? "interview" : "interviews"}</span> left — no signup needed · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> for 99 free credits</>
               ) : (
-                <><Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to get 99 free credits</>
+                <>Free interviews used up · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to get 99 free credits</>
               )}
             </p>
           </CardFooter>

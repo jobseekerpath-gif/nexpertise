@@ -32,15 +32,20 @@ async function getStripeCredentials(): Promise<{ secretKey: string; webhookSecre
   }
 
   const data = (await resp.json()) as {
-    items?: Array<{ settings?: { secret_key?: string; webhook_secret?: string } }>;
+    items?: Array<{
+      settings?: { secret?: string; secret_key?: string; webhook_secret?: string };
+    }>;
   };
   const settings = data.items?.[0]?.settings;
+  // The Replit Stripe connector exposes the secret key under `secret`;
+  // keep `secret_key` as a fallback in case the connector schema changes.
+  const secretKey = settings?.secret ?? settings?.secret_key;
 
-  if (!settings?.secret_key) {
+  if (!secretKey) {
     throw new Error("Stripe integration not connected or missing secret key. Connect Stripe via the Integrations tab first.");
   }
 
-  return { secretKey: settings.secret_key, webhookSecret: settings.webhook_secret };
+  return { secretKey, webhookSecret: settings?.webhook_secret };
 }
 
 /** Returns a fresh authenticated Stripe client (not cached so rotated keys are picked up). */

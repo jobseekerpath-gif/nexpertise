@@ -10,6 +10,7 @@ import { INDIAN_LANGUAGES } from "@/lib/constants";
 import { useAuth } from "@/lib/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits, startLiveBlock, tickLiveBlock, LIVE_BLOCK_SECONDS } from "@/lib/use-credits";
+import { useGuestTrial, guestLiveSecondsLeft, addGuestLiveSeconds } from "@/lib/guest-trial";
 import { useHistory } from "@/lib/use-history";
 import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
@@ -234,9 +235,10 @@ export default function EnglishGuru() {
 }
 
 function EnglishGuruContent() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const { balance } = useCredits();
+  const { liveSecondsLeft: guestLiveLeft } = useGuestTrial();
   const { save } = useHistory();
   const { track } = useProgress();
   const { text: aiText, isStreaming, error: aiError, stream, reset: resetAI } = useGeminiStream();
@@ -454,26 +456,35 @@ function EnglishGuruContent() {
       aiBusyRef.current = false;
       return;
     }
-    // Starting live chat — requires sign-in and costs credits (5/hour).
-    if (!user) {
-      toast({ title: "Sign in to start live chat", description: "Get 99 free credits when you sign in.", variant: "destructive" });
+    // Don't decide guest vs. paid until auth has resolved — otherwise a signed-in
+    // user could slip onto the free path before /api/auth/me returns.
+    if (authLoading) {
+      toast({ title: "One moment…", description: "Checking your account — please try again in a second." });
       return;
     }
-    const charge = await startLiveBlock();
-    if (!charge.ok) {
-      if (charge.status === 402) {
-        toast({ title: "Not enough credits", description: "Live conversation uses 5 credits/hour. Top up to continue.", variant: "destructive" });
-      } else {
-        toast({ title: "Couldn't start live chat", description: charge.error ?? "Please try again.", variant: "destructive" });
+    // Guests get a free 15-minute trial (no signup); signed-in users spend credits (5/hour).
+    if (!user) {
+      if (guestLiveSecondsLeft() <= 0) {
+        toast({ title: "Free trial finished", description: "That's your 15 free minutes. Sign in to get 99 free credits and keep chatting.", variant: "destructive" });
+        return;
       }
-      return;
+    } else {
+      const charge = await startLiveBlock();
+      if (!charge.ok) {
+        if (charge.status === 402) {
+          toast({ title: "Not enough credits", description: "Live conversation uses 5 credits/hour. Top up to continue.", variant: "destructive" });
+        } else {
+          toast({ title: "Couldn't start live chat", description: charge.error ?? "Please try again.", variant: "destructive" });
+        }
+        return;
+      }
     }
     setLiveChat(true);
     setConvFlowState("user-speaking");
     // Use ref so the callback always calls the latest handleConvPhrase even
     // after its deps (e.g. isStreaming) change — avoids stale closures.
     speech.startContinuous(p => handleConvPhraseRef.current?.(p));
-  }, [liveChat, speech, synth, user, toast]);
+  }, [liveChat, speech, synth, user, authLoading, toast]);
 
   // Keep a live reference to the "stop everything" action for the metering timer.
   const stopLiveRef = useRef<() => void>(() => {});
@@ -487,18 +498,31 @@ function EnglishGuruContent() {
     };
   }, [speech, synth]);
 
-  // Meter live conversation: 1 credit per 12-minute block; end gracefully when credits run out.
+  // Meter live conversation: signed-in users spend 1 credit per 12-min block;
+  // guests burn down a free 15-minute trial. Both end gracefully when exhausted.
   useEffect(() => {
     if (!liveChat) return;
-    const id = setInterval(async () => {
-      const r = await tickLiveBlock();
-      if (!r.ok && r.status === 402) {
+    if (user) {
+      const id = setInterval(async () => {
+        const r = await tickLiveBlock();
+        if (!r.ok && r.status === 402) {
+          stopLiveRef.current();
+          toast({ title: "Credits used up", description: "Your live conversation ended. Top up to keep chatting.", variant: "destructive" });
+        }
+      }, LIVE_BLOCK_SECONDS * 1000);
+      return () => clearInterval(id);
+    }
+    // Guest trial: tick down the free 15 minutes locally.
+    const GUEST_TICK = 10; // seconds
+    const id = setInterval(() => {
+      addGuestLiveSeconds(GUEST_TICK);
+      if (guestLiveSecondsLeft() <= 0) {
         stopLiveRef.current();
-        toast({ title: "Credits used up", description: "Your live conversation ended. Top up to keep chatting.", variant: "destructive" });
+        toast({ title: "Free trial finished 🎉", description: "That's your 15 free minutes. Sign in to get 99 free credits and keep going.", variant: "destructive" });
       }
-    }, LIVE_BLOCK_SECONDS * 1000);
+    }, GUEST_TICK * 1000);
     return () => clearInterval(id);
-  }, [liveChat, toast]);
+  }, [liveChat, user, toast]);
 
   const handleConvSend = useCallback(async () => {
     const userMsg = convInput.trim();
@@ -683,8 +707,10 @@ function EnglishGuruContent() {
                 <p className="text-xs text-muted-foreground">
                   {user ? (
                     <>Uses <span className="font-semibold text-secondary">5 credits/hour</span> · Balance: <span className="font-semibold text-secondary">{balance ?? "…"}</span> · <Link href="/credits" className="text-primary font-semibold hover:underline">Top up</Link></>
+                  ) : guestLiveLeft > 0 ? (
+                    <><span className="font-semibold text-green-700">{Math.ceil(guestLiveLeft / 60)} min</span> free trial left — no signup needed · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> for 99 free credits</>
                   ) : (
-                    <><Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to get 99 free credits and start chatting</>
+                    <>Free trial used up · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to get 99 free credits and keep chatting</>
                   )}
                 </p>
               )}
