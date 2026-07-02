@@ -582,8 +582,9 @@ function EnglishGuruContent() {
           <div className="sticky top-16 z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 py-1.5 mb-3 bg-background/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-secondary truncate">{profile.name || user?.name || "Guest"}</span>
             <span className="text-muted-foreground/40">•</span>
+            <span className="text-xs font-medium text-muted-foreground">Native language</span>
             <Select value={uiLang} onValueChange={(v) => { setUiLang(v); updateProfile({ preferredLanguage: v }); }}>
-              <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed">
+              <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed" aria-label="Native language">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
