@@ -658,7 +658,11 @@ function RozgarSamacharContent() {
     (filters.salaryBand && filters.salaryBand !== "any")
   );
 
-  const { data: allJobs, isLoading: jobsLoading, error: jobsError, reload, source: jobsSource } = useRozgarJobs(studentProfile, filters.keyword, hasFilters);
+  const { data: allJobs, isLoading: jobsLoading, error: jobsError, reload, source: jobsSource } = useRozgarJobs(
+    studentProfile,
+    { keyword: filters.keyword, city: filters.city, experience: filters.experience, sector: filters.sector },
+    hasFilters,
+  );
   const {
     data: livePulse,
     isLoading: livePulseLoading,

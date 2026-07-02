@@ -22,7 +22,9 @@
 - [Interview Ace video call UI](interview-video-call.md) — interview session phase uses fixed full-screen dark layout (z-30, top:56px offset for nav); webcam PiP via getUserMedia; red PhoneOff hang-up button to end.
 - [Edge TTS + echo fix](edge-tts-echo-fix.md) — Live chat + Interview Ace use Edge Neural TTS via /api/tts; blockFor(1200ms) prevents mic from picking up AI's own voice from speakers.
 - [Learning Journey SM-2](learning-journey.md) — /api/journey/* routes; due reviews must interleave separately from new lessons or priority breaks; /api/jobs/search and /api/news/feed also added.
-- [AI provider fallback](ai-provider-fallback.md) — every Gemini route must use generateTextWithFallback (Gemini→Claude); free-tier Gemini is often 429/404, causing empty output + "Unexpected end of JSON input".
+- [AI provider fallback](ai-provider-fallback.md) — Claude is PRIMARY, Gemini fallback (no working GEMINI_API_KEY); route AI via generateTextWithFallback so calls don't waste 3-5s failing through dead Gemini models.
+- [Rozgar filter vs profile](rozgar-filter-priority.md) — job query must send the FILTER city/experience over profile location; two-layer filtering (backend query + client filterJobs) means an unsent filter shows a mismatch AND empties results.
+- [Journey progression](journey-progression.md) — SM-2 queue dead-ends when all lessons have future due dates; use "practice ahead" mode + mastery-based effectiveStage used in BOTH All Lessons and Roadmap locking.
 - [Live-chat recognition loop](live-chat-recognition-loop.md) — ONE startContinuous in toggleLiveChat (via ref); TTS onEnd uses blockFor() only — never stop()+startContinuous there.
 - [Journey AI content endpoint](journey-ai-content.md) — GET /journey/lesson-content/:lessonId; in-memory cache capped at 200 entries (FIFO eviction); useEffect([expanded]) triggers fetch; static LESSON_CONTENT is immediate fallback.
 - [Sticky bars below nav](sticky-bars.md) — use sticky top-16 z-20 -mx-4 px-4 bg-white/95 backdrop-blur-sm border-b; works when page container has overflow-y-auto and is the scroll root.

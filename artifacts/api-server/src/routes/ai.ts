@@ -7,7 +7,7 @@ const router: IRouter = Router();
 
 // Models in fallback order — 2.5-flash first (best), then 1.5-flash (1500 RPD free tier)
 const GEMINI_MODEL_CHAIN = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"] as const;
-const ANTHROPIC_MODEL_CHAIN = ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-sonnet-4-6"] as const;
+const ANTHROPIC_MODEL_CHAIN = ["claude-haiku-4-5", "claude-sonnet-4-5"] as const;
 
 function getAnthropicModelChain(maxTokens: number) {
   // Always start with the cheapest model. Only escalate to bigger models on rate limits.
@@ -74,8 +74,9 @@ async function streamGemini(
   req: Request,
   res: Response,
   prompt: string,
-  system?: string | null,
-  maxTokens = 8192,
+  system: string | null | undefined,
+  maxTokens: number,
+  state: { wrote: boolean },
 ) {
   const ai = getAI();
   const contents = buildContents(prompt, system);
@@ -90,7 +91,7 @@ async function streamGemini(
       });
       for await (const chunk of stream) {
         const text = chunk.text;
-        if (text) res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+        if (text) { state.wrote = true; res.write(`data: ${JSON.stringify({ content: text })}\n\n`); }
       }
       res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
       res.end();
@@ -112,8 +113,9 @@ async function streamAnthropic(
   req: Request,
   res: Response,
   prompt: string,
-  system?: string | null,
-  maxTokens = 8192,
+  system: string | null | undefined,
+  maxTokens: number,
+  state: { wrote: boolean },
 ) {
   const anthropic = getAnthropic();
   if (!anthropic) {
@@ -132,12 +134,11 @@ async function streamAnthropic(
         max_tokens: maxTokens,
         messages,
         ...(systemPrompt ? { system: systemPrompt } : {}),
-        // Keep context cheap: don't let Claude waste tokens on long preambles
-        // 1024 is plenty for UI-driven tasks (question, feedback, short report)
       });
 
       for await (const event of stream) {
         if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+          state.wrote = true;
           res.write(`data: ${JSON.stringify({ content: event.delta.text })}\n\n`);
         }
       }
@@ -169,20 +170,32 @@ router.post("/ai/stream", async (req, res) => {
   res.setHeader("Connection", "keep-alive");
 
   const hasClaudeKey = Boolean(process.env["ANTHROPIC_API_KEY"]);
+  const tokens = maxTokens ?? 8192;
+  const state = { wrote: false };
 
   try {
-    // Always try Gemini first; Claude is the fallback when all Gemini models fail
-    try {
-      await streamGemini(req, res, prompt, system, maxTokens ?? 8192);
-      return;
-    } catch (geminiErr) {
-      if (!hasClaudeKey) throw geminiErr;
-      req.log.warn({ err: geminiErr }, "All Gemini models failed — falling back to Claude");
-      await streamAnthropic(req, res, prompt, system, maxTokens ?? 8192);
+    // Claude is the reliable primary. Gemini's free tier is frequently quota-
+    // exhausted (429) or 404s on unavailable models, which adds a multi-second
+    // dead delay before every answer and makes live chat feel broken. Try Claude
+    // first when a key is present; fall back to Gemini only if Claude fails
+    // BEFORE any bytes were streamed (we can't safely restart a live stream).
+    if (hasClaudeKey) {
+      try {
+        await streamAnthropic(req, res, prompt, system, tokens, state);
+        return;
+      } catch (claudeErr) {
+        if (state.wrote) throw claudeErr;
+        req.log.warn({ err: claudeErr }, "Claude streaming failed — falling back to Gemini");
+        await streamGemini(req, res, prompt, system, tokens, state);
+      }
+    } else {
+      await streamGemini(req, res, prompt, system, tokens, state);
     }
   } catch (err) {
     req.log.error({ err }, "AI streaming error");
-    res.write(`data: ${JSON.stringify({ error: userFriendlyError(err) })}\n\n`);
+    if (!state.wrote) {
+      res.write(`data: ${JSON.stringify({ error: userFriendlyError(err) })}\n\n`);
+    }
     res.end();
   }
 });
@@ -274,7 +287,35 @@ export async function generateTextWithFallback(opts: {
   const { prompt, system, maxTokens = 4096, onDelta, log } = opts;
   let full = "";
 
-  // ── Gemini chain ──
+  // ── Anthropic / Claude chain (reliable primary) ──
+  const anthropic = getAnthropic();
+  if (anthropic) {
+    const modelChain = getAnthropicModelChain(maxTokens);
+    for (let i = 0; i < modelChain.length; i++) {
+      const model = modelChain[i]!;
+      try {
+        const stream = anthropic.messages.stream({
+          model,
+          max_tokens: maxTokens,
+          messages: [{ role: "user", content: prompt }],
+          ...(system ? { system } : {}),
+        });
+        for await (const event of stream) {
+          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+            full += event.delta.text;
+            onDelta?.(event.delta.text);
+          }
+        }
+        if (full.trim()) return full;
+      } catch (err) {
+        log?.warn({ model, err }, "Claude model failed in generateTextWithFallback");
+        continue;
+      }
+    }
+  }
+  if (full.trim()) return full;
+
+  // ── Gemini fallback (free tier often 429/404) ──
   try {
     const ai = getAI();
     const contents = buildContents(prompt, system);
@@ -289,7 +330,6 @@ export async function generateTextWithFallback(opts: {
           if (text) { full += text; onDelta?.(text); }
         }
         if (full.trim()) return full;
-        // Empty output (e.g. all budget went to thinking) — try the next model.
       } catch (err) {
         log?.warn({ model, err }, "Gemini model failed in generateTextWithFallback");
         if (isRateLimit(err)) {
@@ -300,34 +340,7 @@ export async function generateTextWithFallback(opts: {
       }
     }
   } catch (err) {
-    log?.warn({ err }, "Gemini provider unavailable — trying Claude");
-  }
-  if (full.trim()) return full;
-
-  // ── Anthropic / Claude fallback ──
-  const anthropic = getAnthropic();
-  if (!anthropic) return full;
-  const modelChain = getAnthropicModelChain(maxTokens);
-  for (let i = 0; i < modelChain.length; i++) {
-    const model = modelChain[i]!;
-    try {
-      const stream = anthropic.messages.stream({
-        model,
-        max_tokens: maxTokens,
-        messages: [{ role: "user", content: prompt }],
-        ...(system ? { system } : {}),
-      });
-      for await (const event of stream) {
-        if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-          full += event.delta.text;
-          onDelta?.(event.delta.text);
-        }
-      }
-      if (full.trim()) return full;
-    } catch (err) {
-      log?.warn({ model, err }, "Claude model failed in generateTextWithFallback");
-      continue;
-    }
+    log?.warn({ err }, "Gemini provider unavailable");
   }
   return full;
 }

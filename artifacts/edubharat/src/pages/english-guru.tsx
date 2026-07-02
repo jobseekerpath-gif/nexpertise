@@ -386,11 +386,15 @@ function EnglishGuruContent() {
         const recentHistory = [...convHistoryRef.current.slice(-4), { role: "user" as const, text: userMsg }]
           .map(m => `${m.role === "user" ? "Student" : teacherShort}: ${m.text}`).join("\n");
         resetAI();
+        const isEnglishNative = uiLang === "English";
+        const languageGuidance = isEnglishNative
+          ? `Speak in clear, simple, natural English throughout.`
+          : `The student is a native ${uiLang} speaker who is learning English. English is the goal, so speak MOSTLY in simple, clear English and keep them practicing. But use ${uiLang} as a warm helping hand whenever they need it: if the student replies in ${uiLang}, tells you (in any language) that they didn't understand, or clearly seems confused, briefly explain the tricky word or idea in ${uiLang}, then continue in English. You may drop a short ${uiLang} gloss in brackets right after a hard English word. Never leave them stuck or embarrassed — slow down, simplify, and lean on ${uiLang} to unblock them, then gently guide them back to English. When they're managing fine in English, keep your whole reply in English.`;
         const response = await stream(
           `${recentHistory}\n${teacherShort}:`,
-          `You are ${teacherShort}, a friendly Indian English coach having a real conversation with ${profile.name || "a student"}. ${tutor.teachingStyle}. Reply ONLY in ${uiLang} — never switch languages. Use contractions (I'm, you're, that's). Sound warm and real — like a helpful friend, not a textbook. React naturally ("Oh nice!", "Hmm, that's a great point!", "That's right!") when it fits. If the student makes a grammar mistake, weave the correct form naturally into your reply without formally pointing it out. Give a complete, helpful response — finish every thought. No lists, no markdown, no symbols. Keep it to 2–4 natural sentences.`,
+          `You are ${teacherShort}, a warm, patient Indian English coach having a real, natural conversation with ${profile.name || "a student"}. ${tutor.teachingStyle}. ${languageGuidance} Use contractions (I'm, you're, that's). Sound warm and real — like a helpful friend, not a textbook. React naturally ("Oh nice!", "Hmm, good point!", "That's right!") when it fits. If the student makes a grammar mistake, gently weave the correct form into your reply without formally pointing it out. Always give a complete, helpful response — finish every thought and never stop mid-sentence. No lists, no markdown, no symbols. Keep it to 2–4 natural sentences.`,
           undefined,
-          { maxTokens: 350 }
+          { maxTokens: 400 }
         );
         if (response) {
           const cleanResponse = stripMarkdownForSpeech(response);
@@ -460,7 +464,7 @@ function EnglishGuruContent() {
   }, [convInput, handleConvPhrase]);
 
   return (
-    <div className="min-h-full overflow-y-auto container mx-auto px-3 sm:px-4 pt-2 pb-8 max-w-6xl">
+    <div className="min-h-full overflow-y-auto container mx-auto px-3 sm:px-4 pt-1 pb-6 max-w-6xl">
       {showTutorPicker && (
         <TutorSelector currentId={tutorId} onSelect={handleSelectTutor} onClose={() => setShowTutorPicker(false)} />
       )}
@@ -575,7 +579,7 @@ function EnglishGuruContent() {
           </div>
 
           {/* ── STICKY PROFILE BAR — always visible at top without scrolling ── */}
-          <div className="sticky top-16 z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2 mb-5 bg-background/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap">
+          <div className="sticky top-16 z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 py-1.5 mb-3 bg-background/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-secondary truncate">{profile.name || user?.name || "Guest"}</span>
             <span className="text-muted-foreground/40">•</span>
             <Select value={uiLang} onValueChange={(v) => { setUiLang(v); updateProfile({ preferredLanguage: v }); }}>
@@ -604,8 +608,8 @@ function EnglishGuruContent() {
           </div>
 
           {/* ── LIVE CONVERSATION — top section with its own heading ── */}
-          <section className="mb-6">
-            <h2 className="text-base font-display font-bold text-secondary mb-3 flex items-center gap-2">
+          <section className="mb-4">
+            <h2 className="text-base font-display font-bold text-secondary mb-2 flex items-center gap-2">
               <MessageCircle className="w-4 h-4 text-green-600" />
               Live Conversation with {tutor.name}
             </h2>
@@ -618,7 +622,7 @@ function EnglishGuruContent() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold text-secondary">Live Conversation</p>
-                    <p className="text-xs text-muted-foreground">Speak in {uiLang}, AI responds naturally</p>
+                    <p className="text-xs text-muted-foreground">{uiLang === "English" ? "Speak in English — I reply naturally" : `Speak in English or ${uiLang} — I'll help in ${uiLang} when you're stuck`}</p>
                   </div>
                 </div>
                 <Button
@@ -666,7 +670,7 @@ function EnglishGuruContent() {
                 <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
                   <Textarea
                     ref={convInputRef}
-                    placeholder={`Type in ${uiLang}, or press mic to speak...`}
+                    placeholder={uiLang === "English" ? "Type in English, or press mic to speak..." : `Type in English or ${uiLang}, or press mic to speak...`}
                     value={convInput}
                     onChange={e => setConvInput(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (convInput.trim()) void handleConvSend(); } }}

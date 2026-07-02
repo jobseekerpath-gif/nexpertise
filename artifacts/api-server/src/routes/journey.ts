@@ -367,19 +367,39 @@ router.get("/journey/next", async (req: Request, res: Response) => {
   // Interleave due reviews first, then fill remaining slots with new lessons
   const interleavedDue = interleaveBySkillType(due);
   const interleavedNew = interleaveBySkillType(newLessons);
-  const interleaved = [...interleavedDue, ...interleavedNew];
+  let interleaved = [...interleavedDue, ...interleavedNew];
+  let mode: "due" | "ahead" = "due";
+
+  // No dead-end: when every lesson is studied and nothing is due yet, surface the
+  // lessons whose review is coming up soonest so the learner can practise ahead.
+  // (Reviewing early just re-locks the memory — pedagogically harmless, and it
+  // keeps streaks and momentum alive instead of a "come back tomorrow" wall.)
+  if (interleaved.length === 0) {
+    const upcoming = LESSON_BANK
+      .filter(l => progress[l.id])
+      .sort((a, b) => progress[a.id]!.due_date.localeCompare(progress[b.id]!.due_date))
+      .slice(0, 5);
+    interleaved = interleaveBySkillType(upcoming);
+    if (interleaved.length > 0) mode = "ahead";
+  }
 
   const result = interleaved.slice(0, 5).map(lesson => {
     const state = progress[lesson.id];
     return {
       ...lesson,
-      status: state ? "due for review" : "new lesson",
+      status: mode === "ahead" ? "practice ahead" : state ? "due for review" : "new lesson",
       last_score: state?.last_score ?? null,
       next_review: state?.due_date ?? null,
     };
   });
 
-  res.json({ lessons: result, total_due: due.length, total_new: newLessons.length });
+  // Soonest future review date — lets the UI say "next review on <date>".
+  const nextDueDate = LESSON_BANK
+    .map(l => progress[l.id]?.due_date)
+    .filter((d): d is string => Boolean(d) && (d as string) > today)
+    .sort()[0] ?? null;
+
+  res.json({ lessons: result, total_due: due.length, total_new: newLessons.length, mode, next_due_date: nextDueDate });
 });
 
 // ------------------------------------------------------------------

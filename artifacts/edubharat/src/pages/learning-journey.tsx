@@ -38,7 +38,7 @@ type Lesson = {
   title: string;
   skill_type: string;
   description: string;
-  status: "new lesson" | "due for review";
+  status: "new lesson" | "due for review" | "practice ahead";
   last_score: number | null;
   next_review: string | null;
 };
@@ -355,20 +355,51 @@ export default function LearningJourneyPage() {
   const [expandedLevel, setExpandedLevel] = useState<string | null>(null);
   // XP earned in the current focus session (resets on each fresh queue load)
   const [sessionXP, setSessionXP] = useState(0);
+  // "Practice ahead" mode: everything is done + nothing due, so we show upcoming lessons early.
+  const [aheadMode, setAheadMode] = useState(false);
+  const [nextDueDate, setNextDueDate] = useState<string | null>(null);
 
   const { profile } = useStudentProfile();
   const { text: planText, isStreaming: planStreaming, stream: streamPlan } = useGeminiStream();
   const level        = mapEnglishLevel(profile.englishLevel);
   const currentStage = LEVEL_TO_STAGE[level] ?? "A1";
 
+  // Study-earned stage: the first CEFR level the learner has NOT fully studied.
+  // Real progress unlocks the next level (finish A1 → A2 opens), independent of
+  // the level declared in the profile. Empty progress falls back to A1 so we
+  // never unlock everything before data has loaded.
+  const masteryStage = useMemo<(typeof CEFR_ORDER)[number]>(() => {
+    if (allLessons.length === 0) return "A1";
+    const byLevel: Record<string, { total: number; done: number }> = {};
+    for (const l of allLessons) {
+      const lvl = LESSON_TO_LEVEL[l.id] ?? "B1";
+      const b = byLevel[lvl] ?? { total: 0, done: 0 };
+      b.total++;
+      if (l.studied) b.done++;
+      byLevel[lvl] = b;
+    }
+    for (const lvl of CEFR_ORDER) {
+      const b = byLevel[lvl];
+      if (b && b.done < b.total) return lvl;
+    }
+    return CEFR_ORDER[CEFR_ORDER.length - 1];
+  }, [allLessons]);
+
+  // Effective stage = the further along of profile-declared and study-earned.
+  const effectiveStageIdx = Math.max(
+    CEFR_ORDER.indexOf(currentStage as (typeof CEFR_ORDER)[number]),
+    CEFR_ORDER.indexOf(masteryStage),
+  );
+  const effectiveStage = CEFR_ORDER[effectiveStageIdx] ?? currentStage;
+
   // Default expanded level = student's current stage
   useEffect(() => {
-    setExpandedLevel(currentStage);
-  }, [currentStage]);
+    setExpandedLevel(effectiveStage);
+  }, [effectiveStage]);
 
   const generatePlan = useCallback(() => {
     void streamPlan(
-      `Create a detailed 30-day English learning plan for an Indian ${level} learner at CEFR ${currentStage} level, targeting job interviews and professional communication.
+      `Create a detailed 30-day English learning plan for an Indian ${level} learner at CEFR ${effectiveStage} level, targeting job interviews and professional communication.
 
 Structure as 4 weeks. Use ONLY headings (##, ###), bullet points (- ), and bold text (**text**). Do NOT use markdown tables or pipe characters.
 
@@ -382,7 +413,7 @@ End each week with:
 Keep every task specific, time-boxed, and India-relevant (job interviews, office talk, interviews on YouTube, etc.).`,
       `You are an experienced English teacher for India's job market. Use only headings, bullet points, and bold — never markdown tables or pipe characters. Be specific and actionable.`,
     );
-  }, [streamPlan, level, currentStage]);
+  }, [streamPlan, level, effectiveStage]);
 
   const loadNext = useCallback(async () => {
     setLoading(true);
@@ -391,9 +422,11 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
         fetch(`${BASE}/api/journey/next?userId=${userId}`),
         fetch(`${BASE}/api/journey/progress?userId=${userId}`),
       ]);
-      const nextData = await nextRes.json() as { lessons: Lesson[]; total_due: number; total_new: number };
+      const nextData = await nextRes.json() as { lessons: Lesson[]; total_due: number; total_new: number; mode?: string; next_due_date?: string | null };
       const progData = await progressRes.json() as { lessons: ProgressLesson[]; summary: Summary };
       setLessons(nextData.lessons ?? []);
+      setAheadMode(nextData.mode === "ahead");
+      setNextDueDate(nextData.next_due_date ?? null);
       setAllLessons(progData.lessons ?? []);
       setSummary(progData.summary ?? null);
       setSubmitted({});
@@ -423,7 +456,7 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
       if (!res.ok) return;
       // Advance the focus session in place — no full reload, so the next
       // lesson slides in immediately instead of resetting the whole queue.
-      const isReview = lesson?.status === "due for review";
+      const isReview = lesson?.status === "due for review" || lesson?.status === "practice ahead";
       setSubmitted(s => ({ ...s, [lessonId]: true }));
       setSessionXP(x => x + XP_PER_LESSON);
       // Optimistically bump headline stats so the goal ring feels alive.
@@ -455,8 +488,9 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
   const overdue = summary?.overdue  ?? 0;
   const pct     = total > 0 ? Math.round((studied / total) * 100) : 0;
 
-  // Current stage index for locking future levels
-  const currentLevelIdx = CEFR_ORDER.indexOf(currentStage as typeof CEFR_ORDER[number]);
+  // Current stage index for locking future levels — driven by real progress so
+  // finishing a level actually unlocks the next one.
+  const currentLevelIdx = effectiveStageIdx;
 
   return (
     <>
@@ -481,7 +515,7 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs text-muted-foreground font-medium hidden sm:block">Jump to:</span>
             <Select
-              value={expandedLevel ?? currentStage}
+              value={expandedLevel ?? effectiveStage}
               onValueChange={val => {
                 setExpandedLevel(val);
                 setActiveTab("roadmap");
@@ -592,6 +626,15 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
 
               return (
                 <>
+                  {aheadMode && (
+                    <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+                      <p className="font-semibold text-secondary">🎯 You're ahead of schedule!</p>
+                      <p className="text-muted-foreground">
+                        Today's reviews are all done. These are your upcoming lessons — practising early locks them in and keeps your streak alive.
+                        {nextDueDate ? ` Next scheduled review: ${new Date(nextDueDate + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })}.` : ""}
+                      </p>
+                    </div>
+                  )}
                   {/* ── Session header: goal ring + streak loss-aversion + FOMO ── */}
                   <Card className="border shadow-sm overflow-hidden">
                     <CardContent className="p-4 flex items-center gap-4">
@@ -722,7 +765,7 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
                 const accent     = LEVEL_ACCENT[lvl] ?? LEVEL_ACCENT.A1;
                 const done       = levelLessons.filter(l => l.studied).length;
                 const isLocked   = currentLevelIdx < CEFR_ORDER.indexOf(lvl as typeof CEFR_ORDER[number]) - 1;
-                const isCurrent  = lvl === currentStage;
+                const isCurrent  = lvl === effectiveStage;
 
                 return (
                   <div key={lvl}>
@@ -848,14 +891,14 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
         {activeTab === "roadmap" && (
           <div className="space-y-3">
             {ROADMAP_STAGES.map((stage, idx) => {
-              const isCurrent  = stage.level === currentStage;
-              const isPast     = CEFR_ORDER.indexOf(currentStage as typeof CEFR_ORDER[number]) > idx;
+              const isCurrent  = stage.level === effectiveStage;
+              const isPast     = effectiveStageIdx > idx;
               const isExpanded = expandedLevel === stage.level;
               const accent     = LEVEL_ACCENT[stage.level] ?? LEVEL_ACCENT.A1;
               const levelLessons = lessonsByLevel[stage.level] ?? [];
               const doneCnt    = levelLessons.filter(l => l.studied).length;
               const pctLevel   = levelLessons.length > 0 ? Math.round((doneCnt / levelLessons.length) * 100) : 0;
-              const isLocked   = !isCurrent && !isPast && idx > CEFR_ORDER.indexOf(currentStage as typeof CEFR_ORDER[number]) + 1;
+              const isLocked   = !isCurrent && !isPast && idx > effectiveStageIdx + 1;
 
               return (
                 <div key={stage.level} className="flex gap-3">
@@ -1039,7 +1082,7 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
                         )}
                         {!isCurrent && !isPast && !isLocked && (
                           <Button size="sm" variant="outline" className="w-full font-semibold text-xs" disabled>
-                            Complete {currentStage} first to unlock this level
+                            Complete {effectiveStage} first to unlock this level
                           </Button>
                         )}
                         {isPast && (
@@ -1060,7 +1103,7 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
               <CardContent className="pt-5 space-y-3">
                 <p className="text-sm font-semibold text-secondary flex items-center gap-2">
                   <Map className="w-4 h-4 text-primary" />
-                  Want a personalised week-by-week 30-day plan for {currentStage}?
+                  Want a personalised week-by-week 30-day plan for {effectiveStage}?
                 </p>
                 <Button className="w-full font-bold" disabled={planStreaming} onClick={generatePlan}>
                   {planStreaming

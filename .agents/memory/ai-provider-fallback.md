@@ -1,28 +1,37 @@
 ---
-name: AI provider fallback (Gemini → Claude)
-description: Why every AI feature route must fall back to Claude, not just chain Gemini models.
+name: AI provider fallback (Claude primary → Gemini fallback)
+description: Why Claude is the primary AI provider and Gemini only a fallback, and how routes must call AI.
 ---
 
-# AI provider fallback (Gemini → Claude)
+# AI provider fallback (Claude primary → Gemini fallback)
 
-Any feature route in `api-server` that calls Gemini MUST use the shared
-`generateTextWithFallback` helper (in `routes/ai.ts`), not a hand-rolled Gemini
-model loop.
+Every AI feature route in `api-server` MUST go through the shared
+`generateTextWithFallback` helper (streaming) or the shared chat helpers in
+`routes/ai.ts` — never a hand-rolled single-provider loop.
 
-**Why:** The project's `GEMINI_API_KEY` is on a free tier whose quota is
-frequently exhausted — `gemini-2.5-flash` and `gemini-2.0-flash-lite` return
-`429 RESOURCE_EXHAUSTED` (free-tier limit literally 0 at times) and
-`gemini-1.5-flash` is gone (`404 NOT_FOUND`). A Gemini-only route then streams
-*no text*, so the client's `JSON.parse` blows up with "Unexpected end of JSON
-input" and the feature looks broken intermittently. The chat endpoints already
-worked only because they fall back to Claude (`ANTHROPIC_API_KEY` is present).
+**Order: Claude is PRIMARY, Gemini is the FALLBACK.** `/ai/stream` tries Claude
+first and only falls back to Gemini if Claude produced nothing (a
+`state:{wrote}` flag guards this); `generateTextWithFallback` is Claude-first too.
+
+**Why:** There is no working `GEMINI_API_KEY` in this project. Every Gemini call
+returns `429 RESOURCE_EXHAUSTED` (free-tier quota effectively 0) or `404 NOT_FOUND`
+(`gemini-1.5-flash` is gone). When Gemini was tried first, every AI call wasted
+~3-5s failing through dead models before falling back to Claude — the real cause
+of the "AI not responding / stops mid-reply / robotic / empty stream" symptoms
+across English Guru, Interview Ace, and the 30-day plan. Flipping to Claude-first
+dropped `/ai/stream` from 5+s to ~1.7s and made responses reliable.
+`ANTHROPIC_API_KEY` is present and healthy.
+
+**Model chain:** keep `ANTHROPIC_MODEL_CHAIN` to REAL models only
+(`claude-haiku-4-5`, `claude-sonnet-4-5`). Do NOT invent names like
+"claude-sonnet-4-6" — a non-existent model 404s and burns a retry.
 
 **How to apply:** `generateTextWithFallback({ prompt, system, maxTokens, onDelta, log })`
-tries the Gemini chain (skipping empty/errored models) then the Anthropic chain,
-calling `onDelta` per fragment so SSE `content` events still stream. Returns the
-full accumulated text. Resume analyse/improved routes use it.
+tries Claude, then Gemini, calling `onDelta` per fragment so SSE `content` events
+still stream. If Gemini is ever given a real key and made primary again, that is a
+deliberate reversal of this decision — update this note.
 
 **Related parsing rule:** never set `responseMimeType: "application/json"` with
-gemini-2.5-flash — it suppresses streamed text entirely. Instead isolate the
-JSON object on both client and server before parsing: strip ``` fences, then
-slice from the first `{` to the last `}` before `JSON.parse`.
+gemini-2.5-flash — it suppresses streamed text entirely. Isolate the JSON object
+on both client and server before parsing: strip ``` fences, then slice from the
+first `{` to the last `}` before `JSON.parse`.

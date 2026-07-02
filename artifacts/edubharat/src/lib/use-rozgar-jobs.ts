@@ -48,15 +48,28 @@ function dedup(items: RozgarLiveItem[]): RozgarLiveItem[] {
 
 // ─── Primary source: /api/jobs/search ────────────────────────────────────────
 
-async function fetchFromSearch(profile: StudentProfile, keyword: string): Promise<RozgarLiveItem[] | null> {
+async function fetchFromSearch(
+  profile: StudentProfile,
+  opts: { keyword?: string; city?: string; experience?: string; sector?: string },
+): Promise<RozgarLiveItem[] | null> {
   const params = new URLSearchParams();
+  const keyword = (opts.keyword || "").trim();
   if (keyword) params.set("q", keyword);
-  const city = profile.preferredCity || profile.location || "";
+  // The city filter chip takes priority over the profile location so the user's
+  // chosen city actually drives the query (not just the display). This fixes the
+  // "filter says Lucknow but results are all Assam" mismatch.
+  const city = (opts.city || "").trim() || profile.preferredCity || profile.location || "";
   if (city) params.set("city", city);
   const skills = (profile.skills || []).join(", ");
   if (skills) params.set("skills", skills);
-  const exp = profile.experienceLevel || "";
-  if (exp) params.set("experience", exp.toLowerCase().includes("fresher") ? "fresher" : exp.toLowerCase().includes("junior") || exp.includes("1-3") ? "junior" : exp.toLowerCase().includes("senior") || exp.includes("6+") ? "senior" : "mid");
+  // Explicit experience filter wins; otherwise infer from the profile.
+  if (opts.experience && opts.experience !== "all") {
+    params.set("experience", opts.experience);
+  } else {
+    const exp = profile.experienceLevel || "";
+    if (exp) params.set("experience", exp.toLowerCase().includes("fresher") ? "fresher" : exp.toLowerCase().includes("junior") || exp.includes("1-3") ? "junior" : exp.toLowerCase().includes("senior") || exp.includes("6+") ? "senior" : "mid");
+  }
+  if (opts.sector && opts.sector !== "all") params.set("sector", opts.sector);
   const industry = (profile.industryPreference || "").toLowerCase().replace(/\s*\/.*/, "").trim();
   if (industry) params.set("industry", industry);
 
@@ -74,9 +87,9 @@ async function fetchFromSearch(profile: StudentProfile, keyword: string): Promis
 
 // ─── Fallback source: /api/rozgar/live (multi-section) ───────────────────────
 
-async function fetchFromLive(profile: StudentProfile): Promise<RozgarLiveItem[]> {
+async function fetchFromLive(profile: StudentProfile, cityOverride?: string): Promise<RozgarLiveItem[]> {
   const params = new URLSearchParams({
-    location: profile.preferredCity || profile.location || "India",
+    location: (cityOverride || "").trim() || profile.preferredCity || profile.location || "India",
     industry: profile.industryPreference || "Technology",
     status: profile.experienceLevel || "Fresher",
     goal: profile.careerGoal || "Private Job",
@@ -108,7 +121,12 @@ async function fetchFromLive(profile: StudentProfile): Promise<RozgarLiveItem[]>
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useRozgarJobs(profile: StudentProfile, keyword = "", enabled = true) {
+export function useRozgarJobs(
+  profile: StudentProfile,
+  opts: { keyword?: string; city?: string; experience?: string; sector?: string } = {},
+  enabled = true,
+) {
+  const { keyword = "", city = "", experience = "", sector = "" } = opts;
   const [state, setState] = useState<JobFetchState>({
     data: [],
     isLoading: false,
@@ -133,7 +151,7 @@ export function useRozgarJobs(profile: StudentProfile, keyword = "", enabled = t
       let source: JobFetchState["source"] = null;
 
       try {
-        items = await fetchFromSearch(profile, keyword);
+        items = await fetchFromSearch(profile, { keyword, city, experience, sector });
         if (items !== null) source = "search";
       } catch {
         // Search endpoint unavailable — fall through to live
@@ -144,7 +162,7 @@ export function useRozgarJobs(profile: StudentProfile, keyword = "", enabled = t
       // 2. Fallback: per-section /api/rozgar/live scraping
       if (items === null || items.length === 0) {
         try {
-          items = await fetchFromLive(profile);
+          items = await fetchFromLive(profile, city);
           source = items.length > 0 ? "live" : "fallback";
         } catch (err) {
           if (ctrl.signal.aborted) return;
@@ -178,6 +196,9 @@ export function useRozgarJobs(profile: StudentProfile, keyword = "", enabled = t
     // eslint-disable-next-line react-hooks/exhaustive-deps
     JSON.stringify(profile.skills),
     keyword,
+    city,
+    experience,
+    sector,
   ]);
 
   useEffect(() => {
