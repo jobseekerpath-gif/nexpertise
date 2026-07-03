@@ -197,6 +197,8 @@ router.get(
       req.session.userId = u.id;
       req.session.userEmail = u.email;
       req.session.userName = u.name ?? undefined;
+      // Explicitly clear admin privilege — Google OAuth is never an admin path
+      delete req.session.isAdmin;
 
       // Merge any guest progress that was saved before login
       const pendingGuestId = req.session.pendingGuestId;
@@ -296,6 +298,8 @@ router.post("/auth/otp/verify", async (req, res) => {
     req.session.userId = user[0].id;
     req.session.userEmail = user[0].email;
     req.session.userName = user[0].name ?? undefined;
+    // Explicitly clear admin privilege — OTP login is never an admin path
+    delete req.session.isAdmin;
 
     // Merge any lesson progress the user built up as a guest
     if (guestId) {

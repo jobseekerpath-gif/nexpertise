@@ -32,5 +32,7 @@
 - [Tailwind dynamic classes](tailwind-dynamic-classes.md) — never build class strings with template literals (e.g. opacity-${val}); Tailwind JIT won't detect them. Always use full class strings or ternary of two complete class strings.
 - [Credit-based access system](credit-system.md) — credits gate only live features (live 5/hr, interview 2–5); free 99 signup; idempotent grants via unique (type,reference); Stripe confirm-on-return; guarded init.
 - [Stripe integration gotchas](stripe-integration-gotchas.md) — Replit connector key is settings.secret (not secret_key); esbuild bundling silently breaks stripe-replit-sync migrations, so copy dist/migrations into the build.
+- [Edge TTS SSML constraints](edge-tts-ssml.md) — never inject <break> tags; they silently cause 0-byte audio; percentage rate strings also break it; use enum values or plain text only.
+- [Session isAdmin flag pattern](session-isadmin-pattern.md) — every non-admin login path must delete req.session.isAdmin or privilege sticks across re-auths.
 - [Guest trial + auth gating](guest-trial.md) — device-local localStorage free trial (no credits); ALWAYS wait for useAuth().isLoading before the guest-vs-paid branch or signed-in users skip the charge.
 - [Schema reaches prod on Publish](schema-to-prod-push.md) — prod schema is applied ONLY by Replit's Publish flow (diffs dev→prod); NEVER manually push/DDL prod. Keep dev schema in sync (drizzle-kit push) so Publish carries it.
