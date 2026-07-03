@@ -72,6 +72,7 @@ function Router() {
             <Route path="/profile" component={ProfilePage} />
             <Route path="/credits" component={BuyCredits} />
             <Route path="/admin-payments" component={AdminPayments} />
+            <Route path="/admin" component={AdminPayments} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

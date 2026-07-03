@@ -343,12 +343,9 @@ router.post("/auth/admin-login", async (req, res) => {
   try {
     const { username, password } = req.body as { username?: string; password?: string };
     const adminUser = process.env["ADMIN_USERNAME"] ?? "admin";
-    const adminHash = process.env["ADMIN_PASSWORD_HASH"];
-
-    if (!adminHash) {
-      res.status(503).json({ error: "Admin login not configured. Set ADMIN_USERNAME and ADMIN_PASSWORD_HASH secrets." });
-      return;
-    }
+    // Default hash = sha256("Jackyu@62"). Override via ADMIN_PASSWORD_HASH secret.
+    const adminHash = process.env["ADMIN_PASSWORD_HASH"]
+      ?? "3b335b336d1df1803c6de4da944f96c116eea3eccbd99dc4185f6ef859c7792e";
 
     const incoming = crypto.createHash("sha256").update(password ?? "").digest("hex");
     if (!username || username !== adminUser || incoming !== adminHash) {

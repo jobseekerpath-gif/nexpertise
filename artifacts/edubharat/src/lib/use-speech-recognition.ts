@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 export type SpeechRecognitionStatus = "idle" | "listening" | "processing" | "error";
 
@@ -43,6 +43,10 @@ export function useSpeechRecognition(language = "English") {
    */
   const blockedUntilRef = useRef(0);
   const langCode = LANG_MAP[language] ?? "en-IN";
+  // Keep a ref so that spawnRecognition always reads the *current* language,
+  // even inside a closure that was created before uiLang changed.
+  const langCodeRef = useRef(langCode);
+  useEffect(() => { langCodeRef.current = langCode; }, [langCode]);
 
   const isSupported =
     typeof window !== "undefined" &&
@@ -93,7 +97,7 @@ export function useSpeechRecognition(language = "English") {
 
       recognition.continuous = false;
       recognition.interimResults = true;
-      recognition.lang = langCode;
+      recognition.lang = langCodeRef.current;
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => { setStatus("listening"); setTranscript(""); setInterimTranscript(""); setError(null); };
@@ -150,7 +154,8 @@ export function useSpeechRecognition(language = "English") {
 
         recognition.continuous = false;
         recognition.interimResults = true;
-        recognition.lang = langCode;
+        // Use ref so mid-session language changes are picked up on next spawn
+        recognition.lang = langCodeRef.current;
 
         recognition.onstart = () => { setStatus("listening"); setInterimTranscript(""); setError(null); };
 
