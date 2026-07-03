@@ -671,7 +671,7 @@ Include one entry in questionScores for each question in order (${answered.lengt
 Be honest, specific, and encouraging. Use Indian hiring context.`,
         `You are a senior hiring manager and interview coach evaluating an Indian candidate. Give human, realistic, non-robotic feedback.`,
         undefined,
-        { maxTokens: 1800 }
+        { maxTokens: 3000 }
       );
 
       const parsed = parseReportJson(reportText) ?? {
@@ -686,9 +686,39 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
         nextSteps: ["Practice STAR method answers", "Record yourself and review", "Schedule another mock interview next week"],
       };
 
+      // If questionScores is missing (e.g. JSON was truncated), run a focused
+      // follow-up call to get per-question feedback only.
+      if (!parsed.questionScores || parsed.questionScores.length === 0) {
+        const fbText = await stream(
+          `You are an interview coach. For each answer below, give a 2-3 sentence honest, natural, specific feedback.
+
+${answered.map((q, i) => `Q${i + 1}: ${q.question}\nAnswer: ${q.answer ?? ""}`).join("\n\n")}
+
+Return ONLY a valid JSON array (no markdown) with one object per question in order:
+[{"score":1-10,"communication":1-10,"grammar":1-10,"confidence":1-10,"technical":1-10,"feedback":"2-3 sentences"}]`,
+          `You are a concise interview evaluator. Be honest, specific, and encouraging.`,
+          undefined,
+          { maxTokens: 1500 }
+        );
+        const cleaned = fbText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+        try {
+          const arr = JSON.parse(cleaned) as Array<Record<string, unknown>>;
+          if (Array.isArray(arr)) {
+            parsed.questionScores = arr.map(qs => ({
+              score: Math.min(10, Math.max(1, Number(qs["score"]) || 5)),
+              communication: Math.min(10, Math.max(1, Number(qs["communication"]) || 5)),
+              grammar: Math.min(10, Math.max(1, Number(qs["grammar"]) || 5)),
+              confidence: Math.min(10, Math.max(1, Number(qs["confidence"]) || 5)),
+              technical: Math.min(10, Math.max(1, Number(qs["technical"]) || 5)),
+              feedback: String(qs["feedback"] || ""),
+            }));
+          }
+        } catch { /* keep without per-question scores */ }
+      }
+
       // Populate per-question feedback from report questionScores
       let updatedAnswered = answered;
-      if (parsed.questionScores) {
+      if (parsed.questionScores && parsed.questionScores.length > 0) {
         updatedAnswered = answered.map((q, i) => {
           const qs = parsed.questionScores![i];
           if (!qs) return q;
