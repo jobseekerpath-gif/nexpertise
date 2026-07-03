@@ -119,25 +119,17 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     },
   });
 
-  // stripe-replit-sync resolves its SQL migration files relative to its own module
-  // directory at runtime. Once esbuild bundles it into dist/index.mjs, that path
-  // resolves to THIS dist/ folder — so copy the migration files here. Without them
-  // runMigrations() silently finds nothing (logs "not found, skipping"), the
-  // stripe.* sync tables are never created, and webhook setup + data sync fail.
+  // connect-pg-simple reads its table.sql relative to __dirname at runtime.
+  // When bundled by esbuild, __dirname resolves to dist/ (not the package dir),
+  // so we copy the file there. Without it, createTableIfMissing:true throws
+  // ENOENT and the session store fails to initialise, which crashes the
+  // Google OAuth callback with a 500.
   const nodeRequire = createRequire(import.meta.url);
-  const stripeSyncDist = path.dirname(nodeRequire.resolve("stripe-replit-sync"));
-  const stripeMigrationsSrc = path.join(stripeSyncDist, "migrations");
-  // Fail the build loudly if the upstream package layout changes: an empty (or
-  // missing) migrations dir would let runMigrations() find a dir but apply zero
-  // migrations, silently recreating the "stripe.* tables never created" bug.
-  const sqlFiles = (await readdir(stripeMigrationsSrc)).filter((f) => f.endsWith(".sql"));
-  if (sqlFiles.length === 0) {
-    throw new Error(
-      `No stripe-replit-sync SQL migrations found at ${stripeMigrationsSrc}. ` +
-        `The package layout may have changed; the stripe.* sync tables would not be created.`,
-    );
-  }
-  await cp(stripeMigrationsSrc, path.resolve(distDir, "migrations"), { recursive: true });
+  const pgSimpleDir = path.dirname(nodeRequire.resolve("connect-pg-simple"));
+  await cp(
+    path.join(pgSimpleDir, "table.sql"),
+    path.resolve(distDir, "table.sql"),
+  );
 }
 
 buildAll().catch((err) => {
