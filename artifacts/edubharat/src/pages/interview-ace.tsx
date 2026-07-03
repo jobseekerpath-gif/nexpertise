@@ -495,7 +495,7 @@ In 2-3 natural spoken sentences: greet them by first name (${candidateName.split
     // during the 300ms window between phase="interview" and speakCoach start.
     const pitchVariation = coach.gender === "male" ? 0.88 : 1.08;
     setCoachSpeaking(true);
-    setTimeout(() => speakCoach(opening, { voiceGender: coach.gender, pitch: pitchVariation, rate: 1.1 }), 300);
+    setTimeout(() => speakCoach(opening, { voiceGender: coach.gender, pitch: pitchVariation }), 300);
   }, [typeMeta, experience, duration, coach, stream, resetStream, speakCoach, buildProfileSummary, profile.name, user, authLoading, toast]);
 
   const toggleRecording = useCallback(() => {
@@ -529,7 +529,7 @@ In 2-3 natural spoken sentences: greet them by first name (${candidateName.split
     ));
 
     if (isFinalQuestion) {
-      speakCoach("Thank you for that. It was great speaking with you — we'll wrap up here and put together your report.", { voiceGender: coach.gender, rate: 1.1 });
+      speakCoach("Thank you for that. It was great speaking with you — we'll wrap up here and put together your report.", { voiceGender: coach.gender });
       setTimeout(() => setPhase("report"), 1500);
       return;
     }
@@ -541,11 +541,12 @@ In 2-3 natural spoken sentences: greet them by first name (${candidateName.split
 Q: ${currentQ.question}
 A: "${recordedAnswer}"
 
-React to the answer in ONE casual sentence (warm but human — like "Oh great!", "That's interesting.", "Mm, I see." — never corporate), then ask ONE specific follow-up question relevant to their answer.
-Write exactly two lines:
-Ack: <your natural reaction>
+Respond as a live interviewer on a voice call. First, react to their answer in one natural human sentence — like "Right, that makes sense.", "Oh interesting!", "Hmm, good point." — something real, not corporate. Then ask ONE focused follow-up question based on what they said.
+
+Output exactly two lines (no extra text):
+Ack: <your spoken reaction, one sentence>
 Next: <your follow-up question>`,
-      `You are ${coach.name}, a real Indian interviewer. Sound human and warm — casual conversational style, never robotic or scripted.`,
+      `You are ${coach.name}, a real Indian professional on a live voice interview call. React like a human — genuinely interested, warm, occasionally surprised or curious. Never sound like you're reading a checklist. Use natural speech rhythms.`,
       undefined,
       { maxTokens: 100 }
     );
@@ -561,9 +562,9 @@ Next: <your follow-up question>`,
       setAnswer("");
       setIsRecording(false);
       const pitchVariation = coach.gender === "male" ? 0.88 + Math.random() * 0.06 : 1.06 + Math.random() * 0.06;
-      speakCoach(`${acknowledgment} ${nextQuestion}`, { voiceGender: coach.gender, pitch: pitchVariation, rate: 1.1 });
+      speakCoach(`${acknowledgment} ${nextQuestion}`, { voiceGender: coach.gender, pitch: pitchVariation });
     } else {
-      speakCoach("Thank you. That was a great session. Generating your full report now.", { voiceGender: coach.gender, rate: 1.1 });
+      speakCoach("Thank you. That was a great session. Generating your full report now.", { voiceGender: coach.gender });
       setTimeout(() => setPhase("report"), 1200);
     }
   }, [currentQ, currentIdx, experience, duration, elapsedSeconds, coach, stream, resetStream, synth, typeMeta, buildProfileSummary, buildTranscript, clearAutoSubmitTimer, speech]);
@@ -583,7 +584,7 @@ Next: <your follow-up question>`,
     resetStream();
     // Guard against the 300ms window before speakCoach fires
     setCoachSpeaking(true);
-    setTimeout(() => speakCoach(questions[nextIdx]!.question, { voiceGender: coach.gender, rate: 1.1 }), 300);
+    setTimeout(() => speakCoach(questions[nextIdx]!.question, { voiceGender: coach.gender }), 300);
   }, [currentIdx, questions, resetStream, speakCoach, clearAutoSubmitTimer]);
 
   const endEarly = useCallback(() => {
@@ -1131,7 +1132,7 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
               <p className="text-white text-sm sm:text-base font-semibold leading-snug">{currentQ.question}</p>
               <button
                 className="mt-2 text-primary/70 hover:text-primary text-xs flex items-center gap-1 mx-auto"
-                onClick={() => speakCoach(currentQ.question, { voiceGender: coach.gender, pitch: coach.gender === "male" ? 0.88 : 1.08, rate: 1.1 })}
+                onClick={() => speakCoach(currentQ.question, { voiceGender: coach.gender, pitch: coach.gender === "male" ? 0.88 : 1.08 })}
               >
                 <Volume2 className="w-3 h-3" /> Repeat question
               </button>

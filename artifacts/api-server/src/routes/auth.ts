@@ -65,6 +65,15 @@ function setupPassport() {
     return;
   }
 
+  // Diagnostic: log first 8 chars + length so you can verify this matches
+  // the Client ID in Google Cloud Console → APIs & Services → Credentials.
+  // "Error 401: invalid_client / OAuth client not found" means this value is wrong.
+  console.log(`[auth] Google Client ID (first 8 chars): ${clientID.slice(0, 8)}… (length: ${clientID.length})`);
+  console.log(`[auth] Expected format: XXXXXXXXXX-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com (72 chars)`);
+  if (!clientID.endsWith(".apps.googleusercontent.com")) {
+    console.warn("[auth] ⚠️  GOOGLE_CLIENT_ID does not end with .apps.googleusercontent.com — this will cause invalid_client");
+  }
+
   passport.use(
     new GoogleStrategy(
       {

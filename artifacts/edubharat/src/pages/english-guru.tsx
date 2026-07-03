@@ -422,12 +422,24 @@ function EnglishGuruContent() {
           : `The student's ONLY helper language is ${uiLang} — do NOT use any other Indian language (not Hindi, not Kannada, not Tamil, not any other — ONLY ${uiLang} when needed). English is the goal, so speak MOSTLY in simple, clear English and keep them practicing. But use ${uiLang} as a warm helping hand whenever they need it: if the student replies in ${uiLang}, tells you (in any language) that they didn't understand, or clearly seems confused, briefly explain the tricky word or idea in ${uiLang}, then continue in English. You may drop a short ${uiLang} gloss in brackets right after a hard English word. Never leave them stuck or embarrassed — slow down, simplify, and lean on ${uiLang} to unblock them, then gently guide them back to English. When they're managing fine in English, keep your whole reply in English.`;
         const response = await stream(
           `${recentHistory}\n${teacherShort}:`,
-          `You are ${teacherShort}, a warm, patient Indian English coach having a real, natural conversation with ${profile.name || "a student"}. ${tutor.teachingStyle}. The student is at ${level} level. ${languageGuidance} Use contractions (I'm, you're, that's). Sound warm and real — like a helpful friend, not a textbook. React naturally ("Oh nice!", "Hmm, good point!", "That's right!") when it fits. If the student makes a grammar mistake, gently weave the correct form into your reply without formally pointing it out. Always give a complete, helpful response — finish every thought and never stop mid-sentence. No lists, no markdown, no symbols. Keep it to 2–4 natural sentences.`,
+          `You are ${teacherShort}, a warm Indian English coach on a voice call with ${profile.name || "a student"} (${level} level). ${tutor.teachingStyle}. ${languageGuidance}
+
+Rules for spoken replies:
+- Imagine you are speaking, not writing. Keep it to 2–3 short sentences max.
+- Use contractions: I'm, you're, that's, let's, it's.
+- Start with a natural reaction: "Oh nice!", "Hmm, right!", "Good point!", "Yes, exactly!" — whatever fits.
+- If they make a grammar mistake, quietly use the correct form in your own sentence without pointing it out.
+- Never use bullet points, numbered lists, dashes, or any formatting.
+- Never start your reply with your own name or a label like "Teacher:".
+- Always finish your thought completely — never cut off mid-sentence.`,
           undefined,
-          { maxTokens: 400 }
+          { maxTokens: 300 }
         );
         if (response) {
-          const cleanResponse = stripMarkdownForSpeech(response);
+          // Strip any "TeacherName: " prefix the AI may echo, plus markdown
+          const cleanResponse = stripMarkdownForSpeech(response)
+            .replace(/^[A-Za-zÀ-ÿ'\s]{2,30}:\s*/, "")
+            .trim();
           setConvHistory(h => [...h, { role: "ai", text: cleanResponse }]);
           track("English Guru", "Live Conversation");
           setConvFlowState("ai-speaking");
@@ -445,7 +457,7 @@ function EnglishGuruContent() {
             } else {
               setConvFlowState("idle");
             }
-          }, { rate: 1.05 });
+          });
         } else {
           aiBusyRef.current = false;
           // AI gave no response — release the pause block so the existing loop
