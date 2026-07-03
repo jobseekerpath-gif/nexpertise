@@ -119,43 +119,29 @@ export function tickLiveBlock(): Promise<SpendResult> {
   return spend("/api/credits/live/tick");
 }
 
-export async function startCheckout(credits: number): Promise<{ ok: boolean; error?: string; status: number }> {
-  const origin = window.location.origin;
-  const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-  const creditsUrl = `${origin}${base}/credits`;
-  const { res, data } = await post("/api/credits/checkout", {
-    credits,
-    successUrl: creditsUrl,
-    cancelUrl: creditsUrl,
-  });
-  if (res.ok && typeof data["url"] === "string") {
-    window.location.href = data["url"] as string;
-    return { ok: true, status: res.status };
+// ── UPI payment helpers ──────────────────────────────────────────────────────
+
+export async function submitUpiPayment(credits: number, utr: string): Promise<{ ok: boolean; paymentId?: number; error?: string }> {
+  try {
+    const { res, data } = await post("/api/credits/upi/submit", { credits, utr });
+    return { ok: res.ok, paymentId: data["paymentId"] as number | undefined, error: data["error"] as string | undefined };
+  } catch {
+    return { ok: false, error: "Network error. Please try again." };
   }
-  return {
-    ok: false,
-    status: res.status,
-    error: (data["message"] as string) || (data["error"] as string) || "Checkout could not be started.",
-  };
 }
 
-export async function confirmCheckout(
-  sessionId: string,
-): Promise<{ ok: boolean; credited?: number; already?: boolean; balance?: number; status?: string }> {
+export async function pollUpiPaymentStatus(paymentId: number): Promise<{ status: string; credits?: number; rejectionReason?: string | null } | null> {
   try {
-    const { res, data } = await post("/api/credits/confirm", { sessionId });
-    applyBalance(data);
-    return {
-      ok: res.ok && data["ok"] === true,
-      credited: data["credited"] as number | undefined,
-      already: data["already"] as boolean | undefined,
-      balance: data["balance"] as number | undefined,
-      status: data["status"] as string | undefined,
-    };
+    const res = await fetch(`${BASE}/api/credits/upi/status/${paymentId}`, { credentials: "include" });
+    if (!res.ok) return null;
+    const data = await res.json() as { status: string; credits?: number; rejectionReason?: string | null };
+    if (data.status === "approved") {
+      // Refresh balance so the UI immediately reflects the new credits
+      void refreshCredits();
+    }
+    return data;
   } catch {
-    // Network/transient error — treat as "not confirmed yet" so the caller can retry
-    // without losing the paid session id (crediting is idempotent server-side).
-    return { ok: false };
+    return null;
   }
 }
 

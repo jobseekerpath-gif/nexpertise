@@ -13,6 +13,8 @@ declare module "express-session" {
     userId: number;
     userEmail: string;
     userName?: string;
+    /** Set to true only by the admin-login route (password-hash verified). Never set by OTP or OAuth. */
+    isAdmin?: boolean;
     /** Temporary: guest ID to merge on next successful login (Google OAuth flow) */
     pendingGuestId?: string;
   }
@@ -356,6 +358,7 @@ router.post("/auth/admin-login", async (req, res) => {
     req.session.userId = user.id;
     req.session.userEmail = user.email;
     req.session.userName = user.name ?? undefined;
+    req.session.isAdmin = true; // Only set here — after password-hash verification
 
     res.json({ success: true, user: { id: user.id, email: user.email, name: user.name } });
   } catch (err) {

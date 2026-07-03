@@ -190,6 +190,26 @@ export const creditTransactionsTable = pgTable("credit_transactions", {
   uniqueIndex("credit_tx_type_reference_idx").on(table.type, table.reference),
 ]);
 
+// ── UPI Payments ────────────────────────────────────────────────────────────
+// Manual UPI payment requests submitted by students. Admin approves/rejects.
+export const upiPaymentsTable = pgTable("upi_payments", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }).notNull(),
+  credits: integer("credits").notNull(),        // credits to grant on approval
+  amountInr: integer("amount_inr").notNull(),   // same value — 1 credit = ₹1
+  utr: text("utr").notNull(),                   // UTR / reference number from student
+  status: text("status").notNull().default("pending"), // pending | approved | rejected
+  rejectionReason: text("rejection_reason"),
+  approvedBy: integer("approved_by"),           // admin userId
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  // Prevent the same UTR from being submitted more than once globally.
+  // A UTR is a unique banking reference — no two payments should share one.
+  uniqueIndex("upi_payments_utr_idx").on(table.utr),
+]);
+export type UpiPayment = typeof upiPaymentsTable.$inferSelect;
+
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertOtpSchema = createInsertSchema(otpsTable).omit({ id: true, createdAt: true });
 export const insertLearningProgressSchema = createInsertSchema(learningProgressTable).omit({ id: true, createdAt: true });

@@ -48,6 +48,7 @@
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@types/node": "catalog:",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
@@ -83,6 +84,7 @@
   },
   "dependencies": {
     "jspdf": "^4.2.1",
+    "qrcode": "^1.5.4",
     "react-helmet-async": "^3.0.0",
     "web-vitals": "^5.3.0"
   }

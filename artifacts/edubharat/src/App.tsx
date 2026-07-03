@@ -24,6 +24,7 @@ const Login = lazy(() => import("@/pages/login"));
 const Progress = lazy(() => import("@/pages/progress"));
 const ProfilePage = lazy(() => import("@/pages/profile"));
 const BuyCredits = lazy(() => import("@/pages/buy-credits"));
+const AdminPayments = lazy(() => import("@/pages/admin-payments"));
 
 function Analytics() {
   const [location] = useLocation();
@@ -70,6 +71,7 @@ function Router() {
             <Route path="/progress" component={Progress} />
             <Route path="/profile" component={ProfilePage} />
             <Route path="/credits" component={BuyCredits} />
+            <Route path="/admin-payments" component={AdminPayments} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

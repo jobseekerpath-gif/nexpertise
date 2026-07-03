@@ -14,6 +14,7 @@ import jobsRouter from "./jobs.js";
 import newsRouter from "./news.js";
 import journeyRouter from "./journey.js";
 import creditsRouter from "./credits.js";
+import upiPaymentsRouter from "./upi-payments.js";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(jobsRouter);
 router.use(newsRouter);
 router.use(journeyRouter);
 router.use(creditsRouter);
+router.use(upiPaymentsRouter);
 
 export default router;

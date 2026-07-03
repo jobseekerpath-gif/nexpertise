@@ -1,6 +1,5 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { initStripe } from "./lib/stripe-init";
 import { backfillSignupGrants } from "./lib/credits";
 
 const rawPort = process.env["PORT"];
@@ -26,6 +25,5 @@ app.listen(port, (err) => {
   logger.info({ port }, "Server listening");
 
   // Background init — must never crash or delay the server.
-  void initStripe();
   void backfillSignupGrants();
 });
