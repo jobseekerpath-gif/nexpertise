@@ -103,6 +103,10 @@ export function useEdgeTTS() {
       const ctrl = new AbortController();
       _abort = ctrl;
 
+      // Auto-abort if the TTS fetch hangs (slow network, server stall).
+      // 15 s is generous; real responses are usually < 2 s.
+      const hangTimer = setTimeout(() => { if (_abort === ctrl) ctrl.abort(); }, 15_000);
+
       try {
         const res = await fetch(`${BASE}/api/tts`, {
           method:  "POST",
@@ -111,6 +115,7 @@ export function useEdgeTTS() {
           body:    JSON.stringify({ text: text.trim(), language, gender }),
           signal:  ctrl.signal,
         });
+        clearTimeout(hangTimer);
 
         if (!res.ok || ctrl.signal.aborted) {
           if (ownerRef.current) { ownerRef.current = false; setIsSpeaking(false); }
@@ -155,10 +160,12 @@ export function useEdgeTTS() {
           cleanup();
         }
       } catch (err: unknown) {
-        if ((err as Error)?.name !== "AbortError") {
-          if (ownerRef.current) { ownerRef.current = false; setIsSpeaking(false); }
-          onEnd?.();
-        }
+        clearTimeout(hangTimer);
+        // Fire onEnd whenever we are still the active owner.
+        // • Timeout-triggered abort: ownerRef is still true → fire onEnd ✓
+        // • New speak() evicted us (globalStop → ownerRef=false): skip onEnd ✓
+        // • Any other error: ownerRef is still true → fire onEnd ✓
+        if (ownerRef.current) { ownerRef.current = false; setIsSpeaking(false); onEnd?.(); }
       }
     },
     [],

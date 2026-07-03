@@ -419,10 +419,10 @@ function EnglishGuruContent() {
         const isEnglishNative = uiLang === "English";
         const languageGuidance = isEnglishNative
           ? `Speak in clear, simple, natural English throughout.`
-          : `The student is a native ${uiLang} speaker who is learning English. English is the goal, so speak MOSTLY in simple, clear English and keep them practicing. But use ${uiLang} as a warm helping hand whenever they need it: if the student replies in ${uiLang}, tells you (in any language) that they didn't understand, or clearly seems confused, briefly explain the tricky word or idea in ${uiLang}, then continue in English. You may drop a short ${uiLang} gloss in brackets right after a hard English word. Never leave them stuck or embarrassed — slow down, simplify, and lean on ${uiLang} to unblock them, then gently guide them back to English. When they're managing fine in English, keep your whole reply in English.`;
+          : `The student's ONLY helper language is ${uiLang} — do NOT use any other Indian language (not Hindi, not Kannada, not Tamil, not any other — ONLY ${uiLang} when needed). English is the goal, so speak MOSTLY in simple, clear English and keep them practicing. But use ${uiLang} as a warm helping hand whenever they need it: if the student replies in ${uiLang}, tells you (in any language) that they didn't understand, or clearly seems confused, briefly explain the tricky word or idea in ${uiLang}, then continue in English. You may drop a short ${uiLang} gloss in brackets right after a hard English word. Never leave them stuck or embarrassed — slow down, simplify, and lean on ${uiLang} to unblock them, then gently guide them back to English. When they're managing fine in English, keep your whole reply in English.`;
         const response = await stream(
           `${recentHistory}\n${teacherShort}:`,
-          `You are ${teacherShort}, a warm, patient Indian English coach having a real, natural conversation with ${profile.name || "a student"}. ${tutor.teachingStyle}. ${languageGuidance} Use contractions (I'm, you're, that's). Sound warm and real — like a helpful friend, not a textbook. React naturally ("Oh nice!", "Hmm, good point!", "That's right!") when it fits. If the student makes a grammar mistake, gently weave the correct form into your reply without formally pointing it out. Always give a complete, helpful response — finish every thought and never stop mid-sentence. No lists, no markdown, no symbols. Keep it to 2–4 natural sentences.`,
+          `You are ${teacherShort}, a warm, patient Indian English coach having a real, natural conversation with ${profile.name || "a student"}. ${tutor.teachingStyle}. The student is at ${level} level. ${languageGuidance} Use contractions (I'm, you're, that's). Sound warm and real — like a helpful friend, not a textbook. React naturally ("Oh nice!", "Hmm, good point!", "That's right!") when it fits. If the student makes a grammar mistake, gently weave the correct form into your reply without formally pointing it out. Always give a complete, helpful response — finish every thought and never stop mid-sentence. No lists, no markdown, no symbols. Keep it to 2–4 natural sentences.`,
           undefined,
           { maxTokens: 400 }
         );
@@ -674,7 +674,13 @@ function EnglishGuruContent() {
             <span className="text-sm font-semibold text-secondary truncate">{profile.name || user?.name || "Guest"}</span>
             <span className="text-muted-foreground/40">•</span>
             <span className="text-xs font-medium text-muted-foreground">Native language</span>
-            <Select value={uiLang} onValueChange={(v) => { setUiLang(v); updateProfile({ preferredLanguage: v }); }}>
+            <Select value={uiLang} onValueChange={(v) => {
+              setUiLang(v);
+              updateProfile({ preferredLanguage: v });
+              // Instantly apply during live chat: abort current AI/TTS so the next
+              // turn picks up the new language without waiting for the current one to finish.
+              if (liveChatRef.current) { synth.stop(); aiBusyRef.current = false; setConvFlowState("user-speaking"); }
+            }}>
               <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed" aria-label="Native language">
                 <SelectValue />
               </SelectTrigger>
@@ -684,7 +690,11 @@ function EnglishGuruContent() {
                 {INDIAN_LANGUAGES.filter(l => l !== "Hindi").map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={level} onValueChange={setLevel}>
+            <Select value={level} onValueChange={(v) => {
+              setLevel(v);
+              // Instantly apply during live chat (same pattern as uiLang above)
+              if (liveChatRef.current) { synth.stop(); aiBusyRef.current = false; setConvFlowState("user-speaking"); }
+            }}>
               <SelectTrigger className="h-7 text-xs w-[110px] rounded-full border-dashed">
                 <SelectValue />
               </SelectTrigger>

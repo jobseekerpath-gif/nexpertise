@@ -263,6 +263,10 @@ function InterviewAceContent() {
   // fixing the "stops after 1 question" bug caused by the effect firing eagerly
   // between when the stream ends and when speakCoach actually starts TTS.
   const [coachSpeaking, setCoachSpeaking] = useState(false);
+  // Safety timer: if TTS is aborted or the fetch hangs, onEnd never fires and
+  // coachSpeaking gets stuck true permanently — the mic never starts. This ref
+  // holds a fallback timer that force-clears the flag after a generous timeout.
+  const coachSafetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * speakCoach — the ONLY way the interviewer should talk. It hard-pauses the
    * mic the instant the AI begins speaking (kills echo/self-repeat on phones
@@ -273,8 +277,18 @@ function InterviewAceContent() {
   const speakCoach = useCallback(
     (text: string, opts: { voiceGender?: "male" | "female"; pitch?: number; rate?: number }) => {
       speech.pause();
+      // Clear any previous safety timer before starting fresh
+      if (coachSafetyTimerRef.current) { clearTimeout(coachSafetyTimerRef.current); coachSafetyTimerRef.current = null; }
       setCoachSpeaking(true);
+      // ~120 ms per character covers the slowest realistic reading pace; 12 s is
+      // the minimum so even very short questions get enough buffer for fetch + buffer.
+      const safetyMs = Math.max(text.length * 120 + 4_000, 12_000);
+      coachSafetyTimerRef.current = setTimeout(() => {
+        coachSafetyTimerRef.current = null;
+        setCoachSpeaking(false);
+      }, safetyMs);
       void synth.speak(text, "English", () => {
+        if (coachSafetyTimerRef.current) { clearTimeout(coachSafetyTimerRef.current); coachSafetyTimerRef.current = null; }
         speech.blockFor(800);
         setCoachSpeaking(false);
       }, opts);
