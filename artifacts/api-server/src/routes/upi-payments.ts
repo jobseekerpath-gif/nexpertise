@@ -38,10 +38,28 @@ router.post("/credits/upi/submit", requireAuth, async (req: Request, res: Respon
   }
 
   try {
+    // Insert as approved immediately — no manual review required.
     const [payment] = await db
       .insert(upiPaymentsTable)
-      .values({ userId, credits, amountInr: credits, utr, status: "pending" })
+      .values({ userId, credits, amountInr: credits, utr, status: "approved" })
       .returning();
+
+    // Grant credits (idempotent via reference)
+    const grant = await grantCredits({
+      userId,
+      amount: credits,
+      type: "purchase",
+      description: `UPI top-up — ₹${credits} (UTR: ${utr})`,
+      reference: `upi:${payment!.id}`,
+    });
+
+    if (!grant.ok && !grant.already) {
+      logger.error({ paymentId: payment!.id, userId }, "Credit grant failed on UPI submit");
+      res.status(500).json({ error: "Credits could not be granted. Please contact support." });
+      return;
+    }
+
+    logger.info({ paymentId: payment!.id, userId, credits }, "UPI payment auto-approved");
     res.json({ ok: true, paymentId: payment!.id });
   } catch (err) {
     logger.error({ err: (err as Error).message }, "UPI payment submit error");
