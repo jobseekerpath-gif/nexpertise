@@ -344,9 +344,32 @@ function EnglishGuruContent() {
     const t = getTutorById(id);
     if (!t) return;
     synth.stop();
+    // Unlock the busy flag — the previous AI reply may still be "speaking" as
+    // far as the flag is concerned, which would silently block the next turn.
+    aiBusyRef.current = false;
     setTutorId(id);
     updateProfile({ voiceStyle: t.voiceStyle as typeof profile.voiceStyle, voiceGender: t.voiceGender, preferredTutor: id });
-  }, [synth, updateProfile]);
+    // If live conversation is running, resume it with the new tutor's voice
+    // by having them introduce themselves, then hand back to the student.
+    if (liveChatRef.current) {
+      const shortName = t.name.replace(/\s+(Ma'am|Sir)$/i, "");
+      const greeting = `Hi! I'm ${shortName}. ${t.intro} Please go ahead!`;
+      setConvHistory(h => [...h, { role: "ai", text: greeting }]);
+      setConvFlowState("ai-speaking");
+      // Lock the busy flag AND kill the mic BEFORE speaking so the greeting
+      // can't be picked up as user input (same pattern as handleConvPhrase).
+      aiBusyRef.current = true;
+      speech.pause();
+      synth.speak(stripMarkdownForSpeech(greeting), uiLang, () => {
+        // Only unlock if the user hasn't already ended the live session
+        if (!liveChatRef.current) { aiBusyRef.current = false; return; }
+        aiBusyRef.current = false;
+        setConvFlowState("user-speaking");
+        // Echo-guard: let the continuous loop resume after the greeting fades
+        speech.blockFor(1000);
+      }, { voiceGender: t.voiceGender, voiceStyle: t.voiceStyle });
+    }
+  }, [synth, updateProfile, speech, uiLang]);
 
   const handleStream = useCallback(async (prompt: string, system: string, saveTitle: string) => {
     resetAI();
@@ -532,14 +555,14 @@ function EnglishGuruContent() {
   }, [convInput, handleConvPhrase]);
 
   return (
-    <div className="min-h-full overflow-y-auto container mx-auto px-3 sm:px-4 pt-1 pb-6 max-w-6xl">
+    <div className="min-h-full container mx-auto px-3 sm:px-4 pt-2 pb-6 max-w-6xl">
       {showTutorPicker && (
         <TutorSelector currentId={tutorId} onSelect={handleSelectTutor} onClose={() => setShowTutorPicker(false)} />
       )}
 
       <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
         {/* Sidebar */}
-        <aside className="order-2 lg:order-1 space-y-4 lg:sticky lg:top-20 self-start">
+        <aside className="order-2 lg:order-1 space-y-4 lg:sticky lg:top-2 self-start">
           {/* Change Teacher — top of page CTA */}
           <Button
             variant="default"
@@ -647,7 +670,7 @@ function EnglishGuruContent() {
           </div>
 
           {/* ── STICKY PROFILE BAR — always visible at top without scrolling ── */}
-          <div className="sticky top-16 z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 py-1.5 mb-3 bg-background/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap">
+          <div className="sticky top-0 z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 py-1.5 mb-3 bg-background/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-secondary truncate">{profile.name || user?.name || "Guest"}</span>
             <span className="text-muted-foreground/40">•</span>
             <span className="text-xs font-medium text-muted-foreground">Native language</span>
@@ -682,7 +705,7 @@ function EnglishGuruContent() {
               <MessageCircle className="w-4 h-4 text-green-600" />
               Live Conversation with {tutor.name}
             </h2>
-            <Card className={`flex flex-col overflow-hidden border-2 transition-all h-[72vh] ${liveChat ? "border-green-400 bg-green-50/30" : "border-green-200/70 bg-green-50/10"}`}>
+            <Card className={`flex flex-col overflow-hidden border-2 transition-all h-[calc(100dvh-210px)] min-h-[370px] ${liveChat ? "border-green-400 bg-green-50/30" : "border-green-200/70 bg-green-50/10"}`}>
             <CardContent className="pt-4 pb-4 space-y-3 flex min-h-0 flex-1 flex-col">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">

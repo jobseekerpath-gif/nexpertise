@@ -793,9 +793,9 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
   // ── Setup ──────────────────────────────────────────────────────────────────
   if (phase === "setup") {
     return (
-      <div className="min-h-full overflow-y-auto container mx-auto px-4 max-w-4xl">
+      <div className="min-h-full container mx-auto px-4 max-w-4xl">
         {/* ── STICKY PROFILE BAR — visible at top without scrolling ── */}
-        <div className="sticky top-16 z-20 -mx-4 px-4 py-2.5 bg-white/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap mb-6">
+        <div className="sticky top-0 z-20 -mx-4 px-4 py-2.5 bg-white/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap mb-6">
           <span className="text-sm font-semibold text-secondary truncate">
             {profile.name || user?.name || "Guest"}
           </span>
@@ -911,7 +911,7 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
     const durationMin = Math.round(elapsedSeconds / 60);
 
     return (
-      <div className="min-h-full overflow-y-auto container mx-auto px-4 py-8 max-w-4xl space-y-6">
+      <div className="min-h-full container mx-auto px-4 py-8 max-w-4xl space-y-6">
         {/* Hero */}
         <div className="text-center">
           <div className="flex justify-center mb-4">

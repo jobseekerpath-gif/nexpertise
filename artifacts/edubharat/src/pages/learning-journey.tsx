@@ -412,6 +412,8 @@ End each week with:
 
 Keep every task specific, time-boxed, and India-relevant (job interviews, office talk, interviews on YouTube, etc.).`,
       `You are an experienced English teacher for India's job market. Use only headings, bullet points, and bold — never markdown tables or pipe characters. Be specific and actionable.`,
+      undefined,
+      { maxTokens: 4000 },
     );
   }, [streamPlan, level, effectiveStage]);
 
