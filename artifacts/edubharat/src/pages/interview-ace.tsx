@@ -280,11 +280,13 @@ function InterviewAceContent() {
       // Clear any previous safety timer before starting fresh
       if (coachSafetyTimerRef.current) { clearTimeout(coachSafetyTimerRef.current); coachSafetyTimerRef.current = null; }
       setCoachSpeaking(true);
-      // ~120 ms per character covers the slowest realistic reading pace; 12 s is
-      // the minimum so even very short questions get enough buffer for fetch + buffer.
-      const safetyMs = Math.max(text.length * 120 + 4_000, 12_000);
+      // 50 ms/char + 5 s base, minimum 16 s (just after the 15 s TTS hang-abort).
+      // When this fires it means TTS hung — release the 10-min mic block that
+      // speech.pause() set so the auto-listen effect can restart the mic.
+      const safetyMs = Math.max(text.length * 50 + 5_000, 16_000);
       coachSafetyTimerRef.current = setTimeout(() => {
         coachSafetyTimerRef.current = null;
+        speech.blockFor(500); // override the 10-min pause window → mic can retry
         setCoachSpeaking(false);
       }, safetyMs);
       void synth.speak(text, "English", () => {
@@ -513,6 +515,10 @@ STRICT rules:
       speech.stop();
       return;
     }
+    // Resuming: clear any lingering mic-block window (e.g. from a stuck pause())
+    // so the auto-listen effect can start recognition immediately.
+    speech.blockFor(0);
+    setIsRecording(false); // force auto-listen effect to re-evaluate and restart
     setAutoListenEnabled(true);
   }, [autoListenEnabled, clearAutoSubmitTimer, speech]);
 
@@ -710,6 +716,25 @@ Next: <your next question — start directly with the question, never with a gre
     });
     return () => { clearAutoSubmitTimer(); };
   }, [phase, currentQ, autoListenEnabled, speech, isStreaming, synth.isSpeaking, isRecording, coachSpeaking, submitCurrentAnswer, clearAutoSubmitTimer]);
+
+  // Watchdog: if isRecording is true but the recognition has silently died
+  // (speech status is "idle" for 4+ seconds while nothing else is blocking),
+  // reset isRecording so the auto-listen effect above retries startContinuous.
+  useEffect(() => {
+    if (phase !== "interview" || !autoListenEnabled) return;
+    const id = setInterval(() => {
+      if (
+        isRecording &&
+        speech.status === "idle" &&
+        !coachSpeaking &&
+        !synth.isSpeaking &&
+        !isStreaming
+      ) {
+        setIsRecording(false); // triggers auto-listen effect to restart mic
+      }
+    }, 4_000);
+    return () => clearInterval(id);
+  }, [phase, autoListenEnabled, isRecording, speech.status, coachSpeaking, synth.isSpeaking, isStreaming]);
 
   // Generate detailed report when entering report phase
   useEffect(() => {
