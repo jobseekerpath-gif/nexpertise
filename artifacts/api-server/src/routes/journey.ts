@@ -77,6 +77,62 @@ const LESSON_BANK: Lesson[] = [
 
 const LESSON_IDS = new Set(LESSON_BANK.map(l => l.id));
 
+// ── CEFR level → lesson IDs ──────────────────────────────────────────────────
+const LEVEL_LESSONS: Record<string, string[]> = {
+  A1: ["l1", "l2", "l3", "l4", "l13", "l14"],
+  A2: ["l5", "l6", "l9", "l10", "l15", "l16"],
+  B1: ["l7", "l8", "l11", "l12", "l17", "l18"],
+  B2: ["l19", "l20", "l21", "l22"],
+  C1: ["l23", "l24", "l25", "l26"],
+  C2: ["l27", "l28", "l29", "l30"],
+};
+
+const CEFR_ORDER_SERVER = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
+
+/**
+ * Minimum AVERAGE score (%) across all lessons in a level to "pass" it
+ * and unlock the next level. Based on CEFR language benchmarks.
+ */
+const LEVEL_PASSING_SCORE: Record<string, number> = {
+  A1: 60, A2: 65, B1: 70, B2: 75, C1: 80, C2: 85,
+};
+
+type LevelStatus = {
+  level: string;
+  total: number;
+  studied: number;
+  avgScore: number;
+  passed: boolean;
+  passingScore: number;
+};
+
+function computeLevelStatus(progress: UserProgress): LevelStatus[] {
+  return CEFR_ORDER_SERVER.map(level => {
+    const ids = LEVEL_LESSONS[level] ?? [];
+    const total = ids.length;
+    const states = ids.map(id => progress[id]).filter((s): s is LessonState => Boolean(s));
+    const studied = states.length;
+    // Include ALL studied lesson scores (even 0%) so the average can't be
+    // inflated by omitting failures. A lesson counts as scored once it has
+    // been submitted; un-started lessons don't affect the average yet.
+    const scores = states.map(s => s.last_score ?? 0);
+    const avgScore = scores.length > 0
+      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+      : 0;
+    const passingScore = LEVEL_PASSING_SCORE[level] ?? 60;
+    const passed = studied >= total && avgScore >= passingScore;
+    return { level, total, studied, avgScore, passed, passingScore };
+  });
+}
+
+/** First CEFR level that is not yet fully passed; falls back to "C2" */
+function getCurrentLevel(progress: UserProgress): string {
+  for (const status of computeLevelStatus(progress)) {
+    if (!status.passed) return status.level;
+  }
+  return "C2";
+}
+
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -322,12 +378,20 @@ export async function mergeGuestProgress(guestId: string, userId: string): Promi
 
 // ------------------------------------------------------------------
 // GET /journey/next?userId=<id>
-// Returns up to 5 interleaved lessons (due reviews first, then new)
+// Returns due reviews (any level) + all remaining new lessons in
+// the student's current CEFR level. No hard 5-lesson cap on new
+// lessons so an entire level (e.g. all 6 A1 lessons) is accessible
+// in a single session. Reviews are capped at 5 to avoid overwhelm.
 // ------------------------------------------------------------------
 router.get("/journey/next", async (req: Request, res: Response) => {
   const userId = (req.query["userId"] as string) || "guest";
   const progress = await loadUserProgress(userId);
   const today = todayStr();
+
+  // Determine which CEFR level the student is currently working on
+  const levelStatuses = computeLevelStatus(progress);
+  const currentLevel = getCurrentLevel(progress);
+  const currentLevelIds = new Set(LEVEL_LESSONS[currentLevel] ?? []);
 
   const due: Lesson[] = [];
   const newLessons: Lesson[] = [];
@@ -335,17 +399,17 @@ router.get("/journey/next", async (req: Request, res: Response) => {
   for (const lesson of LESSON_BANK) {
     const state = progress[lesson.id];
     if (!state) {
-      newLessons.push(lesson);
+      // New lessons: only from the current CEFR level — never jump ahead
+      if (currentLevelIds.has(lesson.id)) newLessons.push(lesson);
     } else if (state.due_date <= today) {
-      due.push(lesson);
+      due.push(lesson); // Reviews from any level always come back
     }
   }
 
   /**
    * Priority contract: due reviews ALWAYS come before new lessons.
-   * Interleaving is applied within each group independently, then the
-   * groups are concatenated — so no new lesson can appear while any
-   * due review is still available.
+   * Interleaving is applied within each group independently so the
+   * same skill type never repeats back-to-back.
    */
   function interleaveBySkillType(lessons: Lesson[]): Lesson[] {
     const byType = new Map<string, Lesson[]>();
@@ -364,33 +428,42 @@ router.get("/journey/next", async (req: Request, res: Response) => {
     return result;
   }
 
-  // Interleave due reviews first, then fill remaining slots with new lessons
-  const interleavedDue = interleaveBySkillType(due);
+  // Reviews capped at 5/session; new lessons: ALL remaining in current level
+  const interleavedDue = interleaveBySkillType(due).slice(0, 5);
   const interleavedNew = interleaveBySkillType(newLessons);
   let interleaved = [...interleavedDue, ...interleavedNew];
-  let mode: "due" | "ahead" = "due";
+  let mode: "due" | "ahead" | "improve_score" = "due";
 
-  // No dead-end: when every lesson is studied and nothing is due yet, surface the
-  // lessons whose review is coming up soonest so the learner can practise ahead.
-  // (Reviewing early just re-locks the memory — pedagogically harmless, and it
-  // keeps streaks and momentum alive instead of a "come back tomorrow" wall.)
   if (interleaved.length === 0) {
-    const upcoming = LESSON_BANK
-      .filter(l => progress[l.id])
-      .sort((a, b) => progress[a.id]!.due_date.localeCompare(progress[b.id]!.due_date))
-      .slice(0, 5);
-    interleaved = interleaveBySkillType(upcoming);
-    if (interleaved.length > 0) mode = "ahead";
+    const currentStatus = levelStatuses.find(ls => ls.level === currentLevel);
+
+    if (currentStatus && currentStatus.studied >= currentStatus.total && !currentStatus.passed) {
+      // All lessons in current level studied but average score is below passing —
+      // surface lowest-scoring lessons for re-practice so the student can improve.
+      const toRepractice = LESSON_BANK
+        .filter(l => currentLevelIds.has(l.id) && progress[l.id])
+        .sort((a, b) => (progress[a.id]!.last_score ?? 0) - (progress[b.id]!.last_score ?? 0));
+      interleaved = interleaveBySkillType(toRepractice).slice(0, 5);
+      if (interleaved.length > 0) mode = "improve_score";
+    } else {
+      // Everything done and on-schedule — surface upcoming reviews for practice ahead
+      const upcoming = LESSON_BANK
+        .filter(l => progress[l.id])
+        .sort((a, b) => progress[a.id]!.due_date.localeCompare(progress[b.id]!.due_date))
+        .slice(0, 5);
+      interleaved = interleaveBySkillType(upcoming);
+      if (interleaved.length > 0) mode = "ahead";
+    }
   }
 
-  const result = interleaved.slice(0, 5).map(lesson => {
+  const result = interleaved.map(lesson => {
     const state = progress[lesson.id];
-    return {
-      ...lesson,
-      status: mode === "ahead" ? "practice ahead" : state ? "due for review" : "new lesson",
-      last_score: state?.last_score ?? null,
-      next_review: state?.due_date ?? null,
-    };
+    const status =
+      mode === "ahead" ? "practice ahead"
+      : mode === "improve_score" ? "due for review"
+      : state ? "due for review"
+      : "new lesson";
+    return { ...lesson, status, last_score: state?.last_score ?? null, next_review: state?.due_date ?? null };
   });
 
   // Soonest future review date — lets the UI say "next review on <date>".
@@ -399,7 +472,15 @@ router.get("/journey/next", async (req: Request, res: Response) => {
     .filter((d): d is string => Boolean(d) && (d as string) > today)
     .sort()[0] ?? null;
 
-  res.json({ lessons: result, total_due: due.length, total_new: newLessons.length, mode, next_due_date: nextDueDate });
+  res.json({
+    lessons: result,
+    total_due: due.length,
+    total_new: newLessons.length,
+    mode,
+    next_due_date: nextDueDate,
+    current_level: currentLevel,
+    level_status: levelStatuses,
+  });
 });
 
 // ------------------------------------------------------------------
@@ -620,9 +701,14 @@ router.get("/journey/progress", async (req: Request, res: Response) => {
   const studied = items.filter(l => l.studied).length;
   const overdue = items.filter(l => l.overdue).length;
 
+  const levelStatuses = computeLevelStatus(progress);
+  const currentLevel = getCurrentLevel(progress);
+
   res.json({
     lessons: items,
     summary: { total: LESSON_BANK.length, studied, overdue, streak },
+    level_status: levelStatuses,
+    current_level: currentLevel,
   });
 });
 

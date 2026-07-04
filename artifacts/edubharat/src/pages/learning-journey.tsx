@@ -50,6 +50,15 @@ type Summary = {
   streak: number;
 };
 
+type LevelStatus = {
+  level: string;
+  total: number;
+  studied: number;
+  avgScore: number;
+  passed: boolean;
+  passingScore: number;
+};
+
 type ProgressLesson = Lesson & {
   studied: boolean;
   due_date: string | null;
@@ -343,14 +352,16 @@ export default function LearningJourneyPage() {
   const { user } = useAuth();
   const userId = user ? String(user.id) : getGuestId();
 
-  const [lessons,    setLessons]    = useState<Lesson[]>([]);
-  const [summary,    setSummary]    = useState<Summary | null>(null);
-  const [allLessons, setAllLessons] = useState<ProgressLesson[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [scores,     setScores]     = useState<Record<string, number>>({});
-  const [submitting, setSubmitting] = useState<Record<string, boolean>>({});
-  const [submitted,  setSubmitted]  = useState<Record<string, boolean>>({});
-  const [activeTab,  setActiveTab]  = useState<"queue" | "all" | "roadmap">("queue");
+  const [lessons,         setLessons]         = useState<Lesson[]>([]);
+  const [summary,         setSummary]         = useState<Summary | null>(null);
+  const [allLessons,      setAllLessons]      = useState<ProgressLesson[]>([]);
+  const [levelStatus,     setLevelStatus]     = useState<LevelStatus[]>([]);
+  const [currentLevelAPI, setCurrentLevelAPI] = useState<string>("A1");
+  const [loading,         setLoading]         = useState(true);
+  const [scores,          setScores]          = useState<Record<string, number>>({});
+  const [submitting,      setSubmitting]      = useState<Record<string, boolean>>({});
+  const [submitted,       setSubmitted]       = useState<Record<string, boolean>>({});
+  const [activeTab,       setActiveTab]       = useState<"queue" | "all" | "roadmap">("queue");
   // Which CEFR level card is expanded in the roadmap
   const [expandedLevel, setExpandedLevel] = useState<string | null>(null);
   // XP earned in the current focus session (resets on each fresh queue load)
@@ -364,11 +375,19 @@ export default function LearningJourneyPage() {
   const level        = mapEnglishLevel(profile.englishLevel);
   const currentStage = LEVEL_TO_STAGE[level] ?? "A1";
 
-  // Study-earned stage: the first CEFR level the learner has NOT fully studied.
-  // Real progress unlocks the next level (finish A1 → A2 opens), independent of
-  // the level declared in the profile. Empty progress falls back to A1 so we
-  // never unlock everything before data has loaded.
+  // Study-earned stage: the first CEFR level that is NOT yet "passed".
+  // A level is passed only when ALL its lessons are studied AND the average
+  // score meets the CEFR minimum (60 % for A1, 65 % for A2, …).
+  // Falls back to the API-reported currentLevel when levelStatus is not loaded yet.
   const masteryStage = useMemo<(typeof CEFR_ORDER)[number]>(() => {
+    if (levelStatus.length > 0) {
+      for (const lvl of CEFR_ORDER) {
+        const ls = levelStatus.find(l => l.level === lvl);
+        if (!ls || !ls.passed) return lvl as (typeof CEFR_ORDER)[number];
+      }
+      return CEFR_ORDER[CEFR_ORDER.length - 1] as (typeof CEFR_ORDER)[number];
+    }
+    // Fallback before level_status loads: use study count only
     if (allLessons.length === 0) return "A1";
     const byLevel: Record<string, { total: number; done: number }> = {};
     for (const l of allLessons) {
@@ -380,10 +399,10 @@ export default function LearningJourneyPage() {
     }
     for (const lvl of CEFR_ORDER) {
       const b = byLevel[lvl];
-      if (b && b.done < b.total) return lvl;
+      if (b && b.done < b.total) return lvl as (typeof CEFR_ORDER)[number];
     }
-    return CEFR_ORDER[CEFR_ORDER.length - 1];
-  }, [allLessons]);
+    return CEFR_ORDER[CEFR_ORDER.length - 1] as (typeof CEFR_ORDER)[number];
+  }, [levelStatus, allLessons]);
 
   // Effective stage = the further along of profile-declared and study-earned.
   const effectiveStageIdx = Math.max(
@@ -424,13 +443,30 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
         fetch(`${BASE}/api/journey/next?userId=${userId}`),
         fetch(`${BASE}/api/journey/progress?userId=${userId}`),
       ]);
-      const nextData = await nextRes.json() as { lessons: Lesson[]; total_due: number; total_new: number; mode?: string; next_due_date?: string | null };
-      const progData = await progressRes.json() as { lessons: ProgressLesson[]; summary: Summary };
+      const nextData = await nextRes.json() as {
+        lessons: Lesson[];
+        total_due: number;
+        total_new: number;
+        mode?: string;
+        next_due_date?: string | null;
+        current_level?: string;
+        level_status?: LevelStatus[];
+      };
+      const progData = await progressRes.json() as {
+        lessons: ProgressLesson[];
+        summary: Summary;
+        level_status?: LevelStatus[];
+        current_level?: string;
+      };
       setLessons(nextData.lessons ?? []);
       setAheadMode(nextData.mode === "ahead");
       setNextDueDate(nextData.next_due_date ?? null);
       setAllLessons(progData.lessons ?? []);
       setSummary(progData.summary ?? null);
+      // Level status comes from either endpoint; progress is more authoritative
+      const ls = progData.level_status ?? nextData.level_status ?? [];
+      setLevelStatus(ls);
+      setCurrentLevelAPI(progData.current_level ?? nextData.current_level ?? "A1");
       setSubmitted({});
       setScores({});
       setSessionXP(0);
@@ -474,6 +510,20 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
     }
   }, [scores, userId, lessons]);
 
+  // When the entire queue is submitted, refresh level_status from the server
+  // so the session-complete card can show accurate pass/fail messaging.
+  useEffect(() => {
+    const allSubmitted = lessons.length > 0 && lessons.every(l => submitted[l.id]);
+    if (!allSubmitted) return;
+    fetch(`${BASE}/api/journey/progress?userId=${userId}`)
+      .then(r => r.json())
+      .then((data: { level_status?: LevelStatus[]; current_level?: string }) => {
+        if (data.level_status) setLevelStatus(data.level_status);
+        if (data.current_level) setCurrentLevelAPI(data.current_level);
+      })
+      .catch(() => {});
+  }, [submitted, lessons, userId]);
+
   // Group allLessons by CEFR level for the "All Lessons" view
   const lessonsByLevel = useMemo(() => {
     const map: Record<string, ProgressLesson[]> = {};
@@ -490,9 +540,15 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
   const overdue = summary?.overdue  ?? 0;
   const pct     = total > 0 ? Math.round((studied / total) * 100) : 0;
 
-  // Current stage index for locking future levels — driven by real progress so
-  // finishing a level actually unlocks the next one.
-  const currentLevelIdx = effectiveStageIdx;
+  // Use the server-reported current level as the strict gate for locking.
+  // Profile-declared level only affects UI labelling, not which levels are
+  // visible — a student who declares B2 but hasn't passed A1 shouldn't see
+  // A2+ lessons unlocked in the All Lessons or Roadmap tabs.
+  const apiCurrentLevelIdx = (() => {
+    const idx = CEFR_ORDER.indexOf(currentLevelAPI as (typeof CEFR_ORDER)[number]);
+    return idx >= 0 ? idx : 0;
+  })();
+  const currentLevelIdx = apiCurrentLevelIdx;
 
   return (
     <>
@@ -730,22 +786,41 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
                     </>
                   ) : (
                     /* ── Session complete celebration ── */
-                    <Card className="border-primary/30 shadow-sm bg-gradient-to-b from-primary/5 to-transparent">
-                      <CardContent className="p-8 text-center space-y-3">
-                        <div className="text-5xl">🏆</div>
-                        <p className="font-display text-xl font-extrabold text-secondary">
-                          Session complete!
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          You finished {doneCount} lesson{doneCount > 1 ? "s" : ""} and earned{" "}
-                          <span className="font-bold text-primary">+{sessionXP} XP</span>.
-                          {summary && summary.streak > 0 && ` Your ${summary.streak}-day streak is safe. 🔥`}
-                        </p>
-                        <Button onClick={() => void loadNext()} className="font-bold">
-                          <RotateCcw className="w-3.5 h-3.5 mr-1.5" />Check for more
-                        </Button>
-                      </CardContent>
-                    </Card>
+                    (() => {
+                      const curLS = levelStatus.find(l => l.level === currentLevelAPI);
+                      const justPassed = curLS?.passed;
+                      const needScore  = curLS && curLS.studied >= curLS.total && !curLS.passed;
+                      const nextLevel  = CEFR_ORDER[CEFR_ORDER.indexOf(currentLevelAPI as typeof CEFR_ORDER[number]) + 1];
+                      return (
+                        <Card className={`border-primary/30 shadow-sm bg-gradient-to-b ${justPassed ? "from-green-50 to-transparent border-green-200" : "from-primary/5 to-transparent"}`}>
+                          <CardContent className="p-8 text-center space-y-3">
+                            <div className="text-5xl">{justPassed ? "🎉" : "🏆"}</div>
+                            <p className="font-display text-xl font-extrabold text-secondary">
+                              {justPassed ? `${currentLevelAPI} Passed!` : "Session complete!"}
+                            </p>
+                            {justPassed && nextLevel ? (
+                              <p className="text-sm text-green-700 font-semibold">
+                                You've unlocked <strong>{nextLevel}</strong>! Your learning journey continues.
+                              </p>
+                            ) : needScore ? (
+                              <p className="text-sm text-amber-700">
+                                You need <strong>{curLS!.passingScore}%</strong> average to pass {currentLevelAPI} (you have <strong>{curLS!.avgScore}%</strong>). Practice again to improve!
+                              </p>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                You finished {doneCount} lesson{doneCount > 1 ? "s" : ""} and earned{" "}
+                                <span className="font-bold text-primary">+{sessionXP} XP</span>.
+                                {summary && summary.streak > 0 && ` Your ${summary.streak}-day streak is safe. 🔥`}
+                              </p>
+                            )}
+                            <Button onClick={() => void loadNext()} className={`font-bold ${justPassed ? "bg-green-600 hover:bg-green-700" : ""}`}>
+                              <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                              {justPassed ? `Start ${nextLevel ?? "C2"} lessons` : needScore ? "Practice to improve" : "Check for more"}
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      );
+                    })()
                   )}
                 </>
               );
@@ -766,8 +841,11 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
                 const levelLessons = lessonsByLevel[lvl] ?? [];
                 const accent     = LEVEL_ACCENT[lvl] ?? LEVEL_ACCENT.A1;
                 const done       = levelLessons.filter(l => l.studied).length;
-                const isLocked   = currentLevelIdx < CEFR_ORDER.indexOf(lvl as typeof CEFR_ORDER[number]) - 1;
+                const lvlIdx     = CEFR_ORDER.indexOf(lvl as typeof CEFR_ORDER[number]);
+                // Strictly sequential: levels beyond the current one are locked
+                const isLocked   = lvlIdx > currentLevelIdx;
                 const isCurrent  = lvl === effectiveStage;
+                const ls         = levelStatus.find(l => l.level === lvl);
 
                 return (
                   <div key={lvl}>
@@ -792,7 +870,15 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
                           )}
                           {isLocked && (
                             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
-                              Complete {CEFR_ORDER[CEFR_ORDER.indexOf(lvl as typeof CEFR_ORDER[number]) - 1]} first
+                              🔒 Complete {effectiveStage} to unlock
+                            </Badge>
+                          )}
+                          {ls && !isLocked && ls.studied > 0 && (
+                            <Badge
+                              variant="secondary"
+                              className={`text-[10px] px-1.5 py-0 h-4 ${ls.passed ? "bg-green-100 text-green-700" : "text-muted-foreground"}`}
+                            >
+                              {ls.passed ? `✓ Passed (${ls.avgScore}%)` : `${ls.avgScore}% · need ${ls.passingScore}%`}
                             </Badge>
                           )}
                           {levelLessons.length > 0 && (
@@ -900,7 +986,11 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
               const levelLessons = lessonsByLevel[stage.level] ?? [];
               const doneCnt    = levelLessons.filter(l => l.studied).length;
               const pctLevel   = levelLessons.length > 0 ? Math.round((doneCnt / levelLessons.length) * 100) : 0;
-              const isLocked   = !isCurrent && !isPast && idx > effectiveStageIdx + 1;
+              // Strictly sequential: only current + past levels are unlocked
+              const isLocked   = idx > effectiveStageIdx;
+              const ls         = levelStatus.find(l => l.level === stage.level);
+              // Level needs score improvement (all studied but below passing mark)
+              const needsImprovement = ls && ls.studied >= ls.total && !ls.passed && !isLocked;
 
               return (
                 <div key={stage.level} className="flex gap-3">
@@ -1071,6 +1161,27 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
                           </div>
                         )}
 
+                        {/* Passing-score bar for current/past levels */}
+                        {ls && !isLocked && ls.studied > 0 && (
+                          <div className={`rounded-lg border px-3 py-2 text-xs flex items-center justify-between gap-2 ${
+                            ls.passed ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"
+                          }`}>
+                            <span className={ls.passed ? "text-green-700 font-semibold" : "text-amber-700"}>
+                              {ls.passed
+                                ? `✓ Passed — avg ${ls.avgScore}%`
+                                : `Avg ${ls.avgScore}% · need ${ls.passingScore}% to unlock ${
+                                    CEFR_ORDER[CEFR_ORDER.indexOf(stage.level as typeof CEFR_ORDER[number]) + 1] ?? "next level"
+                                  }`}
+                            </span>
+                            <div className="w-20 h-1.5 rounded-full bg-black/10 overflow-hidden shrink-0">
+                              <div
+                                className={`h-full rounded-full transition-all ${ls.passed ? "bg-green-500" : "bg-amber-400"}`}
+                                style={{ width: `${Math.min(100, (ls.avgScore / ls.passingScore) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
                         {/* CTA */}
                         {isCurrent && (
                           <Button
@@ -1079,18 +1190,21 @@ Keep every task specific, time-boxed, and India-relevant (job interviews, office
                             onClick={() => setActiveTab("queue")}
                           >
                             <ArrowRight className="w-3.5 h-3.5 mr-1.5" />
-                            Go to today's lessons
+                            {needsImprovement ? "Practice again to improve score" : "Go to today's lessons"}
                           </Button>
                         )}
-                        {!isCurrent && !isPast && !isLocked && (
+                        {isLocked && (
                           <Button size="sm" variant="outline" className="w-full font-semibold text-xs" disabled>
-                            Complete {effectiveStage} first to unlock this level
+                            <Lock className="w-3 h-3 mr-1.5" />
+                            {ls
+                              ? `Complete ${effectiveStage} with ${levelStatus.find(l => l.level === effectiveStage)?.passingScore ?? 60}%+ to unlock`
+                              : `Complete ${effectiveStage} first`}
                           </Button>
                         )}
                         {isPast && (
                           <div className="flex items-center gap-2 text-xs text-primary font-semibold px-1">
                             <Trophy className="w-3.5 h-3.5" />
-                            Level completed — great work!
+                            {ls?.passed ? `Level passed with ${ls.avgScore}% — great work!` : "Level completed — great work!"}
                           </div>
                         )}
                       </div>
