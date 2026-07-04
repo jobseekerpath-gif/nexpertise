@@ -907,44 +907,44 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
   if (phase === "setup") {
     return (
       <div className="min-h-full container mx-auto px-4 max-w-4xl">
-        {/* ── STICKY PROFILE BAR — visible at top without scrolling ── */}
-        <div className="sticky top-0 z-20 -mx-4 px-4 py-2.5 bg-white/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap mb-6">
-          <span className="text-sm font-semibold text-secondary truncate">
-            {profile.name || user?.name || "Guest"}
-          </span>
-          <span className="text-muted-foreground/40">•</span>
-          <Select value={type} onValueChange={setType}>
-            <SelectTrigger className="h-7 text-xs w-[160px] rounded-full border-dashed">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {INTERVIEW_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.icon} {t.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={experience} onValueChange={setExperience}>
-            <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {EXPERIENCE_LEVELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={String(duration)} onValueChange={v => setDuration(Number(v))}>
-            <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {DURATIONS.map(d => <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="text-center mb-8 pt-2">
+        <div className="text-center mb-8 pt-6">
           <h1 className="text-4xl font-display font-bold text-secondary mb-2">Interview Ace</h1>
           <p className="text-muted-foreground">AI mock interviews with instant feedback · Voice-powered · India-focused</p>
         </div>
 
         {/* Coach selection */}
         <div className="mb-8">
+          {/* ── SETTINGS BAR — directly above the interviewer grid ── */}
+          <div className="flex items-center gap-2 flex-wrap mb-3">
+            <span className="text-sm font-semibold text-secondary truncate">
+              {profile.name || user?.name || "Guest"}
+            </span>
+            <span className="text-muted-foreground/40">•</span>
+            <Select value={type} onValueChange={setType}>
+              <SelectTrigger className="h-7 text-xs w-[160px] rounded-full border-dashed">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {INTERVIEW_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.icon} {t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={experience} onValueChange={setExperience}>
+              <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {EXPERIENCE_LEVELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={String(duration)} onValueChange={v => setDuration(Number(v))}>
+              <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DURATIONS.map(d => <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">
             Choose Your Interviewer
           </h2>
