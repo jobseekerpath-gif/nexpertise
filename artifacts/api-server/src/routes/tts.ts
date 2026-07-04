@@ -3,6 +3,24 @@ import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
 
 const router = Router();
 
+/**
+ * Per-tutor voice overrides — each English Guru tutor gets a distinct accent.
+ * Female tutors: all chosen for warmth/sweetness.
+ * Male tutors: one Indian, one American, one British.
+ * Keys match the `voiceStyle` field on TutorPersona in the frontend.
+ */
+const TUTOR_VOICE_MAP: Record<string, string> = {
+  // Female tutors — distinct accents, all sweet/warm
+  priya:  "en-IN-NeerjaNeural",       // Indian — warm, friendly
+  meera:  "en-US-AriaNeural",         // American — professional & sweet (Maya Ma'am)
+  neerja: "en-GB-SoniaNeural",        // British — clear & sweet (Neha Ma'am, pronunciation)
+
+  // Male tutors — Indian / American / British
+  rohit:  "en-IN-PrabhatNeural",      // Indian (Rohit Sir — corporate)
+  arjun:  "en-US-ChristopherNeural",  // American (Arjun Sir — interview coach)
+  rahul:  "en-GB-RyanNeural",         // British (Rahul Sir — grammar & writing)
+};
+
 // Microsoft Edge Neural voices for all 13 Indian languages + English
 // Sourced from verified Microsoft voice list (all -Neural suffix voices)
 const EDGE_VOICES: Record<string, { male: string; female: string }> = {
@@ -43,7 +61,8 @@ router.post("/tts", async (req, res) => {
     text,
     language = "English",
     gender = "female",
-  } = req.body as { text?: string; language?: string; gender?: "male" | "female" };
+    voiceStyle,
+  } = req.body as { text?: string; language?: string; gender?: "male" | "female"; voiceStyle?: string };
 
   if (!text?.trim()) {
     res.status(400).json({ error: "Missing 'text' field" });
@@ -55,8 +74,12 @@ router.post("/tts", async (req, res) => {
     return;
   }
 
+  // Use per-tutor voice when a voiceStyle is supplied; fall back to language-based selection.
+  // For non-English languages, always use the language-native voice regardless of voiceStyle
+  // (tutor voice overrides only apply when speaking English).
   const voices = EDGE_VOICES[language] ?? EDGE_VOICES["English"]!;
-  const voiceName = gender === "male" ? voices.male : voices.female;
+  const tutorVoice = language === "English" && voiceStyle ? TUTOR_VOICE_MAP[voiceStyle] : undefined;
+  const voiceName = tutorVoice ?? (gender === "male" ? voices.male : voices.female);
 
   try {
     const tts = new MsEdgeTTS();

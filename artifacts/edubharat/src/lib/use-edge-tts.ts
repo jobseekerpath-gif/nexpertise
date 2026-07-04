@@ -20,7 +20,12 @@ export type EdgeSpeakOptions = {
   rate?: number;
   /** ignored for Edge TTS (pitch is set by the neural model, not adjustable) */
   pitch?: number;
-  voiceStyle?: string; // kept for API compatibility, unused
+  /**
+   * Tutor voice style key (e.g. "priya", "arjun", "rahul"). When supplied, the
+   * API server maps this to a specific Edge Neural voice so each tutor has a
+   * distinct accent. Falls back to gender-based selection when absent.
+   */
+  voiceStyle?: string;
 };
 
 const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
@@ -112,7 +117,7 @@ export function useEdgeTTS() {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body:    JSON.stringify({ text: text.trim(), language, gender }),
+          body:    JSON.stringify({ text: text.trim(), language, gender, voiceStyle: options.voiceStyle }),
           signal:  ctrl.signal,
         });
         clearTimeout(hangTimer);
