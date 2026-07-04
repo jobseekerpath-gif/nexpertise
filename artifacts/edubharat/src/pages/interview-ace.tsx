@@ -331,7 +331,7 @@ function InterviewAceContent() {
     const preferred = profile.preferredInterviewer;
     return INTERVIEW_COACHES.find(c => c.id === preferred) ?? INTERVIEW_COACHES[0]!;
   });
-  const [duration, setDuration] = useState(15);
+  const [duration, setDuration] = useState(10);
   const [phase, setPhase] = useState<"setup" | "interview" | "report">("setup");
   const [questions, setQuestions] = useState<QA[]>([]);
   const questionsRef = useRef<QA[]>([]);
@@ -665,6 +665,17 @@ Next: <your next question — start directly with the question, never with a gre
     speakCoach(`${acknowledgment} ${nextQuestion}`, { voiceGender: coach.gender, pitch: pitchVariation });
   }, [currentQ, currentIdx, experience, duration, elapsedSeconds, coach, stream, resetStream, synth, typeMeta, buildProfileSummary, buildTranscript, clearAutoSubmitTimer, speech, profile]);
 
+  /**
+   * submitCurrentAnswerRef — always points to the latest submitCurrentAnswer.
+   * Used in the auto-listen startContinuous callback so the callback closure
+   * doesn't need submitCurrentAnswer in deps. Without this, the elapsedSeconds
+   * dep in submitCurrentAnswer causes a new reference every second, which makes
+   * the auto-listen effect re-run every second and its cleanup clears the 800ms
+   * auto-submit timer before it can fire — the user's answer is never submitted.
+   */
+  const submitCurrentAnswerRef = useRef<typeof submitCurrentAnswer>(submitCurrentAnswer);
+  useEffect(() => { submitCurrentAnswerRef.current = submitCurrentAnswer; }, [submitCurrentAnswer]);
+
   const submitAnswer = useCallback(() => {
     if (!answer.trim()) return;
     void submitCurrentAnswer(answer.trim());
@@ -709,13 +720,20 @@ Next: <your next question — start directly with the question, never with a gre
       clearAutoSubmitTimer();
       // 800ms silence → auto-submit: snappy, human-paced turn-taking while
       // still leaving room for short thinking pauses mid-answer.
+      // Uses submitCurrentAnswerRef (not submitCurrentAnswer directly) so the
+      // closure always calls the latest version without adding submitCurrentAnswer
+      // to deps. Without this, elapsedSeconds (a dep of submitCurrentAnswer) gives
+      // it a new reference every second → effect re-runs every second → cleanup
+      // fires clearAutoSubmitTimer() before 800ms elapses → answer never submitted.
       autoSubmitRef.current = setTimeout(() => {
         const latest = answerRef.current.trim();
-        if (latest) void submitCurrentAnswer(latest);
+        if (latest) void submitCurrentAnswerRef.current(latest);
       }, 800);
     });
-    return () => { clearAutoSubmitTimer(); };
-  }, [phase, currentQ, autoListenEnabled, speech, isStreaming, synth.isSpeaking, isRecording, coachSpeaking, submitCurrentAnswer, clearAutoSubmitTimer]);
+    // No clearAutoSubmitTimer in cleanup: timer must survive normal dep changes.
+    // Unmount cleanup is handled by the dedicated effect above. Clearing here
+    // would cancel in-flight auto-submits whenever any dep ticks (e.g. speech.status).
+  }, [phase, currentQ, autoListenEnabled, speech, isStreaming, synth.isSpeaking, isRecording, coachSpeaking, clearAutoSubmitTimer]);
 
   // Watchdog: if isRecording is true but the recognition has silently died
   // (speech status is "idle" for 4+ seconds while nothing else is blocking),
