@@ -691,7 +691,17 @@ Rules for spoken replies:
               updateProfile({ preferredLanguage: v });
               // Instantly apply during live chat: abort current AI/TTS so the next
               // turn picks up the new language without waiting for the current one to finish.
-              if (liveChatRef.current) { synth.stop(); aiBusyRef.current = false; setConvFlowState("user-speaking"); }
+              if (liveChatRef.current) {
+                synth.stop();
+                aiBusyRef.current = false;
+                // Clear the mic pause-block (speech.pause sets a 10-min timer;
+                // blockFor(0) expires it immediately so the loop can respawn).
+                speech.blockFor(0);
+                // Clear isStreaming so handleConvPhrase doesn't return early
+                // if the AI was mid-response when the language was changed.
+                resetAI();
+                setConvFlowState("user-speaking");
+              }
             }}>
               <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed" aria-label="Native language">
                 <SelectValue />
