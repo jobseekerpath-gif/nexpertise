@@ -6,14 +6,13 @@ const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 export const CREDIT_MIN_PURCHASE = 49;
 export const CREDIT_QUICK_PICKS = [49, 99, 199, 499, 999];
 
-/** Live conversation: 1 credit per 12-minute block = 5 credits/hour. */
-export const LIVE_BLOCK_SECONDS = 12 * 60;
-export const LIVE_HOURLY_COST = 5;
+/** Live conversation: 1 credit per 60-minute block = 5 credits/5 hours. */
+export const LIVE_BLOCK_SECONDS = 60 * 60;
+export const LIVE_HOURLY_COST = 1;
 
-/** Interview cost by duration: ~1 credit per 5 min, clamped 2–5 (mirrors the server). */
-export function interviewCreditCost(durationMinutes: number): number {
-  const cost = Math.round(durationMinutes / 5);
-  return Math.max(2, Math.min(5, cost));
+/** Interview cost is a flat 5 credits per session (mirrors the server). */
+export function interviewCreditCost(_durationMinutes: number): number {
+  return 5;
 }
 
 export type CreditsState = { balance: number | null; authenticated: boolean; loaded: boolean };

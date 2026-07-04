@@ -447,7 +447,7 @@ function InterviewAceContent() {
     }
     // Guests get 2 free interviews (no signup); signed-in users spend credits.
     if (!user && guestInterviewsLeft() <= 0) {
-      toast({ title: "Free interviews used up", description: "Sign in to get 99 free credits and keep practising.", variant: "destructive" });
+      toast({ title: "Free interviews used up", description: "Sign in to get 20 free credits and keep practising.", variant: "destructive" });
       return;
     }
     resetStream();
@@ -1051,9 +1051,9 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
               {user ? (
                 <>Uses <span className="font-semibold text-secondary">{interviewCost} credits</span> · Balance: <span className="font-semibold text-secondary">{balance ?? "…"}</span> · <Link href="/credits" className="text-primary font-semibold hover:underline">Top up</Link></>
               ) : guestInterviewsRemaining > 0 ? (
-                <><span className="font-semibold text-green-700">{guestInterviewsRemaining} free {guestInterviewsRemaining === 1 ? "interview" : "interviews"}</span> left — no signup needed · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> for 99 free credits</>
+                <><span className="font-semibold text-green-700">{guestInterviewsRemaining} free {guestInterviewsRemaining === 1 ? "interview" : "interviews"}</span> left — no signup needed · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> for 20 free credits</>
               ) : (
-                <>Free interviews used up · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to get 99 free credits</>
+                <>Free interviews used up · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to get 20 free credits</>
               )}
             </p>
           </CardFooter>

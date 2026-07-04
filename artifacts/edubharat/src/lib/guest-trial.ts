@@ -5,7 +5,7 @@ import { useSyncExternalStore } from "react";
  * This lets visitors experience the live tools without an account. It is a
  * friction-reducer for showcasing the product, not a hard paywall — clearing
  * browser storage resets it, which is acceptable for a trial. Once a visitor
- * signs in they get 99 real credits and this trial no longer applies.
+ * signs in they get 20 real credits and this trial no longer applies.
  */
 const KEY = "edubharat_guest_trial_v1";
 

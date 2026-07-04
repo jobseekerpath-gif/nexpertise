@@ -531,17 +531,17 @@ Rules for spoken replies:
       toast({ title: "One moment…", description: "Checking your account — please try again in a second." });
       return;
     }
-    // Guests get a free 15-minute trial (no signup); signed-in users spend credits (5/hour).
+    // Guests get a free 15-minute trial (no signup); signed-in users spend credits (1/hour).
     if (!user) {
       if (guestLiveSecondsLeft() <= 0) {
-        toast({ title: "Free trial finished", description: "That's your 15 free minutes. Sign in to get 99 free credits and keep chatting.", variant: "destructive" });
+        toast({ title: "Free trial finished", description: "That's your 15 free minutes. Sign in to get 20 free credits and keep chatting.", variant: "destructive" });
         return;
       }
     } else {
       const charge = await startLiveBlock();
       if (!charge.ok) {
         if (charge.status === 402) {
-          toast({ title: "Not enough credits", description: "Live conversation uses 5 credits/hour. Top up to continue.", variant: "destructive" });
+          toast({ title: "Not enough credits", description: "Live conversation uses 1 credit/hour. Top up to continue.", variant: "destructive" });
         } else {
           toast({ title: "Couldn't start live chat", description: charge.error ?? "Please try again.", variant: "destructive" });
         }
@@ -567,7 +567,7 @@ Rules for spoken replies:
     };
   }, [speech, synth]);
 
-  // Meter live conversation: signed-in users spend 1 credit per 12-min block;
+  // Meter live conversation: signed-in users spend 1 credit per 60-min block;
   // guests burn down a free 15-minute trial. Both end gracefully when exhausted.
   useEffect(() => {
     if (!liveChat) return;
@@ -587,7 +587,7 @@ Rules for spoken replies:
       addGuestLiveSeconds(GUEST_TICK);
       if (guestLiveSecondsLeft() <= 0) {
         stopLiveRef.current();
-        toast({ title: "Free trial finished 🎉", description: "That's your 15 free minutes. Sign in to get 99 free credits and keep going.", variant: "destructive" });
+        toast({ title: "Free trial finished 🎉", description: "That's your 15 free minutes. Sign in to get 20 free credits and keep going.", variant: "destructive" });
       }
     }, GUEST_TICK * 1000);
     return () => clearInterval(id);
@@ -795,11 +795,11 @@ Rules for spoken replies:
               {!liveChat && (
                 <p className="text-xs text-muted-foreground">
                   {user ? (
-                    <>Uses <span className="font-semibold text-secondary">5 credits/hour</span> · Balance: <span className="font-semibold text-secondary">{balance ?? "…"}</span> · <Link href="/credits" className="text-primary font-semibold hover:underline">Top up</Link></>
+                    <>Uses <span className="font-semibold text-secondary">1 credit/hour</span> · Balance: <span className="font-semibold text-secondary">{balance ?? "…"}</span> · <Link href="/credits" className="text-primary font-semibold hover:underline">Top up</Link></>
                   ) : guestLiveLeft > 0 ? (
-                    <><span className="font-semibold text-green-700">{Math.ceil(guestLiveLeft / 60)} min</span> free trial left — no signup needed · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> for 99 free credits</>
+                    <><span className="font-semibold text-green-700">{Math.ceil(guestLiveLeft / 60)} min</span> free trial left — no signup needed · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> for 20 free credits</>
                   ) : (
-                    <>Free trial used up · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to get 99 free credits and keep chatting</>
+                    <>Free trial used up · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to get 20 free credits and keep chatting</>
                   )}
                 </p>
               )}

@@ -134,8 +134,8 @@ export default function BuyCredits() {
   }, [utr, amount, toast]);
 
   const uses = useMemo(() => [
-    { icon: MessageCircle, title: "Live Conversation", cost: "5 credits / hour", note: "Real-time voice practice with your tutor" },
-    { icon: Mic, title: "Mock Interviews", cost: "2–5 credits each", note: "By length — 10 min = 2, 25 min = 5" },
+    { icon: MessageCircle, title: "Live Conversation", cost: "1 credit / hour", note: "Real-time voice practice with your tutor" },
+    { icon: Mic, title: "Mock Interviews", cost: "5 credits each", note: "Flat rate — any length session" },
     { icon: GraduationCap, title: "Everything else", cost: "Free", note: "Lessons, grammar, writing, vocab, jobs & news" },
   ], []);
 
@@ -374,8 +374,8 @@ export default function BuyCredits() {
             <div className="flex items-start gap-3">
               <Sparkles className="w-6 h-6 text-primary shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold text-secondary">Get 99 free credits</p>
-                <p className="text-sm text-muted-foreground">Sign in to claim your welcome bonus — enough for about a month of use.</p>
+                <p className="font-bold text-secondary">Get 20 free credits</p>
+                <p className="text-sm text-muted-foreground">Sign in to claim your welcome bonus and start practising right away.</p>
               </div>
             </div>
             <Link href="/login">

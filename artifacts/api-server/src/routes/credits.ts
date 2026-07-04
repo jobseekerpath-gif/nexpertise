@@ -50,14 +50,14 @@ router.post("/credits/interview/charge", requireAuth, async (req: Request, res: 
   res.json({ ok: true, balance: result.balance, charged: cost });
 });
 
-// POST /api/credits/live/start and /tick — one credit per 12-minute block (5 credits/hour).
+// POST /api/credits/live/start and /tick — one credit per 60-minute block (5 credits/5 hours).
 async function chargeLiveBlock(req: Request, res: Response) {
   const userId = req.session.userId!;
   const result = await spendCredits({
     userId,
     amount: LIVE_BLOCK_COST,
     type: "spend_live",
-    description: "Live conversation (12-minute block)",
+    description: "Live conversation (60-minute block)",
   });
   if (!result.ok) {
     res.status(402).json({ error: "insufficient_credits", balance: result.balance, required: LIVE_BLOCK_COST });

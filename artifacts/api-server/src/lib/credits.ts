@@ -2,11 +2,11 @@ import { db, usersTable, creditTransactionsTable } from "@workspace/db";
 import { and, desc, eq } from "drizzle-orm";
 import { logger } from "./logger";
 
-/** Free credits granted once per account on first sign-in (≈ 1 month of use). */
-export const SIGNUP_GRANT = 99;
+/** Free credits granted once per account on first sign-in. */
+export const SIGNUP_GRANT = 20;
 
-/** Live conversation is metered in 12-minute blocks → 1 credit each = 5 credits/hour. */
-export const LIVE_BLOCK_SECONDS = 12 * 60;
+/** Live conversation is metered in 60-minute blocks → 1 credit each = 5 credits/5 hours. */
+export const LIVE_BLOCK_SECONDS = 60 * 60;
 export const LIVE_BLOCK_COST = 1;
 
 export type CreditType =
@@ -17,13 +17,9 @@ export type CreditType =
   | "refund"
   | "adjustment";
 
-/**
- * Interview cost by selected duration: ~1 credit per 5 minutes, clamped to 2–5.
- * 10 min → 2, 15 min → 3, 25 min → 5.
- */
-export function interviewCreditCost(durationMinutes: number): number {
-  const cost = Math.round(durationMinutes / 5);
-  return Math.max(2, Math.min(5, cost));
+/** Interview cost is a flat 5 credits per session, regardless of duration. */
+export function interviewCreditCost(_durationMinutes: number): number {
+  return 5;
 }
 
 export async function getBalance(userId: number): Promise<number> {
@@ -138,7 +134,7 @@ export async function ensureSignupGrant(userId: number): Promise<void> {
       userId,
       amount: SIGNUP_GRANT,
       type: "signup_grant",
-      description: "Welcome bonus — 99 free credits",
+      description: "Welcome bonus — 20 free credits",
       reference: `signup:${userId}`,
     });
   } catch (err) {

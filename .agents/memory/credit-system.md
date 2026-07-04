@@ -6,9 +6,9 @@ description: How EduBharat meters/charges credits, and the money-safety invarian
 EduBharat gates only *live* features on credits; everything else is free.
 
 ## Model
-- 1 credit = ₹1. Signed-in accounts get a one-time 99-credit signup grant (≈1 month). Guests get nothing and are prompted to sign in.
-- Live conversation (English Guru): 1 credit per 12-minute block = 5/hour. First block charged at start; a client interval charges each subsequent block and ends the session gracefully on 402.
-- Mock interview: `clamp(round(minutes/5), 2, 5)` credits, charged once when the interview actually starts (after the opening question generates, before entering the session) so a failed opening never charges.
+- 1 credit = ₹1. Signed-in accounts get a one-time 20-credit signup grant. Guests get nothing and are prompted to sign in.
+- Live conversation (English Guru): 1 credit per 60-minute block = 5 credits/5 hours. First block charged at start; a client interval charges each subsequent block and ends the session gracefully on 402.
+- Mock interview: flat 5 credits per session regardless of duration, charged once when the interview actually starts (after the opening question generates, before entering the session) so a failed opening never charges.
 - Non-live learning (lessons, grammar, writing, vocab, jobs, news) is free.
 
 ## Money-safety invariants (do not regress)
