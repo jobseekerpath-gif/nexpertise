@@ -332,6 +332,8 @@ function InterviewAceContent() {
   const [duration, setDuration] = useState(15);
   const [phase, setPhase] = useState<"setup" | "interview" | "report">("setup");
   const [questions, setQuestions] = useState<QA[]>([]);
+  const questionsRef = useRef<QA[]>([]);
+  useEffect(() => { questionsRef.current = questions; }, [questions]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answer, setAnswer] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -448,15 +450,26 @@ function InterviewAceContent() {
     }
     resetStream();
     const candidateName = profile.name || "there";
+    const firstName = candidateName.split(" ")[0];
     const full = await stream(
-      `You are ${coach.name} opening a real ${duration}-min ${typeMeta.label} interview in India.
+      `You are ${coach.name}, opening a real ${duration}-minute ${typeMeta.label} interview in India.
 
-Candidate: ${buildProfileSummary()}
+Candidate profile: ${buildProfileSummary()}
 
-In 2-3 natural spoken sentences: greet them by first name (${candidateName.split(" ")[0]}), briefly say who you are, then ask your first interview question tailored to their background. Sound like a real person — warm, conversational, not reading from a checklist. Return ONLY the spoken words, no labels.`,
-      `You are ${coach.name}, ${coach.role}. Talk like a real Indian professional interviewer — warm, natural, direct. Never sound like a script.`,
+Write your opening (3–5 warm spoken sentences):
+1. Greet ${firstName} by name, introduce yourself and your role
+2. Put them at ease — say something genuine like "Don't worry, this is just a conversation — there are no trick questions, just be yourself" or "Take your time with your answers, we have ${duration} minutes"
+3. Ask the universal warm-up opener: "So, to start us off — could you walk me through your background and what's brought you here today?"
+
+Rules:
+- Sound like a warm, experienced Indian ${typeMeta.label} interviewer, NOT a bot
+- Do NOT ask a technical or behavioral question yet — always begin with "tell me about yourself"
+- Use natural spoken language: contractions, warmth, calm pacing
+- Make the candidate feel comfortable and welcomed, like a friendly professional conversation
+- Return ONLY the spoken words, no labels or formatting`,
+      `You are ${coach.name}, ${coach.role}. You are a seasoned Indian interviewer known for making candidates feel at ease. You are warm, professional, and genuinely interested in the person in front of you. You never sound scripted.`,
       undefined,
-      { maxTokens: 150 }
+      { maxTokens: 220 }
     );
     const opening = full.replace(/^\s*["']?|["']?\s*$/g, "").trim();
     if (!opening) return;
@@ -528,33 +541,88 @@ In 2-3 natural spoken sentences: greet them by first name (${candidateName.split
       : q
     ));
 
+    const firstName = (profile.name || "there").split(" ")[0];
+
     if (isFinalQuestion) {
-      speakCoach("Thank you for that. It was great speaking with you — we'll wrap up here and put together your report.", { voiceGender: coach.gender });
+      speakCoach(`Thank you, ${firstName}. It's been great speaking with you — that's all from my side. I'll put together your feedback report now.`, { voiceGender: coach.gender });
       setTimeout(() => setPhase("report"), 1500);
       return;
     }
 
-    // Get a brief natural acknowledgment + next question — no scores, no analysis
+    // Build recent interview history for context (last 3 answered questions)
+    const recentAnswered = questionsRef.current
+      .filter(q => q.answer)
+      .slice(-3)
+      .map((q, i) => `Q: ${q.question}\nA: ${q.answer}`)
+      .join("\n\n");
+
+    // Detect short/vague answers so we can probe instead of jumping to next topic
+    const wordCount = recordedAnswer.split(/\s+/).filter(Boolean).length;
+    const isShortAnswer = wordCount < 20;
+
+    // Get a natural acknowledgment + next question — no scores, no analysis
     const response = await stream(
-      `${typeMeta.label} interview, ${remainingMin} min left.
+      `You are ${coach.name} conducting a live ${typeMeta.label} interview. ${remainingMin} minutes remaining.
 
-Q: ${currentQ.question}
-A: "${recordedAnswer}"
+Candidate: ${firstName} | ${buildProfileSummary()}
 
-Respond as a live interviewer on a voice call. First, react to their answer in one natural human sentence — like "Right, that makes sense.", "Oh interesting!", "Hmm, good point." — something real, not corporate. Then ask ONE focused follow-up question based on what they said.
+Interview conversation so far:
+${recentAnswered || "(This is the first answer)"}
 
-Output exactly two lines (no extra text):
-Ack: <your spoken reaction, one sentence>
-Next: <your follow-up question>`,
-      `You are ${coach.name}, a real Indian professional on a live voice interview call. React like a human — genuinely interested, warm, occasionally surprised or curious. Never sound like you're reading a checklist. Use natural speech rhythms.`,
+You just asked:
+"${currentQ.question}"
+
+${firstName} answered:
+"${recordedAnswer}"
+
+${isShortAnswer
+  ? `Note: Their answer is quite brief (${wordCount} words). They may be nervous or unsure. Gently acknowledge what they said and invite them to share more before moving on.`
+  : ""}
+
+Your job:
+1. React naturally to something SPECIFIC they actually said — not a generic "That's great." Mention a detail from their answer.
+2. Then${isShortAnswer
+  ? ` ask them to elaborate: use "Could you tell me a bit more about that?" or "Can you share a specific example of that?"`
+  : remainingMin <= 3
+    ? ` ask one warm closing question — their career goals, what they're looking for in a role, or if they have any questions for you`
+    : ` either dig deeper into what they mentioned, or smoothly move to a new aspect relevant to ${typeMeta.label}`}
+
+Rules — follow these exactly:
+- Use ${firstName}'s name once in a while (not every time)
+- React to their SPECIFIC words, not generically. If they mentioned a project, a company, a skill — reference it.
+- Natural Indian professional speech: "That makes sense.", "I see.", "Interesting.", "Right, okay.", "That's helpful."
+- NEVER use "Like, if you had to..." — it sounds robotic
+- Ask questions naturally: "Tell me about...", "Walk me through...", "How did you handle...", "What's your take on..."
+- Acknowledgment: 1–2 sentences max
+- Ask exactly ONE question
+
+Output exactly two lines, no extra text:
+Ack: <your genuine reaction to their specific answer, 1–2 sentences>
+Next: <your next question, clear and conversational>`,
+      `You are ${coach.name}, ${coach.role}. You are on a live voice interview call with ${firstName}. You are warm, perceptive, and genuinely curious — you listen carefully and respond to what the candidate actually says, not a generic script. You make candidates feel heard and comfortable.`,
       undefined,
-      { maxTokens: 100 }
+      { maxTokens: 200 }
     );
 
-    const ackMatch = response.match(/^Ack:\s*(.+)/im);
-    const nextMatch = response.match(/^Next:\s*(.+)/im);
-    const acknowledgment = ackMatch?.[1]?.trim() ?? "Thank you for that.";
-    const nextQuestion = nextMatch?.[1]?.trim();
+    // Robust parsing — tolerates multiline Ack, minor model format drift, or
+    // missing labels. Prevents premature session-end if the model skips "Next:".
+    const ackMatch = response.match(/^Ack:\s*([\s\S]+?)(?=\nNext:|\n\nNext:|$)/im);
+    const nextMatch = response.match(/^Next:\s*([\s\S]+?)$/im);
+    let acknowledgment = ackMatch?.[1]?.trim().replace(/\n+/g, " ") ?? "That's helpful, thank you.";
+    let nextQuestion = nextMatch?.[1]?.trim().replace(/\n+/g, " ");
+
+    // Fallback: if structured parsing failed, split by paragraphs/lines so the
+    // interview can continue rather than ending the session.
+    if (!nextQuestion && response.trim()) {
+      const lines = response.trim().split(/\n+/).map(l => l.replace(/^(Ack:|Next:)\s*/i, "").trim()).filter(Boolean);
+      if (lines.length >= 2) {
+        acknowledgment = lines.slice(0, -1).join(" ");
+        nextQuestion = lines[lines.length - 1];
+      } else if (lines.length === 1 && lines[0]!.includes("?")) {
+        nextQuestion = lines[0];
+        acknowledgment = "Right, okay.";
+      }
+    }
 
     if (nextQuestion) {
       setQuestions(prev => [...prev, { question: nextQuestion }]);
@@ -567,7 +635,7 @@ Next: <your follow-up question>`,
       speakCoach("Thank you. That was a great session. Generating your full report now.", { voiceGender: coach.gender });
       setTimeout(() => setPhase("report"), 1200);
     }
-  }, [currentQ, currentIdx, experience, duration, elapsedSeconds, coach, stream, resetStream, synth, typeMeta, buildProfileSummary, buildTranscript, clearAutoSubmitTimer, speech]);
+  }, [currentQ, currentIdx, experience, duration, elapsedSeconds, coach, stream, resetStream, synth, typeMeta, buildProfileSummary, buildTranscript, clearAutoSubmitTimer, speech, profile]);
 
   const submitAnswer = useCallback(() => {
     if (!answer.trim()) return;
