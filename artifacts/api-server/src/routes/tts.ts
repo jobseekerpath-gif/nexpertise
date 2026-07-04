@@ -49,9 +49,24 @@ const EDGE_VOICES: Record<string, { male: string; female: string }> = {
  */
 function cleanForTTS(text: string): string {
   return text
-    .replace(/^[A-Za-zÀ-ÿ'\s]{2,30}:\s*/m, "")  // "TeacherName: " at start
+    // Strip AI role-label prefixes — "TeacherName: " or "Ack:" / "Next:" at line start
+    .replace(/^[A-Za-zÀ-ÿ'\s]{2,30}:\s*/m, "")
     .replace(/\bAck:\s*/gi, "")
     .replace(/\bNext:\s*/gi, "")
+    // Strip markdown action/emote words in asterisks — *smiles warmly*, *chuckles*, etc.
+    .replace(/\*[^*]{1,40}\*/g, "")
+    // Strip markdown bold (**text**) and italic (*text* or _text_)
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    // Strip markdown headers — ## Heading → Heading
+    .replace(/^#{1,6}\s+/gm, "")
+    // Strip parenthetical stage directions — (smiles), (pause), (laughs)
+    .replace(/\([^)]{1,30}\)/g, "")
+    // Strip leading/trailing quote marks the model sometimes wraps around output
+    .replace(/^\s*["'"]/m, "")
+    .replace(/["'"]\s*$/m, "")
+    // Collapse extra whitespace
     .replace(/\s{2,}/g, " ")
     .trim();
 }

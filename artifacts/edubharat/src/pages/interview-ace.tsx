@@ -452,24 +452,18 @@ function InterviewAceContent() {
     const candidateName = profile.name || "there";
     const firstName = candidateName.split(" ")[0];
     const full = await stream(
-      `You are ${coach.name}, opening a real ${duration}-minute ${typeMeta.label} interview in India.
+      `You are ${coach.name}, starting a ${typeMeta.label} interview with ${firstName}.
 
-Candidate profile: ${buildProfileSummary()}
+Say a warm 2-sentence greeting — introduce yourself briefly and put them at ease — then ask: "So, tell me about yourself."
 
-Write your opening (3–5 warm spoken sentences):
-1. Greet ${firstName} by name, introduce yourself and your role
-2. Put them at ease — say something genuine like "Don't worry, this is just a conversation — there are no trick questions, just be yourself" or "Take your time with your answers, we have ${duration} minutes"
-3. Ask the universal warm-up opener: "So, to start us off — could you walk me through your background and what's brought you here today?"
-
-Rules:
-- Sound like a warm, experienced Indian ${typeMeta.label} interviewer, NOT a bot
-- Do NOT ask a technical or behavioral question yet — always begin with "tell me about yourself"
-- Use natural spoken language: contractions, warmth, calm pacing
-- Make the candidate feel comfortable and welcomed, like a friendly professional conversation
-- Return ONLY the spoken words, no labels or formatting`,
-      `You are ${coach.name}, ${coach.role}. You are a seasoned Indian interviewer known for making candidates feel at ease. You are warm, professional, and genuinely interested in the person in front of you. You never sound scripted.`,
+STRICT rules:
+- Maximum 3 sentences total. No long speeches.
+- Plain spoken words ONLY. No asterisks, no *actions*, no #headers, no markdown, no quotes around your reply.
+- Do NOT list rules, do NOT explain the process, do NOT say "there are no trick questions".
+- Sound like a real person on a phone call, not a script.`,
+      `You are ${coach.name}, ${coach.role}. Speak naturally and briefly. Never use markdown or action words.`,
       undefined,
-      { maxTokens: 220 }
+      { maxTokens: 100 }
     );
     const opening = full.replace(/^\s*["']?|["']?\s*$/g, "").trim();
     if (!opening) return;
@@ -624,17 +618,25 @@ Next: <your next question, clear and conversational>`,
       }
     }
 
-    if (nextQuestion) {
-      setQuestions(prev => [...prev, { question: nextQuestion }]);
-      setCurrentIdx(prev => prev + 1);
-      setAnswer("");
-      setIsRecording(false);
-      const pitchVariation = coach.gender === "male" ? 0.88 + Math.random() * 0.06 : 1.06 + Math.random() * 0.06;
-      speakCoach(`${acknowledgment} ${nextQuestion}`, { voiceGender: coach.gender, pitch: pitchVariation });
-    } else {
-      speakCoach("Thank you. That was a great session. Generating your full report now.", { voiceGender: coach.gender });
-      setTimeout(() => setPhase("report"), 1200);
+    // Safety: never let a parsing failure silently end the interview.
+    // If the AI didn't return a parseable question, use a neutral probe.
+    const FALLBACK_QUESTIONS = [
+      "Could you tell me a bit more about that?",
+      "Interesting — can you give me a specific example?",
+      "Walk me through that in a bit more detail.",
+      "What would you say was the biggest challenge there?",
+    ];
+    if (!nextQuestion) {
+      nextQuestion = FALLBACK_QUESTIONS[Math.floor(Math.random() * FALLBACK_QUESTIONS.length)];
+      acknowledgment = "Right, okay.";
     }
+
+    setQuestions(prev => [...prev, { question: nextQuestion! }]);
+    setCurrentIdx(prev => prev + 1);
+    setAnswer("");
+    setIsRecording(false);
+    const pitchVariation = coach.gender === "male" ? 0.88 + Math.random() * 0.06 : 1.06 + Math.random() * 0.06;
+    speakCoach(`${acknowledgment} ${nextQuestion}`, { voiceGender: coach.gender, pitch: pitchVariation });
   }, [currentQ, currentIdx, experience, duration, elapsedSeconds, coach, stream, resetStream, synth, typeMeta, buildProfileSummary, buildTranscript, clearAutoSubmitTimer, speech, profile]);
 
   const submitAnswer = useCallback(() => {

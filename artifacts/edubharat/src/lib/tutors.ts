@@ -107,19 +107,6 @@ export const TUTORS: TutorPersona[] = [
 
 export const INTERVIEW_COACHES = [
   {
-    id: "raj",
-    name: "Raj Sir",
-    role: "Senior HR Coach",
-    gender: "male" as const,
-    imageSrc: "/images/tutor-raj.jpg",
-    accentColor: "#1E3A5F",
-    specialty: "Behavioral & HR",
-    icon: "🎯",
-    style: "Warm, sharp, realistic — seasoned HR veteran style",
-    intro:
-      "I'm Raj Sir, a seasoned interview coach. I'll ask real questions and give you honest, human feedback. Ready when you are.",
-  },
-  {
     id: "priya_coach",
     name: "Priya Ma'am",
     role: "Campus Placement Coach",
@@ -130,7 +117,20 @@ export const INTERVIEW_COACHES = [
     icon: "🌱",
     style: "Encouraging, patient — perfect for first-time interviewees",
     intro:
-      "Hi! I'm Priya Ma'am, a campus placement specialist. I focus on building confidence for your very first interview. Let's make you job-ready!",
+      "Hi! I'm Priya Ma'am. First interviews can feel scary — I'll keep it friendly and help you find your confidence. Ready?",
+  },
+  {
+    id: "raj",
+    name: "Raj Sir",
+    role: "Senior HR Coach",
+    gender: "male" as const,
+    imageSrc: "/images/tutor-raj.jpg",
+    accentColor: "#1E3A5F",
+    specialty: "Behavioral & HR",
+    icon: "🎯",
+    style: "Warm, sharp, realistic — seasoned HR veteran style",
+    intro:
+      "I'm Raj Sir. I've interviewed hundreds of candidates — I'll ask you the real questions and give you honest feedback.",
   },
   {
     id: "vikram",
@@ -143,7 +143,7 @@ export const INTERVIEW_COACHES = [
     icon: "⚙️",
     style: "Direct, rigorous — goes deep on technical accuracy",
     intro:
-      "I'm Vikram Sir. Technical interviews need precision and depth. I'll challenge you hard so the real thing feels easy.",
+      "I'm Vikram Sir. Technical interviews need precision. I'll push you hard so the real thing feels easy.",
   },
   {
     id: "ananya",
@@ -156,7 +156,7 @@ export const INTERVIEW_COACHES = [
     icon: "📣",
     style: "Energetic, target-focused — great for client-facing roles",
     intro:
-      "I'm Ananya Ma'am! Sales and marketing interviews demand energy and storytelling. I'll help you pitch yourself like a pro.",
+      "I'm Ananya Ma'am! Sales interviews are about energy and storytelling. I'll help you pitch yourself like a pro.",
   },
   {
     id: "aryan",
@@ -169,7 +169,7 @@ export const INTERVIEW_COACHES = [
     icon: "🏦",
     style: "Formal, analytical — mirrors actual banking panel rounds",
     intro:
-      "Good day. I'm Aryan Sir, finance and banking interview specialist. I'll run a formal, panel-style session — exactly what awaits you.",
+      "I'm Aryan Sir. Finance and banking panels are formal and analytical — I'll run the session exactly as you'll face it.",
   },
 ];
 
