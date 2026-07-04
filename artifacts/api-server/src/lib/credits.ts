@@ -5,8 +5,8 @@ import { logger } from "./logger";
 /** Free credits granted once per account on first sign-in. */
 export const SIGNUP_GRANT = 20;
 
-/** Live conversation is metered in 60-minute blocks → 1 credit each = 5 credits/5 hours. */
-export const LIVE_BLOCK_SECONDS = 60 * 60;
+/** Live conversation is metered in 12-minute blocks → 1 credit each = 5 credits/hour. */
+export const LIVE_BLOCK_SECONDS = 12 * 60;
 export const LIVE_BLOCK_COST = 1;
 
 export type CreditType =
