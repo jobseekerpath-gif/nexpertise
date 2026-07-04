@@ -586,13 +586,15 @@ Rules — follow these exactly:
 - React to their SPECIFIC words, not generically. If they mentioned a project, a company, a skill — reference it.
 - Natural Indian professional speech: "That makes sense.", "I see.", "Interesting.", "Right, okay.", "That's helpful."
 - NEVER use "Like, if you had to..." — it sounds robotic
-- Ask questions naturally: "Tell me about...", "Walk me through...", "How did you handle...", "What's your take on..."
+- Ask questions naturally: "Walk me through...", "How did you handle...", "What's your take on...", "Can you give me an example of..."
+- NEVER start the Next question with "Hello", "Hi", "Hey", "Tell me, Hello", or any greeting — jump straight into the question
+- The Next line is ONLY the question itself — no name, no pleasantry, just the question
 - Acknowledgment: 1–2 sentences max
 - Ask exactly ONE question
 
 Output exactly two lines, no extra text:
 Ack: <your genuine reaction to their specific answer, 1–2 sentences>
-Next: <your next question, clear and conversational>`,
+Next: <your next question — start directly with the question, never with a greeting>`,
       `You are ${coach.name}, ${coach.role}. You are on a live voice interview call with ${firstName}. You are warm, perceptive, and genuinely curious — you listen carefully and respond to what the candidate actually says, not a generic script. You make candidates feel heard and comfortable.`,
       undefined,
       { maxTokens: 200 }
@@ -617,6 +619,24 @@ Next: <your next question, clear and conversational>`,
         acknowledgment = "Right, okay.";
       }
     }
+
+    // Strip any stray greeting prefix the model sneaks into the question.
+    // Covers: "Hello, ..." / "Hi Priya, ..." / "Tell me, Hello — ..." / "Priya, Hello, ..."
+    const stripGreeting = (q: string) => {
+      let s = q;
+      // "Tell me, Hello — ..." or "Tell me, Hi ..."
+      s = s.replace(/^Tell\s+me[,\s]+(?:Hello|Hi|Hey)\b[\s,—–-]*/i, "");
+      // "Name, Hello, ..." e.g. "Priya, Hello, ..."
+      s = s.replace(/^[A-Z][a-z]+[,\s]+(?:Hello|Hi|Hey)\b[\s,—–-]*/i, "");
+      // Plain "Hello, ..." / "Hi Priya, ..." / "Hey, ..."
+      s = s.replace(/^(?:Hello|Hi|Hey)\b(?:\s+[A-Z][a-z]+)?[\s,—–-]+/i, "");
+      // Strip any leftover leading punctuation/dashes after greeting removal
+      s = s.replace(/^[\s—–\-:,]+/, "");
+      return s.trim();
+    };
+    if (nextQuestion) nextQuestion = stripGreeting(nextQuestion);
+    // Capitalise first letter if stripping lowercased it
+    if (nextQuestion) nextQuestion = nextQuestion.charAt(0).toUpperCase() + nextQuestion.slice(1);
 
     // Safety: never let a parsing failure silently end the interview.
     // If the AI didn't return a parseable question, use a neutral probe.
