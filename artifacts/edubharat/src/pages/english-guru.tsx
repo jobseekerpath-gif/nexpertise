@@ -991,38 +991,41 @@ Rules for spoken replies:
                 <CardDescription>A fresh research-based lesson every day — tailored to your level and native language.</CardDescription>
                 <Button className="font-bold w-full h-12" disabled={isStreaming}
                   onClick={() => {
-                    const today = new Date();
-                    const dayOfYear = Math.ceil((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / 86400000);
                     const LESSON_TOPICS = [
                       "Greetings and Professional Introductions","Workplace Emails and Messages","Telephone Etiquette","Presenting Ideas in Meetings","Job Interview Phrases","Describing Your Work Experience","Polite Disagreement at Work","Asking and Giving Directions","Numbers, Dates and Time","Shopping and Negotiating","Expressing Opinions Clearly","Talking About Health and Wellbeing","Travel and Transportation","Banking and Financial Terms","Media and Current Events","Sports and Recreation Vocabulary","Technology and Social Media","Family and Relationships","Food and Restaurant English","Education and Learning Terms","Describing People and Personalities","Office Small Talk","Following Instructions","Making and Refusing Requests","Apologies and Reconciliation","Reports and Data Language","Leadership and Teamwork Phrases","Problem-Solving Language","Celebrations and Social Events","Environmental and Science Terms",
                     ];
-                    const topic = LESSON_TOPICS[dayOfYear % LESSON_TOPICS.length]!;
+                    const INDIAN_CONTEXTS = [
+                      "a software engineer in Bengaluru","a sales executive in Mumbai","a fresh graduate applying to an MNC","a bank teller in Chennai","a nurse at a Delhi hospital","a shop manager in Hyderabad","a government employee in Pune","a college student in Kolkata","a call centre agent in Noida","a schoolteacher in Jaipur","a pharmacist in Ahmedabad","a logistics coordinator in Surat",
+                    ];
+                    // Fully random every click — topic, context, and a unique seed so no two lessons look alike
+                    const topic = LESSON_TOPICS[Math.floor(Math.random() * LESSON_TOPICS.length)]!;
+                    const ctx   = INDIAN_CONTEXTS[Math.floor(Math.random() * INDIAN_CONTEXTS.length)]!;
+                    const seed  = Math.random().toString(36).slice(2, 8);
                     handleStream(
-                      `Today is ${today.toLocaleDateString("en-IN")} (Day ${dayOfYear}).
+                      `[uid:${seed}] Write a fresh ${level}-level English lesson on: "${topic}"
+Tailor every example to: ${ctx}.
 
-Generate a UNIQUE ${level}-level English lesson on: "${topic}"
+Write ONLY plain text. No *, **, #, ---, bullets, or markdown of any kind.
 
-IMPORTANT: Write ONLY plain sentences. Do NOT use *, **, #, ##, ---, bullets, or any markdown.
-
-Use exactly this structure:
+Structure:
 
 1. TODAY'S TOPIC
-Write 2 clear sentences about "${topic}" and why it matters for Indian job seekers.
+Two sentences about "${topic}" and why it helps someone like ${ctx}.
 
 2. WHY IT MATTERS
-Give 2 examples of real career or daily life situations where this topic helps.
+Two specific real-life examples from ${ctx}'s daily work or life.
 
 3. KEY WORDS
-List 5 useful English words from this topic. For each word write: the word, then its ${uiLang} meaning, then one example sentence. Separate each with a line break.
+Five English words for this topic. For each: the word, its ${uiLang} meaning, one example sentence from ${ctx}'s world.
 
 4. PRACTICE SENTENCES
-Give 2 fill-in-the-blank exercises. Then show the correct answers below each.
+Two fill-in-the-blank exercises set in ${ctx}'s situation. Show the answers below each.
 
 5. TODAY'S TASK
-Give one specific 10-minute activity the student can do right now to practise this topic.
+One specific 10-minute speaking or writing activity the student can do right now.
 
-Write warmly as a teacher. Use simple, clear language. No markdown symbols at all.`,
-                      `You are ${teacherShort}, a warm and experienced English teacher for Indian ${level} students. ${tutor.teachingStyle}. The student's native language is ${uiLang}. Respond entirely in plain text with numbered sections only. Never use *, **, #, ---, or bullets. Write as if speaking to a student directly.`,
+Teach warmly and directly. No markdown at all.`,
+                      `You are ${teacherShort}, an English teacher for Indian ${level} students. ${tutor.teachingStyle}. Native language: ${uiLang}. Every generation must feel completely fresh — different words, different sentences, different scenarios every time. Plain text only, numbered sections only.`,
                       `Daily Lesson: ${topic}`
                     );
                   }}>
@@ -1030,7 +1033,7 @@ Write warmly as a teacher. Use simple, clear language. No markdown symbols at al
                   Generate Today's Lesson
                 </Button>
                 {displayed && <ResultPanel title={`${level} English Lesson:`} content={displayed} isSpeaking={synth.isSpeaking}
-                  onSpeak={() => speak(stripMarkdownForSpeech(displayed))} onStop={synth.stop}
+                  onSpeak={() => speak(stripMarkdownForSpeech(displayed), "English")} onStop={synth.stop}
                   onSave={() => saveResult("lesson", `Daily Lesson: ${level}`, displayed)} saved={!!savedMap["lesson"]} />}
               </CardContent>
             </Card>
@@ -1051,7 +1054,7 @@ Write warmly as a teacher. Use simple, clear language. No markdown symbols at al
                   Get Interview Phrases
                 </Button>
                 {displayed && <ResultPanel title="Interview Phrases:" content={displayed} isSpeaking={synth.isSpeaking}
-                  onSpeak={() => speak(displayed)} onStop={synth.stop}
+                  onSpeak={() => speak(stripMarkdownForSpeech(displayed), "English")} onStop={synth.stop}
                   onSave={() => saveResult("interview_eng", "Interview English Phrases", displayed)} saved={!!savedMap["interview_eng"]} />}
               </CardContent>
             </Card>
