@@ -365,8 +365,10 @@ function EnglishGuruContent() {
         if (!liveChatRef.current) { aiBusyRef.current = false; return; }
         aiBusyRef.current = false;
         setConvFlowState("user-speaking");
-        // Echo-guard: let the continuous loop resume after the greeting fades
-        speech.blockFor(1000);
+        // Echo-guard: let the continuous loop resume after the greeting fades.
+        // 300ms is enough for Edge TTS audio tail to die; blockFor now also
+        // fires a direct setTimeout wakeup so the mic is ready in ~360ms.
+        speech.blockFor(300);
       }, { voiceGender: t.voiceGender, voiceStyle: t.voiceStyle });
     }
   }, [synth, updateProfile, speech, uiLang]);
@@ -416,10 +418,38 @@ function EnglishGuruContent() {
         const recentHistory = [...convHistoryRef.current.slice(-4), { role: "user" as const, text: userMsg }]
           .map(m => `${m.role === "user" ? "Student" : teacherShort}: ${m.text}`).join("\n");
         resetAI();
+
+        // ── News / current-events enrichment ─────────────────────────────
+        // When the student clearly asks about real-world news or info, fetch
+        // a quick web snippet so the AI can answer confidently rather than
+        // saying "I cannot access the internet."
+        // Kept intentionally specific to avoid false-positives on common words
+        // (e.g. "result" of a grammar exercise vs. "match result").
+        const NEWS_RE = /\b(news|latest news|cricket (score|match|result|news)|ipl (score|match|result)|election (result|winner|news)|prime minister|petrol price|diesel price|gold price|dollar rate|stock market|sensex|nifty|box office|film release|weather forecast|covid|inflation rate|gdp|budget 2024|budget 2025)\b/i;
+        let webContext = "";
+        if (NEWS_RE.test(userMsg)) {
+          try {
+            const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+            const ctxRes = await fetch(
+              `${base}/api/ai/web-context?q=${encodeURIComponent(userMsg.slice(0, 200))}`,
+              { credentials: "include", signal: AbortSignal.timeout(1500) }
+            );
+            if (ctxRes.ok) {
+              const ctxData = await ctxRes.json() as { context: string };
+              webContext = (ctxData.context ?? "").trim();
+            }
+          } catch { /* web context is enrichment only — never block conversation */ }
+        }
+
         const isEnglishNative = uiLang === "English";
         const languageGuidance = isEnglishNative
           ? `Speak in clear, simple, natural English throughout.`
           : `The student's ONLY helper language is ${uiLang} — do NOT use any other Indian language (not Hindi, not Kannada, not Tamil, not any other — ONLY ${uiLang} when needed). English is the goal, so speak MOSTLY in simple, clear English and keep them practicing. But use ${uiLang} as a warm helping hand whenever they need it: if the student replies in ${uiLang}, tells you (in any language) that they didn't understand, or clearly seems confused, briefly explain the tricky word or idea in ${uiLang}, then continue in English. You may drop a short ${uiLang} gloss in brackets right after a hard English word. Never leave them stuck or embarrassed — slow down, simplify, and lean on ${uiLang} to unblock them, then gently guide them back to English. When they're managing fine in English, keep your whole reply in English.`;
+
+        const webContextNote = webContext
+          ? `\n\nLive web context (use naturally if relevant): "${webContext}"`
+          : "";
+
         const response = await stream(
           `${recentHistory}\n${teacherShort}:`,
           `You are ${teacherShort}, a warm Indian English coach on a voice call with ${profile.name || "a student"} (${level} level). ${tutor.teachingStyle}. ${languageGuidance}
@@ -431,7 +461,8 @@ Rules for spoken replies:
 - If they make a grammar mistake, quietly use the correct form in your own sentence without pointing it out.
 - Never use bullet points, numbered lists, dashes, or any formatting.
 - Never start your reply with your own name or a label like "Teacher:".
-- Always finish your thought completely — never cut off mid-sentence.`,
+- Always finish your thought completely — never cut off mid-sentence.
+- If asked about news, sports, films, prices, or current events: share what you know confidently using phrases like "from what I know" or "last I heard". Do NOT say you have no internet access or cannot search — just answer like a well-informed person would. Your knowledge goes up to early 2025; for very recent news, say "I may not have the very latest, but…" and share what you do know.${webContextNote}`,
           undefined,
           { maxTokens: 300 }
         );
@@ -452,7 +483,10 @@ Rules for spoken replies:
               // toggleLiveChat resumes automatically once blockFor expires.
               // Do NOT call stop() or startContinuous() here; that creates a second
               // competing loop which cancels the first and kills subsequent turns.
-              speech.blockFor(800);
+              // 300ms is enough for Edge TTS echo to fade; blockFor now also
+              // fires a direct setTimeout wakeup so the mic is live in ~360ms
+              // instead of the old ~1200ms (800ms block + 250ms poll + startup).
+              speech.blockFor(300);
               setConvFlowState("user-speaking");
             } else {
               setConvFlowState("idle");
@@ -463,7 +497,7 @@ Rules for spoken replies:
           // AI gave no response — release the pause block so the existing loop
           // resumes listening. No new startContinuous needed.
           if (liveChatRef.current) {
-            speech.blockFor(400);
+            speech.blockFor(150);
             setConvFlowState("user-speaking");
           } else {
             setConvFlowState("idle");

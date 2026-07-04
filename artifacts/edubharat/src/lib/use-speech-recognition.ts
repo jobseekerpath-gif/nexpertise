@@ -36,12 +36,36 @@ export function useSpeechRecognition(language = "English") {
   const recognitionRef    = useRef<any>(null);
   const shouldContinueRef = useRef(false);
   const onPhraseRef       = useRef<((text: string) => void) | null>(null);
+
   /**
    * blockedUntilRef — epoch ms before which startContinuous must NOT spawn
    * a new recognition session. Set by blockFor() when AI is speaking to
    * prevent the mic from picking up the AI's own voice (echo/loopback).
    */
   const blockedUntilRef = useRef(0);
+
+  /**
+   * spawnRecognitionRef — points to the spawnRecognition function created
+   * inside startContinuous. blockFor() uses this to schedule a direct
+   * wakeup instead of waiting up to 250ms for the poll cycle.
+   */
+  const spawnRecognitionRef = useRef<(() => void) | null>(null);
+
+  /**
+   * wakeTimerRef — timer ID of the direct-wakeup scheduled by blockFor().
+   * Stored so it can be cancelled when blockFor() is called again (avoids
+   * stacking multiple direct wakeups) and on stop()/pause().
+   */
+  const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * isSpawningRef — true from the moment spawnRecognition starts a new
+   * recognition instance until onstart (success) or onerror fires.
+   * Prevents the poll loop and a direct wakeup from both firing at nearly
+   * the same time and creating two overlapping recognition sessions.
+   */
+  const isSpawningRef = useRef(false);
+
   const langCode = LANG_MAP[language] ?? "en-IN";
   // Keep a ref so that spawnRecognition always reads the *current* language,
   // even inside a closure that was created before uiLang changed.
@@ -65,9 +89,34 @@ export function useSpeechRecognition(language = "English") {
    * for at least `ms` milliseconds.  Call this in the TTS onEnd callback
    * to add a post-speech silence window so the mic doesn't pick up
    * room echo of the AI's voice.
+   *
+   * For short blocks (≤ 1500ms) a direct setTimeout wakeup is scheduled
+   * so the mic restarts ~60ms after the block expires — without waiting
+   * up to 250ms for the poll cycle.  Cuts post-TTS dead-mic time from
+   * ~1200ms (800ms block + 250ms poll + API startup) to ~360ms
+   * (300ms block + 60ms padding + API startup).
+   *
+   * Only one direct-wakeup timer is active at a time; blockFor() cancels
+   * any previous pending timer before scheduling a new one.
    */
   const blockFor = useCallback((ms: number) => {
     blockedUntilRef.current = Date.now() + ms;
+
+    // Cancel any pending direct-wakeup timer (prevents stacking)
+    if (wakeTimerRef.current !== null) {
+      clearTimeout(wakeTimerRef.current);
+      wakeTimerRef.current = null;
+    }
+
+    if (ms > 0 && ms <= 1500 && shouldContinueRef.current) {
+      wakeTimerRef.current = setTimeout(() => {
+        wakeTimerRef.current = null;
+        // Only fire if: loop still running AND block has fully expired
+        if (shouldContinueRef.current && Date.now() >= blockedUntilRef.current) {
+          spawnRecognitionRef.current?.();
+        }
+      }, ms + 60); // 60ms padding for audio tail / jitter
+    }
   }, []);
 
   /**
@@ -78,6 +127,12 @@ export function useSpeechRecognition(language = "English") {
    * Call blockFor(short) afterwards (in the TTS onEnd) to release.
    */
   const pause = useCallback(() => {
+    // Cancel any pending wakeup — blockFor() after TTS will schedule a new one
+    if (wakeTimerRef.current !== null) {
+      clearTimeout(wakeTimerRef.current);
+      wakeTimerRef.current = null;
+    }
+    isSpawningRef.current = false;
     blockedUntilRef.current = Date.now() + 10 * 60 * 1000; // effectively "until resumed"
     try { recognitionRef.current?.stop(); } catch { /* ignore */ }
     setStatus("idle");
@@ -138,13 +193,21 @@ export function useSpeechRecognition(language = "English") {
       onPhraseRef.current = onPhrase;
 
       const spawnRecognition = () => {
+        // Expose to blockFor so direct wakeups call back into this closure
+        spawnRecognitionRef.current = spawnRecognition;
+
         if (!shouldContinueRef.current) return;
 
-        // Honour the post-speech block window
+        // Single-flight guard: if we're already starting a recognition session
+        // (between .start() and onstart/onerror), skip — the in-flight instance
+        // will fire its callbacks and restart the loop itself.
+        if (isSpawningRef.current) return;
+
+        // Honour the post-speech block window.
+        // Poll at most every 250ms so a later SHORT blockFor() can release a
+        // long pause() window without waiting minutes.
         const remaining = blockedUntilRef.current - Date.now();
         if (remaining > 0) {
-          // Poll frequently (cap at 250ms) so a later, SHORTER blockFor()
-          // can release a long pause() window without waiting minutes.
           setTimeout(spawnRecognition, Math.min(remaining + 80, 250));
           return;
         }
@@ -152,12 +215,19 @@ export function useSpeechRecognition(language = "English") {
         const recognition = createRecognitionInstance();
         if (!recognition) return;
 
+        isSpawningRef.current = true; // Claim the in-flight slot
+
         recognition.continuous = false;
         recognition.interimResults = true;
         // Use ref so mid-session language changes are picked up on next spawn
         recognition.lang = langCodeRef.current;
 
-        recognition.onstart = () => { setStatus("listening"); setInterimTranscript(""); setError(null); };
+        recognition.onstart = () => {
+          isSpawningRef.current = false; // Instance is live — release the slot
+          setStatus("listening");
+          setInterimTranscript("");
+          setError(null);
+        };
 
         recognition.onresult = (event: { resultIndex: number; results: { isFinal: boolean; 0: { transcript: string } }[] }) => {
           let interim = "", final = "";
@@ -174,6 +244,7 @@ export function useSpeechRecognition(language = "English") {
         };
 
         recognition.onerror = (event: { error: string }) => {
+          isSpawningRef.current = false; // Release slot on error too
           if (event.error === "not-allowed") {
             shouldContinueRef.current = false;
             setError("Microphone permission denied.");
@@ -182,6 +253,7 @@ export function useSpeechRecognition(language = "English") {
         };
 
         recognition.onend = () => {
+          isSpawningRef.current = false; // Always release on end
           setInterimTranscript("");
           if (shouldContinueRef.current) {
             setTimeout(spawnRecognition, 120);
@@ -191,7 +263,11 @@ export function useSpeechRecognition(language = "English") {
         };
 
         recognitionRef.current = recognition;
-        try { recognition.start(); } catch { /* ignore */ }
+        try {
+          recognition.start();
+        } catch {
+          isSpawningRef.current = false; // Release if start() throws
+        }
       };
 
       spawnRecognition();
@@ -202,6 +278,12 @@ export function useSpeechRecognition(language = "English") {
   const stop = useCallback(() => {
     shouldContinueRef.current = false;
     onPhraseRef.current = null;
+    // Cancel any pending wakeup timer
+    if (wakeTimerRef.current !== null) {
+      clearTimeout(wakeTimerRef.current);
+      wakeTimerRef.current = null;
+    }
+    isSpawningRef.current = false;
     try { recognitionRef.current?.stop(); } catch { /* ignore */ }
     recognitionRef.current = null;
     setStatus("idle");

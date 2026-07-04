@@ -345,4 +345,54 @@ export async function generateTextWithFallback(opts: {
   return full;
 }
 
+// ---------------------------------------------------------------------------
+// GET /ai/web-context?q=<query>
+// Fetches a brief web context snippet from DuckDuckGo Instant Answer API
+// for news/current-event queries in Live Conversation. Free, no API key.
+// Returns { context: string } — empty string when nothing useful is found.
+// ---------------------------------------------------------------------------
+router.get("/ai/web-context", async (req: Request, res: Response) => {
+  const q = ((req.query["q"] as string) || "").slice(0, 200).trim();
+  if (!q) { res.json({ context: "" }); return; }
+
+  try {
+    // DuckDuckGo Instant Answer API — no key required, returns structured JSON
+    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1`;
+    const ddgRes = await fetch(url, { signal: AbortSignal.timeout(3500) });
+
+    if (!ddgRes.ok) { res.json({ context: "" }); return; }
+
+    const data = await ddgRes.json() as {
+      AbstractText?: string;
+      Answer?: string;
+      Definition?: string;
+      RelatedTopics?: { Text?: string; Topics?: { Text?: string }[] }[];
+    };
+
+    // Pick the best available snippet
+    let context =
+      (data.AbstractText ?? data.Answer ?? data.Definition ?? "").trim();
+
+    // Fallback: stitch top RelatedTopics snippets (including nested Topics)
+    if (!context && data.RelatedTopics?.length) {
+      const snippets: string[] = [];
+      for (const topic of data.RelatedTopics) {
+        if (topic.Text) snippets.push(topic.Text);
+        if (topic.Topics) {
+          for (const sub of topic.Topics) {
+            if (sub.Text) snippets.push(sub.Text);
+          }
+        }
+        if (snippets.length >= 4) break;
+      }
+      context = snippets.filter(Boolean).join(" ");
+    }
+
+    // Cap at 400 chars so the prompt injection stays concise
+    res.json({ context: context.slice(0, 400) });
+  } catch {
+    res.json({ context: "" });
+  }
+});
+
 export default router;
