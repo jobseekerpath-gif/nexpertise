@@ -398,7 +398,13 @@ function EnglishGuruContent() {
 
   // Live chat phrase handler
   const handleConvPhrase = useCallback((phrase: string) => {
-    if (!phrase.trim() || isStreaming || aiBusyRef.current) return;
+    // In live chat mode, aiBusyRef.current alone gates re-entry (it stays true
+    // from phrase-accepted until TTS onEnd fires). Checking isStreaming here
+    // creates a stale-closure race: if the React render updating
+    // handleConvPhraseRef.current hasn't committed yet when the mic fires, the
+    // old closure (isStreaming=true) silently drops the next phrase.
+    // In typed mode isStreaming is the correct guard (there's no aiBusy cycle).
+    if (!phrase.trim() || (!liveChatRef.current && isStreaming) || aiBusyRef.current) return;
     aiBusyRef.current = true;
     if (liveChatRef.current) {
       // Live voice mode: hard-stop the mic and block it for the whole
@@ -731,8 +737,7 @@ Rules for spoken replies:
                 // Clear the mic pause-block (speech.pause sets a 10-min timer;
                 // blockFor(0) expires it immediately so the loop can respawn).
                 speech.blockFor(0);
-                // Clear isStreaming so handleConvPhrase doesn't return early
-                // if the AI was mid-response when the language was changed.
+                // Abort any in-flight stream (resets isStreaming via its finally block).
                 resetAI();
                 setConvFlowState("user-speaking");
               }

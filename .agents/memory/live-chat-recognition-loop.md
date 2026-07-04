@@ -36,3 +36,8 @@ Any handler that triggers TTS through the **global-singleton** `speak()` (`use-e
 
 - Use a module-scoped/ref busy flag (`aiBusyRef`): set true right after the input guard, reset false in the TTS `onEnd`, the no-response branch, AND a `try/catch` around the async body (so an unexpected throw never latches it).
 - `synth.stop()` / `globalStop()` do NOT fire the per-call `onEnd`. So any manual stop path (e.g. `toggleLiveChat` OFF) must reset the busy flag itself, or the next session's first turn is silently blocked.
+
+## isStreaming must NOT gate live-chat phrases
+`handleConvPhrase` guard: `if (!phrase.trim() || (!liveChatRef.current && isStreaming) || aiBusyRef.current)`.
+
+In **live chat** mode, only `aiBusyRef.current` is used (not `isStreaming`). Reason: `isStreaming` is React state captured in a `useCallback` closure; `handleConvPhraseRef.current` is updated via `useEffect` which fires AFTER render. If the micrestarts (via `blockFor` wakeup) and the next phrase arrives in the narrow window before that effect commits, the stale closure has `isStreaming=true` and silently drops the phrase. `aiBusyRef.current` is a ref — always current — and already covers the full think+speak window. In **typed** mode `isStreaming` is still correct (no `aiBusy` cycle).
