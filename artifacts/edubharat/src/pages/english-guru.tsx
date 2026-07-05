@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { INDIAN_LANGUAGES } from "@/lib/constants";
 import { useAuth } from "@/lib/use-auth";
@@ -24,7 +24,7 @@ import { exportConversationPdf, exportConversationWord } from "@/lib/export-conv
 import {
   Mic, MicOff, Volume2, VolumeX, BookOpen, PenLine, Languages,
   SpellCheck, MessageCircle, Bookmark, BookmarkCheck, GraduationCap,
-  Briefcase, Loader2, StopCircle, ChevronRight, Zap, ChevronDown,
+  Briefcase, Loader2, StopCircle, ChevronRight,
   Users, FileText, FileDown,
 } from "lucide-react";
 
@@ -56,14 +56,14 @@ function ResultPanel({ title, content, isSpeaking, onSpeak, onStop, onSave, save
   onSpeak: () => void; onStop: () => void; onSave: () => void; saved: boolean;
 }) {
   return (
-    <div className="mt-5 p-5 bg-primary/5 rounded-xl border border-primary/20 animate-in fade-in slide-in-from-bottom-2">
-      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+    <div className="mt-3 p-3 bg-primary/5 rounded-xl border border-primary/20 animate-in fade-in slide-in-from-bottom-2">
+      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
         <h3 className="font-bold text-primary text-sm">{title}</h3>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={isSpeaking ? onStop : onSpeak} className="text-xs font-semibold">
+          <Button variant="ghost" size="sm" onClick={isSpeaking ? onStop : onSpeak} className="text-xs font-semibold h-8">
             {isSpeaking ? <><VolumeX className="w-3.5 h-3.5 mr-1" />Stop</> : <><Volume2 className="w-3.5 h-3.5 mr-1" />Speak</>}
           </Button>
-          <Button variant="outline" size="sm" onClick={onSave} disabled={saved} className="text-xs font-semibold">
+          <Button variant="outline" size="sm" onClick={onSave} disabled={saved} className="text-xs font-semibold h-8">
             {saved ? <><BookmarkCheck className="w-3.5 h-3.5 mr-1 text-primary" />Saved</> : <><Bookmark className="w-3.5 h-3.5 mr-1" />Save</>}
           </Button>
         </div>
@@ -433,8 +433,6 @@ function EnglishGuruContent() {
     setSavedMap(m => ({ ...m, [key]: true }));
   }, [save]);
 
-  const currentMode = MODES.find(m => m.value === mode)!;
-  const Icon = currentMode.icon;
   const displayed = isStreaming ? aiText : result;
   const teacherShort = tutor.name.replace(/\s+(Ma'am|Sir)$/i, "");
 
@@ -662,18 +660,18 @@ Rules for spoken replies:
   }, [convInput, handleConvPhrase]);
 
   return (
-    <div className="min-h-full container mx-auto px-3 sm:px-4 pt-2 pb-6 max-w-6xl">
+    <div className="min-h-full lg:h-full lg:flex lg:flex-col lg:overflow-hidden container mx-auto px-3 sm:px-4 pt-1 pb-2 max-w-6xl">
       {showTutorPicker && (
         <TutorSelector currentId={tutorId} onSelect={handleSelectTutor} onClose={() => setShowTutorPicker(false)} />
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
+      <div className="grid gap-3 lg:grid-cols-[280px_1fr] lg:flex-1 lg:min-h-0 lg:overflow-hidden">
         {/* Sidebar */}
-        <aside className="order-2 lg:order-1 space-y-4 lg:sticky lg:top-2 self-start">
+        <aside className="order-2 lg:order-1 space-y-2 lg:flex lg:flex-col lg:overflow-y-auto lg:min-h-0">
           {/* Change Teacher — top of page CTA */}
           <Button
             variant="default"
-            className="w-full font-semibold rounded-xl"
+            className="w-full font-semibold rounded-xl h-9"
             onClick={() => setShowTutorPicker(true)}
           >
             <Users className="w-4 h-4 mr-2" />Change Teacher
@@ -681,34 +679,34 @@ Rules for spoken replies:
 
           {/* Student Name */}
           <Card className="border shadow-sm">
-            <CardContent className="pt-4 pb-3 space-y-3">
-              <label className="block space-y-1.5">
+            <CardContent className="pt-2 pb-2 space-y-2">
+              <label className="block space-y-1">
                 <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Student Name</span>
                 <Input
                   value={profile.name}
                   onChange={(e) => updateProfile({ name: e.target.value })}
                   placeholder={user?.name ?? "Your name"}
-                  className="h-9 text-sm"
+                  className="h-8 text-sm"
                 />
               </label>
             </CardContent>
           </Card>
 
           {/* Desktop avatar card */}
-          <div className="hidden lg:flex flex-col items-center py-6 px-4 bg-card rounded-2xl border shadow-sm">
+          <div className="hidden lg:flex flex-col items-center py-3 px-3 bg-card rounded-2xl border shadow-sm">
             <AnimatedAvatar
               name={tutor.name}
               subtitle={tutor.role}
               isSpeaking={synth.isSpeaking}
               isThinking={isStreaming}
               gender={tutor.gender}
-              size="xl"
+              size="md"
               imageSrc={tutor.imageSrc}
             />
-            <div className="mt-4 text-center px-2">
-              <p className="text-xs text-muted-foreground leading-relaxed italic">"{tutor.intro}"</p>
+            <div className="mt-2 text-center px-2">
+              <p className="text-[11px] text-muted-foreground leading-relaxed italic line-clamp-2">"{tutor.intro}"</p>
             </div>
-            <div className="mt-3 flex flex-wrap justify-center gap-1">
+            <div className="mt-2 flex flex-wrap justify-center gap-1">
               {tutor.languages.map(l => (
                 <span key={l} className="text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground">{l}</span>
               ))}
@@ -744,17 +742,17 @@ Rules for spoken replies:
         </aside>
 
         {/* Main content */}
-        <main className="order-1 lg:order-2 min-w-0">
+        <main className="order-1 lg:order-2 min-w-0 lg:flex lg:flex-col lg:min-h-0 lg:overflow-hidden max-lg:overflow-y-auto max-lg:min-h-0">
           {/* ── MOBILE HERO — Change Teacher at top, then student greeting + tutor ── */}
-          <div className="lg:hidden flex flex-col mb-4 gap-2">
+          <div className="lg:hidden flex flex-col shrink-0 mb-2 gap-1.5">
             <Button
               variant="default"
-              className="w-full font-semibold rounded-xl"
+              className="w-full font-semibold rounded-xl h-9"
               onClick={() => setShowTutorPicker(true)}
             >
               <Users className="w-4 h-4 mr-2" />Change Teacher
             </Button>
-            <div className="flex items-center gap-3 py-3 px-4 bg-card rounded-2xl border shadow-sm">
+            <div className="flex items-center gap-2 py-2 px-3 bg-card rounded-2xl border shadow-sm">
               <AnimatedAvatar
                 name={tutor.name}
                 subtitle={tutor.role}
@@ -777,7 +775,7 @@ Rules for spoken replies:
           </div>
 
           {/* ── STICKY PROFILE BAR — always visible at top without scrolling ── */}
-          <div className="sticky top-0 z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 py-1.5 mb-3 bg-background/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap">
+          <div className="sticky top-0 z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 py-1 mb-2 bg-background/95 backdrop-blur-sm border-b flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-secondary truncate">{profile.name || user?.name || "Guest"}</span>
             <span className="text-muted-foreground/40">•</span>
             <span className="text-xs font-medium text-muted-foreground">Native language</span>
@@ -826,20 +824,16 @@ Rules for spoken replies:
           </div>
 
           {/* ── LIVE CONVERSATION — top section with its own heading ── */}
-          <section className="mb-4">
-            <h2 className="text-base font-display font-bold text-secondary mb-2 flex items-center gap-2">
-              <MessageCircle className="w-4 h-4 text-green-600" />
-              Live Conversation with {tutor.name}
-            </h2>
-            <Card className={`flex flex-col overflow-hidden border-2 transition-all h-[calc(100dvh-210px)] min-h-[370px] ${liveChat ? "border-green-400 bg-green-50/30" : "border-green-200/70 bg-green-50/10"}`}>
-            <CardContent className="pt-4 pb-4 space-y-3 flex min-h-0 flex-1 flex-col">
+          <section className="flex flex-col min-h-0 flex-1">
+            <Card className={`flex flex-col overflow-hidden border-2 transition-all flex-1 min-h-0 max-h-[calc(100dvh-13rem)] ${liveChat ? "border-green-400 bg-green-50/30" : "border-green-200/70 bg-green-50/10"}`}>
+            <CardContent className="pt-3 pb-3 space-y-2 flex min-h-0 flex-1 flex-col">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="w-8 h-8 bg-green-100 text-green-700 rounded-lg flex items-center justify-center shrink-0">
                     <MessageCircle className="w-4 h-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-secondary">Live Conversation</p>
+                    <h2 className="text-sm font-bold text-secondary">Live Conversation</h2>
                     <p className="text-xs text-muted-foreground">{uiLang === "English" ? "Speak in English — I reply naturally" : `Speak in English or ${uiLang} — I'll help in ${uiLang} when you're stuck`}</p>
                   </div>
                 </div>
@@ -939,7 +933,7 @@ Rules for spoken replies:
           </section>
 
           {/* ── MODE SELECTOR STRIP — practice tool picker ── */}
-          <div className="flex items-center gap-2 mb-4 mt-2 flex-wrap">
+          <div className="flex items-center gap-2 mb-2 flex-wrap shrink-0">
             {MODES.map(m => {
               const MIcon = m.icon;
               const active = mode === m.value;
@@ -960,24 +954,13 @@ Rules for spoken replies:
             })}
           </div>
 
-          <div className="mb-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center">
-                <Icon className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-xl font-display font-bold text-secondary">{currentMode.label}</h1>
-              </div>
-            </div>
-          </div>
-
-
-
+          {/* ── PRACTICE TOOLS ── */}
+          <div className="shrink-0 min-h-0 lg:overflow-y-auto lg:max-h-[35%]">
           {/* ── GRAMMAR FIX ── */}
           {mode === "grammar" && (
             <Card>
-              <CardContent className="pt-5 space-y-4">
-                <Textarea placeholder="Type or speak your text..." className="min-h-[130px] text-sm"
+              <CardContent className="pt-3 space-y-2">
+                <Textarea placeholder="Type or speak your text..." className="min-h-[80px] text-sm"
                   value={grammarInput} onChange={e => setGrammarInput(e.target.value)} />
                 <div className="flex items-center gap-2">
                   <MicButton isListening={speech.isListening} isSupported={speech.isSupported}
@@ -1004,8 +987,8 @@ Rules for spoken replies:
           {/* ── WRITE BETTER ── */}
           {mode === "write" && (
             <Card>
-              <CardContent className="pt-5 space-y-4">
-                <Textarea placeholder="Type your draft..." className="min-h-[130px] text-sm"
+              <CardContent className="pt-3 space-y-2">
+                <Textarea placeholder="Type your draft..." className="min-h-[80px] text-sm"
                   value={writeInput} onChange={e => setWriteInput(e.target.value)} />
                 <div className="flex items-center gap-2">
                   <MicButton isListening={speech.isListening} isSupported={speech.isSupported}
@@ -1030,8 +1013,8 @@ Rules for spoken replies:
           {/* ── VOCABULARY ── */}
           {mode === "vocab" && (
             <Card>
-              <CardContent className="pt-5 space-y-4">
-                <Input placeholder="Topic (e.g. Job Interview, Office, Technology)" className="h-11 text-sm"
+              <CardContent className="pt-3 space-y-2">
+                <Input placeholder="Topic (e.g. Job Interview, Office, Technology)" className="h-9 text-sm"
                   value={vocabTopic} onChange={e => setVocabTopic(e.target.value)} />
                 <Button className="font-bold w-full" disabled={isStreaming || !vocabTopic.trim()}
                   onClick={() => handleStream(
@@ -1052,11 +1035,11 @@ Rules for spoken replies:
           {/* ── PRONUNCIATION ── */}
           {mode === "pronounce" && (
             <Card>
-              <CardContent className="pt-5 space-y-4">
-                <CardDescription>AI will say the word — you repeat and practise.</CardDescription>
+              <CardContent className="pt-3 space-y-2">
+                <p className="text-xs text-muted-foreground">AI says the word — you repeat and practise.</p>
                 <div className="flex gap-2">
                   <Input placeholder="English word or phrase to practise"
-                    value={pronounceWord} onChange={e => setPronounceWord(e.target.value)} className="h-11 flex-1 text-sm" />
+                    value={pronounceWord} onChange={e => setPronounceWord(e.target.value)} className="h-9 flex-1 text-sm" />
                   <Button variant="outline" size="icon" className="h-11 w-11 shrink-0"
                     onClick={() => speak(pronounceWord, "English")} disabled={!pronounceWord.trim() || synth.isSpeaking}>
                     <Volume2 className="w-4 h-4" />
@@ -1081,9 +1064,9 @@ Rules for spoken replies:
           {/* ── DAILY LESSON ── */}
           {mode === "lesson" && (
             <Card>
-              <CardContent className="pt-5 space-y-4">
-                <CardDescription>A fresh research-based lesson every day — tailored to your level and native language.</CardDescription>
-                <Button className="font-bold w-full h-12" disabled={isStreaming}
+              <CardContent className="pt-3 space-y-2">
+                <p className="text-xs text-muted-foreground">A fresh lesson tailored to your level and native language.</p>
+                <Button className="font-bold w-full h-10" disabled={isStreaming}
                   onClick={() => {
                     const LESSON_TOPICS = [
                       "Greetings and Professional Introductions","Workplace Emails and Messages","Telephone Etiquette","Presenting Ideas in Meetings","Job Interview Phrases","Describing Your Work Experience","Polite Disagreement at Work","Asking and Giving Directions","Numbers, Dates and Time","Shopping and Negotiating","Expressing Opinions Clearly","Talking About Health and Wellbeing","Travel and Transportation","Banking and Financial Terms","Media and Current Events","Sports and Recreation Vocabulary","Technology and Social Media","Family and Relationships","Food and Restaurant English","Education and Learning Terms","Describing People and Personalities","Office Small Talk","Following Instructions","Making and Refusing Requests","Apologies and Reconciliation","Reports and Data Language","Leadership and Teamwork Phrases","Problem-Solving Language","Celebrations and Social Events","Environmental and Science Terms",
@@ -1136,9 +1119,9 @@ Teach warmly and directly. No markdown at all.`,
           {/* ── INTERVIEW ENGLISH ── */}
           {mode === "interview_english" && (
             <Card>
-              <CardContent className="pt-5 space-y-4">
-                <CardDescription>Essential English phrases and expressions used in job interviews.</CardDescription>
-                <Button className="font-bold w-full h-12" disabled={isStreaming}
+              <CardContent className="pt-3 space-y-2">
+                <p className="text-xs text-muted-foreground">Essential phrases and expressions for job interviews.</p>
+                <Button className="font-bold w-full h-10" disabled={isStreaming}
                   onClick={() => handleStream(
                     `10 essential interview phrases for Indian ${level} learners. Each: the phrase — when to use it — ${uiLang} meaning — example in context.`,
                     `Career English coach named ${teacherShort} for Indian job seekers. Practical, interview-ready expressions. ${tutor.teachingStyle}.`,
@@ -1153,6 +1136,7 @@ Teach warmly and directly. No markdown at all.`,
               </CardContent>
             </Card>
           )}
+          </div>
         </main>
       </div>
     </div>
