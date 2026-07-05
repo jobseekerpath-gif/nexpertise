@@ -546,6 +546,10 @@ STRICT rules:
     clearAutoSubmitTimer();
     setIsRecording(false);
     speech.stop();
+    // Lock the coach-speaking flag BEFORE the async stream call so the auto-listen
+    // effect never sees a window where isRecording=false AND coachSpeaking=false AND
+    // isStreaming=false all at once (which would make it restart the mic mid-processing).
+    setCoachSpeaking(true);
     const recordedAnswer = userAnswer.trim();
     setAnswer("");
     resetStream();
@@ -583,7 +587,9 @@ STRICT rules:
     // Vary the acknowledgment style randomly to avoid sounding scripted
     const ackStyles = ["brief empathy", "curious follow-on", "impressed observation", "relatable remark"];
     const ackStyle = ackStyles[answeredCount % ackStyles.length];
-    const response = await stream(
+    let response = "";
+    try {
+    response = await stream(
       `You are ${coach.name} on a live ${typeMeta.label} interview call. ${remainingMin} minutes left.
 
 Candidate: ${firstName} | ${buildProfileSummary()}
@@ -624,6 +630,13 @@ Next: <your question — start with the question itself, no greeting>`,
       undefined,
       { maxTokens: 220 }
     );
+    } catch {
+      // Stream failed — unlock mic and let the interview continue
+      setCoachSpeaking(false);
+      speech.blockFor(300);
+      setIsRecording(false);
+      return;
+    }
 
     // Robust parsing — tolerates multiline Ack, minor model format drift, or
     // missing labels. Prevents premature session-end if the model skips "Next:".
