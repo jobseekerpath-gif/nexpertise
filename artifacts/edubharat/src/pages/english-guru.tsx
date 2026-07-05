@@ -286,6 +286,13 @@ function EnglishGuruContent() {
   const [result, setResult] = useState("");
   const [savedMap, setSavedMap] = useState<Record<string, boolean>>({});
   const speech = useSpeechRecognition(uiLang);
+  /**
+   * speechRef — always-current speech handle so handleConvPhrase doesn't need
+   * `speech` in its deps (speech changes every render because it's an object
+   * literal, causing unnecessary handleConvPhrase re-creation).
+   */
+  const speechRef = useRef(speech);
+  useEffect(() => { speechRef.current = speech; }, [speech]);
   const convHistoryRef = useRef(convHistory);
   const liveChatRef = useRef(liveChat);
   useEffect(() => { liveChatRef.current = liveChat; }, [liveChat]);
@@ -391,6 +398,13 @@ function EnglishGuruContent() {
     });
   }, [synth, uiLang, tutor.voiceGender, tutor.voiceStyle]);
 
+  /**
+   * speakRef — always-current speak function so handleConvPhrase doesn't need
+   * `speak` in its deps (speak changes whenever synth.isSpeaking toggles).
+   */
+  const speakRef = useRef(speak);
+  useEffect(() => { speakRef.current = speak; }, [speak]);
+
   const handleSelectTutor = useCallback((id: string) => {
     const t = getTutorById(id);
     if (!t) return;
@@ -417,16 +431,15 @@ function EnglishGuruContent() {
       // Lock the busy flag AND kill the mic BEFORE speaking so the greeting
       // can't be picked up as user input (same pattern as handleConvPhrase).
       aiBusyRef.current = true;
-      speech.pause();
+      speechRef.current.pause();
       synth.speak(stripMarkdownForSpeech(greeting), uiLang, () => {
         // Only unlock if the user hasn't already ended the live session
         if (!liveChatRef.current) { aiBusyRef.current = false; return; }
         aiBusyRef.current = false;
         setConvFlowState("user-speaking");
-        // Echo-guard: let the continuous loop resume after the greeting fades.
-        // 300ms is enough for Edge TTS audio tail to die; blockFor now also
-        // fires a direct setTimeout wakeup so the mic is ready in ~360ms.
-        speech.blockFor(300);
+        // Echo-guard: 800 ms matches handleConvPhrase so teacher-switch greetings
+        // never get self-captured by the mic on the next turn.
+        speechRef.current.blockFor(800);
       }, { voiceGender: t.voiceGender, voiceStyle: t.voiceStyle });
     }
   }, [synth, updateProfile, speech, uiLang]);
@@ -468,11 +481,11 @@ function EnglishGuruContent() {
       // Live voice mode: hard-stop the mic and block it for the whole
       // think+speak cycle so it can never capture the AI's own voice from the
       // speaker (echo / self-repeat). The block is released in the speak onEnd.
-      speech.pause();
+      speechRef.current.pause();
     } else {
       // Typed mode: just stop any active recognition — never apply the long
       // pause block, or the mic button would stay dead afterwards.
-      speech.stop();
+      speechRef.current.stop();
     }
     setConvFlowState("ai-thinking");
     void (async () => {
@@ -548,7 +561,9 @@ Rules for spoken replies:
           if (speakSafetyTimerRef.current) { clearTimeout(speakSafetyTimerRef.current); speakSafetyTimerRef.current = null; }
           aiBusyRef.current = false;
           if (liveChatRef.current) {
-            speech.blockFor(300);
+            // 800 ms block — generous enough to outlast speaker echo so the
+            // mic can't capture the AI's own voice on the second turn.
+            speechRef.current.blockFor(800);
             setConvFlowState("user-speaking");
           } else {
             setConvFlowState("idle");
@@ -568,7 +583,9 @@ Rules for spoken replies:
           const safetyMs = Math.max(cleanResponse.length * 60 + 4_000, 10_000);
           speakSafetyTimerRef.current = setTimeout(releaseTurn, safetyMs);
           // Always use uiLang for TTS — AI was instructed to respond in uiLang.
-          speak(cleanResponse, uiLang, releaseTurn);
+          // Use speakRef so we always call the latest speak closure even though
+          // handleConvPhrase no longer has `speak` in its deps.
+          speakRef.current(cleanResponse, uiLang, releaseTurn);
         } else {
           releaseTurn();
         }
@@ -579,7 +596,9 @@ Rules for spoken replies:
         setConvFlowState(liveChatRef.current ? "user-speaking" : "idle");
       }
     })();
-  }, [stream, resetAI, speak, track, isStreaming, speech, profile.name, tutor.teachingStyle, uiLang, teacherShort]);
+  // `speech` and `speak` intentionally removed from deps — accessed via
+  // speechRef/speakRef so the callback isn't re-created on every render.
+  }, [stream, resetAI, track, isStreaming, profile.name, tutor.teachingStyle, uiLang, teacherShort]);
 
   useEffect(() => { handleConvPhraseRef.current = handleConvPhrase; }, [handleConvPhrase]);
 

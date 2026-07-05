@@ -13,9 +13,15 @@ If you call `speech.stop()` in `onEnd`, it kills the poll loop AND triggers a st
 
 ## How to apply
 - `toggleLiveChat` → `speech.startContinuous(p => handleConvPhraseRef.current?.(p))` (via ref, not direct callback)
-- `handleConvPhrase` TTS `onEnd` → `speech.blockFor(300); setConvFlowState("user-speaking");` ONLY
-- "No AI response" fallback → `speech.blockFor(150); setConvFlowState("user-speaking");` ONLY
-- tutor-switch greeting `onEnd` → `speech.blockFor(300);` ONLY
+- `handleConvPhrase` TTS `onEnd` → `speechRef.current.blockFor(800); setConvFlowState("user-speaking");` ONLY
+- "No AI response" fallback → `speechRef.current.blockFor(800); setConvFlowState("user-speaking");` ONLY
+- tutor-switch greeting `onEnd` → `speechRef.current.blockFor(800);` ONLY
+- **800ms NOT 300ms** — 300ms was too short; speaker reverb reaches the mic within 360ms (blockFor + wakeup delay), causing a spurious recognition result to lock aiBusyRef=true before the real user speech
+
+## speechRef / speakRef pattern (English Guru)
+`speech` (hook return object) and `speak` (depends on `synth.isSpeaking`) are recreated every render. Putting them in `handleConvPhrase` deps caused the callback to be re-created on every render, leaving a brief window where `handleConvPhraseRef.current` pointed to a stale version.
+
+Fix: mirror both via refs (`speechRef`, `speakRef`) updated by `useEffect`, then remove `speech`/`speak` from `handleConvPhrase` deps. Always use `speechRef.current.*` and `speakRef.current(...)` inside the callback. `uiLang` stays in deps and is passed explicitly to `speakRef.current(text, uiLang, onEnd)` so language is always current.
 - Never add `stop()` or `startContinuous()` inside TTS `onEnd` again
 - The `speak` wrapper accepts 4th `opts: { rate? }` arg — pass `{ rate: 1.0–1.1 }` for live conversation to sound natural (1.2 felt clipped/abrupt)
 
