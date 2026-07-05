@@ -6,7 +6,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Layout } from "@/components/layout";
 import { PageSkeleton } from "@/components/page-skeleton";
-import { CookieConsent } from "@/components/cookie-consent";
 import { reportWebVitals } from "@/lib/web-vitals";
 import { trackPageView } from "@/lib/analytics";
 
@@ -97,7 +96,6 @@ function App() {
             <Suspense fallback={<PageSkeleton />}>
               <Router />
             </Suspense>
-            <CookieConsent />
             <Toaster />
           </WouterRouter>
         </TooltipProvider>
