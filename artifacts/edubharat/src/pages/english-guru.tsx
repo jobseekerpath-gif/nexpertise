@@ -856,7 +856,7 @@ Rules for spoken replies:
 
           {/* ── LIVE CONVERSATION — top section with its own heading ── */}
           <section className="flex flex-col min-h-0 flex-1">
-            <Card className={`flex flex-col overflow-hidden border-2 transition-all flex-1 min-h-0 max-h-[calc(100dvh-13rem)] ${liveChat ? "border-green-400 bg-green-50/30" : "border-green-200/70 bg-green-50/10"}`}>
+            <Card className={`flex flex-col overflow-hidden border-2 transition-all flex-1 min-h-0 max-h-[calc(100dvh-6rem)] lg:max-h-none ${liveChat ? "border-green-400 bg-green-50/30" : "border-green-200/70 bg-green-50/10"}`}>
             <CardContent className="pt-3 pb-3 space-y-2 flex min-h-0 flex-1 flex-col">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
@@ -898,7 +898,7 @@ Rules for spoken replies:
                 </div>
               )}
               {(convHistory.length > 0 || isStreaming) && (
-                <div ref={convScrollRef} className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto pr-1 pt-1">
+                <div ref={convScrollRef} className="flex flex-col gap-3 flex-1 min-h-[260px] lg:min-h-0 overflow-y-auto pr-1 pt-1">
                   {isStreaming && !aiText && (
                     <div className="flex gap-2 justify-start">
                       <div className="px-4 py-2.5 bg-muted rounded-2xl">
@@ -963,9 +963,8 @@ Rules for spoken replies:
           </Card>
           </section>
 
-          {/* ── MODE SELECTOR STRIP — practice tool picker ── */}
-          {/* sticky bottom-0 on mobile so it stays visible while the user scrolls the tool cards */}
-          <div className="flex items-center gap-2 flex-wrap shrink-0 mt-3 mb-2 sticky bottom-0 z-10 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2 bg-background/95 backdrop-blur-sm border-t lg:static lg:bg-transparent lg:backdrop-filter-none lg:border-0 lg:mx-0 lg:px-0 lg:py-0">
+          {/* ── MODE SELECTOR STRIP — hidden during live chat so the conversation fills the screen ── */}
+          <div className={`flex items-center gap-2 flex-wrap shrink-0 mt-3 mb-2 sticky bottom-0 z-10 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2 bg-background/95 backdrop-blur-sm border-t lg:static lg:bg-transparent lg:backdrop-filter-none lg:border-0 lg:mx-0 lg:px-0 lg:py-0 ${liveChat ? "hidden" : ""}`}>
             {MODES.map(m => {
               const MIcon = m.icon;
               const active = mode === m.value;
@@ -986,8 +985,8 @@ Rules for spoken replies:
             })}
           </div>
 
-          {/* ── PRACTICE TOOLS ── */}
-          <div className="shrink-0 min-h-0 lg:overflow-y-auto lg:max-h-[35%]">
+          {/* ── PRACTICE TOOLS — hidden during live chat ── */}
+          <div className={`shrink-0 min-h-0 lg:overflow-y-auto lg:max-h-[35%] ${liveChat ? "hidden" : ""}`}>
           {/* ── GRAMMAR FIX ── */}
           {mode === "grammar" && (
             <Card>
