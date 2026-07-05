@@ -945,7 +945,8 @@ Rules for spoken replies:
           </section>
 
           {/* ── MODE SELECTOR STRIP — practice tool picker ── */}
-          <div className="flex items-center gap-2 mt-3 mb-2 flex-wrap shrink-0">
+          {/* sticky bottom-0 on mobile so it stays visible while the user scrolls the tool cards */}
+          <div className="flex items-center gap-2 flex-wrap shrink-0 mt-3 mb-2 sticky bottom-0 z-10 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2 bg-background/95 backdrop-blur-sm border-t lg:static lg:bg-transparent lg:backdrop-filter-none lg:border-0 lg:mx-0 lg:px-0 lg:py-0">
             {MODES.map(m => {
               const MIcon = m.icon;
               const active = mode === m.value;

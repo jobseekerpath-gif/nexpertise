@@ -631,7 +631,15 @@ Next: <your question — start with the question itself, no greeting>`,
       { maxTokens: 220 }
     );
     } catch {
-      // Stream failed — unlock mic and let the interview continue
+      // Stream threw — unlock mic and let the interview continue
+      setCoachSpeaking(false);
+      speech.blockFor(300);
+      setIsRecording(false);
+      return;
+    }
+
+    // stream() swallows network errors and returns "" — treat that the same as a thrown error
+    if (!response.trim()) {
       setCoachSpeaking(false);
       speech.blockFor(300);
       setIsRecording(false);
