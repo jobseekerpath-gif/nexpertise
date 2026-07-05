@@ -368,7 +368,16 @@ function EnglishGuruContent() {
   }, [profile.preferredTutor, profile.voiceStyle, tutorId]);
 
   const speak = useCallback((text: string, language = uiLang, onEnd?: () => void, opts: { rate?: number } = {}) => {
-    synth.speak(stripMarkdownForSpeech(text), language, onEnd, {
+    let t = stripMarkdownForSpeech(text)
+      .replace(/^(?:Teacher|AI|Assistant|System):\s*/i, "")
+      .replace(/\b(?:Student|User):\s*/gi, "")
+      .trim();
+    // If the model accidentally echoes instructions, keep only the first natural reply line.
+    const firstSentence = t.split(/\n/).find(l => {
+      const s = l.trim();
+      return s.length > 2 && !s.startsWith("[") && !s.startsWith("(") && !s.startsWith("-") && !/^\d+[.)]\s*$/.test(s);
+    }) ?? t;
+    synth.speak(firstSentence, language, onEnd, {
       voiceGender: tutor.voiceGender,
       voiceStyle: tutor.voiceStyle,
       ...opts,
@@ -523,7 +532,7 @@ Rules for spoken replies:
 - Always finish your thought — never cut off mid-sentence.
 - If asked about news, sports, films, prices, or current events: answer confidently using "from what I know" or "last I heard". Do NOT say you have no internet. Your knowledge is up to early 2025; for very recent things, say "I may not have the very latest, but…".${webContextNote}`,
           undefined,
-          { maxTokens: 300 }
+          { maxTokens: 160 }
         );
         if (response) {
           // Strip any "TeacherName: " prefix the AI may echo, plus markdown

@@ -112,6 +112,20 @@ function formatTime(totalSeconds: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
+/** Remove any prompt artifacts (Ack:/Next:, labels, markdown) that could leak into TTS. */
+function cleanForSpeech(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/^(?:Ack|Next):\s*/gim, "")
+    .replace(/\b(?:Ack|Next):\s*/gi, "")
+    .replace(/^[A-Za-zÀ-ÿ'\s]{2,30}:\s*/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function parseReportJson(text: string): InterviewReport | null {
   const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
   try {
@@ -276,6 +290,8 @@ function InterviewAceContent() {
    */
   const speakCoach = useCallback(
     (text: string, opts: { voiceGender?: "male" | "female"; pitch?: number; rate?: number }) => {
+      const ttsText = cleanForSpeech(text);
+      if (!ttsText) return;
       speech.pause();
       // Clear any previous safety timer before starting fresh
       if (coachSafetyTimerRef.current) { clearTimeout(coachSafetyTimerRef.current); coachSafetyTimerRef.current = null; }
@@ -286,12 +302,12 @@ function InterviewAceContent() {
       const safetyMs = Math.max(text.length * 50 + 5_000, 16_000);
       coachSafetyTimerRef.current = setTimeout(() => {
         coachSafetyTimerRef.current = null;
-        speech.blockFor(500); // override the 10-min pause window → mic can retry
+        speech.blockFor(400); // override the 10-min pause window → mic can retry
         setCoachSpeaking(false);
       }, safetyMs);
-      void synth.speak(text, "English", () => {
+      void synth.speak(ttsText, "English", () => {
         if (coachSafetyTimerRef.current) { clearTimeout(coachSafetyTimerRef.current); coachSafetyTimerRef.current = null; }
-        speech.blockFor(800);
+        speech.blockFor(400); // mic reopens ~460ms after audio ends (well under 2s target)
         setCoachSpeaking(false);
       }, opts);
     },
@@ -583,7 +599,7 @@ ${isShortAnswer
   : ""}
 
 Your task — two parts:
-1. ACKNOWLEDGE: React to something SPECIFIC from their answer in ${ackStyle} style — 1–2 sentences. Reference a real detail they mentioned. Never say "That's great!" generically.
+1. ACKNOWLEDGE: ONE short, natural reaction to something SPECIFIC they said — maximum 5 words, like "Right, I see" or "Interesting project" or "That makes sense". Do NOT summarize their whole answer. Do NOT repeat the question you just asked.
 2. NEXT QUESTION: ${isShortAnswer
   ? `Ask them to elaborate naturally: "Tell me more about that..." or "Give me a specific example..." or similar.`
   : remainingMin <= 3
@@ -593,6 +609,8 @@ Your task — two parts:
 RULES — non-negotiable:
 - Use ${firstName}'s name at most once per 3 exchanges — not every time
 - React to THEIR exact words — mention a specific project, skill, company, or phrase they used
+- Acknowledgment is a brief verbal nod, not a speech. Max 5 words.
+- NEVER repeat the question you just asked. NEVER repeat any question from the conversation history.
 - Natural Indian professional speech rhythm: "I see.", "Right, okay.", "Interesting.", "That makes sense.", "Ah, good point."
 - NEVER use filler like "That's great!" or "Wonderful!" or "Like, if you had to..."
 - NEVER start Next with any greeting — start directly with the question
@@ -600,7 +618,7 @@ RULES — non-negotiable:
 - Ask exactly ONE question
 
 Output format — exactly two lines, nothing else:
-Ack: <genuine, specific reaction — 1–2 sentences>
+Ack: <brief specific reaction — max 5 words>
 Next: <your question — start with the question itself, no greeting>`,
       `You are ${coach.name}, ${coach.role}. ${coach.style} You are on a live voice interview with ${firstName}. You have a genuine, distinct personality — warm but focused, perceptive, and adaptable. You vary your acknowledgment style and question types naturally to keep the conversation dynamic, never formulaic.`,
       undefined,
@@ -734,7 +752,7 @@ Next: <your question — start with the question itself, no greeting>`,
     // No clearAutoSubmitTimer in cleanup: timer must survive normal dep changes.
     // Unmount cleanup is handled by the dedicated effect above. Clearing here
     // would cancel in-flight auto-submits whenever any dep ticks (e.g. speech.status).
-  }, [phase, currentQ, autoListenEnabled, speech, isStreaming, synth.isSpeaking, isRecording, coachSpeaking, clearAutoSubmitTimer]);
+  }, [phase, currentQ, autoListenEnabled, speech.isSupported, speech.startContinuous, isStreaming, synth.isSpeaking, isRecording, coachSpeaking, clearAutoSubmitTimer]);
 
   // Watchdog: if isRecording is true but the recognition has silently died
   // (speech status is "idle" for 4+ seconds while nothing else is blocking),
