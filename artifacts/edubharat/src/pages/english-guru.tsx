@@ -297,10 +297,14 @@ function EnglishGuruContent() {
    * cut the AI off abruptly. isStreaming alone doesn't cover the TTS window.
    */
   const aiBusyRef = useRef(false);
+  /** Safety timer: if TTS onEnd never fires, force-clear aiBusyRef so the mic comes back. */
+  const speakSafetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Tracks last user speech activity (interim transcript / phrase) for silence detection. */
   const lastUserSpeechRef = useRef(Date.now());
   /** Prevents re-entrant silence probes if one is already in-flight. */
   const silenceProbeActiveRef = useRef(false);
+  /** Counts consecutive silence probes since the user last spoke; max 2 nudges then stop. */
+  const silenceProbeCountRef = useRef(0);
 
   useEffect(() => {
     if (user?.name && !profile.name) updateProfile({ name: user.name });
@@ -333,11 +337,12 @@ function EnglishGuruContent() {
     if (speech.interimTranscript && liveChat) {
       lastUserSpeechRef.current = Date.now();
       silenceProbeActiveRef.current = false; // user is actively speaking — cancel any pending re-engage
+      silenceProbeCountRef.current = 0; // user spoke — reset nudge counter
     }
   }, [speech.interimTranscript, liveChat]);
 
   // Silence re-engagement: if user hasn't spoken for 10 s during live chat,
-  // the AI gently re-engages rather than sitting in dead silence.
+  // the AI gently re-engages — but only up to 2 consecutive nudges.
   useEffect(() => {
     if (!liveChat || convFlowState !== "user-speaking") {
       silenceProbeActiveRef.current = false;
@@ -348,9 +353,11 @@ function EnglishGuruContent() {
     silenceProbeActiveRef.current = false;
     const id = setInterval(() => {
       if (aiBusyRef.current || !liveChatRef.current || silenceProbeActiveRef.current) return;
+      if (silenceProbeCountRef.current >= 2) return; // already nudged twice — don't nag
       const silentMs = Date.now() - lastUserSpeechRef.current;
       if (silentMs > 10_000) {
         silenceProbeActiveRef.current = true;
+        silenceProbeCountRef.current += 1;
         lastUserSpeechRef.current = Date.now();
         // Trigger re-engagement via the phrase handler using a sentinel value
         handleConvPhraseRef.current?.("__silence__");
@@ -454,6 +461,8 @@ function EnglishGuruContent() {
     // Guard: normal phrases need content; silence probes just need the channel to be free.
     if (!isSilenceProbe && (!phrase.trim() || (!liveChatRef.current && isStreaming) || aiBusyRef.current)) return;
     if (isSilenceProbe && (aiBusyRef.current || !liveChatRef.current)) return;
+    // Real user phrase resets the silence-nudge counter
+    if (!isSilenceProbe) { silenceProbeCountRef.current = 0; silenceProbeActiveRef.current = false; }
     aiBusyRef.current = true;
     if (liveChatRef.current) {
       // Live voice mode: hard-stop the mic and block it for the whole
@@ -534,6 +543,18 @@ Rules for spoken replies:
           undefined,
           { maxTokens: 160 }
         );
+        /** Release the busy lock and reopen the mic — called from TTS onEnd OR the safety timer. */
+        const releaseTurn = () => {
+          if (speakSafetyTimerRef.current) { clearTimeout(speakSafetyTimerRef.current); speakSafetyTimerRef.current = null; }
+          aiBusyRef.current = false;
+          if (liveChatRef.current) {
+            speech.blockFor(300);
+            setConvFlowState("user-speaking");
+          } else {
+            setConvFlowState("idle");
+          }
+        };
+
         if (response) {
           // Strip any "TeacherName: " prefix the AI may echo, plus markdown
           const cleanResponse = stripMarkdownForSpeech(response)
@@ -542,34 +563,14 @@ Rules for spoken replies:
           setConvHistory(h => [...h, { role: "ai", text: cleanResponse }]);
           track("English Guru", "Live Conversation");
           setConvFlowState("ai-speaking");
-          // Always use uiLang for TTS — AI was instructed to respond in uiLang,
-          // so we should speak it in that language regardless of script detection.
-          speak(cleanResponse, uiLang, () => {
-            aiBusyRef.current = false;
-            if (liveChatRef.current) {
-              // Only override the block — the single recognition loop started in
-              // toggleLiveChat resumes automatically once blockFor expires.
-              // Do NOT call stop() or startContinuous() here; that creates a second
-              // competing loop which cancels the first and kills subsequent turns.
-              // 300ms is enough for Edge TTS echo to fade; blockFor now also
-              // fires a direct setTimeout wakeup so the mic is live in ~360ms
-              // instead of the old ~1200ms (800ms block + 250ms poll + startup).
-              speech.blockFor(300);
-              setConvFlowState("user-speaking");
-            } else {
-              setConvFlowState("idle");
-            }
-          });
+          // Safety timer: if TTS onEnd never fires (Edge TTS failure, audio context suspend, etc.)
+          // force-release the busy lock after a generous timeout so the mic comes back.
+          const safetyMs = Math.max(cleanResponse.length * 60 + 4_000, 10_000);
+          speakSafetyTimerRef.current = setTimeout(releaseTurn, safetyMs);
+          // Always use uiLang for TTS — AI was instructed to respond in uiLang.
+          speak(cleanResponse, uiLang, releaseTurn);
         } else {
-          aiBusyRef.current = false;
-          // AI gave no response — release the pause block so the existing loop
-          // resumes listening. No new startContinuous needed.
-          if (liveChatRef.current) {
-            speech.blockFor(150);
-            setConvFlowState("user-speaking");
-          } else {
-            setConvFlowState("idle");
-          }
+          releaseTurn();
         }
       } catch {
         // Never leave the busy flag latched on an unexpected failure, or all
@@ -591,6 +592,8 @@ Rules for spoken replies:
       // synth.stop() does not fire the speak() onEnd callback, so clear the
       // busy flag here or the next session's first turn would be blocked.
       aiBusyRef.current = false;
+      if (speakSafetyTimerRef.current) { clearTimeout(speakSafetyTimerRef.current); speakSafetyTimerRef.current = null; }
+      silenceProbeCountRef.current = 0;
       return;
     }
     // Don't decide guest vs. paid until auth has resolved — otherwise a signed-in
@@ -942,7 +945,7 @@ Rules for spoken replies:
           </section>
 
           {/* ── MODE SELECTOR STRIP — practice tool picker ── */}
-          <div className="flex items-center gap-2 mb-2 flex-wrap shrink-0">
+          <div className="flex items-center gap-2 mt-3 mb-2 flex-wrap shrink-0">
             {MODES.map(m => {
               const MIcon = m.icon;
               const active = mode === m.value;
