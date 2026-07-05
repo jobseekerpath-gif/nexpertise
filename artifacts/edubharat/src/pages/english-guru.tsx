@@ -39,13 +39,13 @@ const MODES = [
 type Mode = typeof MODES[number]["value"];
 
 
-function MicButton({ isListening, isSupported, onStart, onStop }: {
-  isListening: boolean; isSupported: boolean; onStart: () => void; onStop: () => void;
+function MicButton({ isListening, isSupported, onStart, onStop, disabled }: {
+  isListening: boolean; isSupported: boolean; onStart: () => void; onStop: () => void; disabled?: boolean;
 }) {
   return (
     <Button type="button" variant={isListening ? "destructive" : "outline"} size="icon"
-      onClick={isListening ? onStop : onStart} disabled={!isSupported}
-      title={!isSupported ? "Voice not supported in this browser" : isListening ? "Stop" : "Speak"} className="shrink-0 min-h-11 min-w-11">
+      onClick={isListening ? onStop : onStart} disabled={!isSupported || disabled}
+      title={!isSupported ? "Voice not supported in this browser" : disabled ? "Mic unavailable during live chat" : isListening ? "Stop" : "Speak"} className="shrink-0 min-h-11 min-w-11">
       {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
     </Button>
   );
@@ -976,7 +976,7 @@ Rules for spoken replies:
                   value={grammarInput} onChange={e => setGrammarInput(e.target.value)} />
                 <div className="flex items-center gap-2">
                   <MicButton isListening={speech.isListening} isSupported={speech.isSupported}
-                    onStart={() => speech.start(t => setGrammarInput(p => p + t))} onStop={speech.stop} />
+                    onStart={() => speech.start(t => setGrammarInput(p => p + t))} onStop={speech.stop} disabled={liveChat} />
                   {speech.interimTranscript && <span className="text-xs text-muted-foreground italic flex-1 truncate">{speech.interimTranscript}</span>}
                   <Button className="ml-auto font-bold" disabled={isStreaming || !grammarInput.trim()}
                     onClick={() => handleStream(
@@ -1004,7 +1004,7 @@ Rules for spoken replies:
                   value={writeInput} onChange={e => setWriteInput(e.target.value)} />
                 <div className="flex items-center gap-2">
                   <MicButton isListening={speech.isListening} isSupported={speech.isSupported}
-                    onStart={() => speech.start(t => setWriteInput(p => p + t))} onStop={speech.stop} />
+                    onStart={() => speech.start(t => setWriteInput(p => p + t))} onStop={speech.stop} disabled={liveChat} />
                   <Button className="ml-auto font-bold" disabled={isStreaming || !writeInput.trim()}
                     onClick={() => handleStream(
                       `Improve this to sound professional: "${writeInput}". Show improved version + 3 key changes made.`,

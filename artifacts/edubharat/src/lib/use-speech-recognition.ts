@@ -146,6 +146,9 @@ export function useSpeechRecognition(language = "English") {
         setStatus("error");
         return;
       }
+      // Never interrupt an active continuous session — the live chat loop would
+      // be permanently killed because start() sets shouldContinueRef to false.
+      if (shouldContinueRef.current) return;
       shouldContinueRef.current = false;
       const recognition = createRecognitionInstance();
       if (!recognition) return;
@@ -278,7 +281,6 @@ export function useSpeechRecognition(language = "English") {
   const stop = useCallback(() => {
     shouldContinueRef.current = false;
     onPhraseRef.current = null;
-    // Cancel any pending wakeup timer
     if (wakeTimerRef.current !== null) {
       clearTimeout(wakeTimerRef.current);
       wakeTimerRef.current = null;
