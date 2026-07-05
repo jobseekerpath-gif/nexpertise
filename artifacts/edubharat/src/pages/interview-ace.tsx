@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useHistory } from "@/lib/use-history";
@@ -454,18 +454,21 @@ function InterviewAceContent() {
     const candidateName = profile.name || "there";
     const firstName = candidateName.split(" ")[0];
     const full = await stream(
-      `You are ${coach.name}, starting a ${typeMeta.label} interview with ${firstName}.
+      `You are ${coach.name}, opening a ${typeMeta.label} interview with ${firstName} (${experience} level).
 
-Say a warm 2-sentence greeting — introduce yourself briefly and put them at ease — then ask: "So, tell me about yourself."
+Give a warm, natural 2-sentence greeting — sound like a real human interviewer, not a script — then ask ONE natural opening question suited for this ${typeMeta.label}.
+
+The opening question should feel fresh and specific to ${typeMeta.label}: ${typeMeta.value === "technical" ? "could be about their background, a project they're proud of, or a specific tech skill" : typeMeta.value === "hr" ? "about their background, their career journey, or what brought them here today" : "about their background and experience in this domain"}.
 
 STRICT rules:
 - Maximum 3 sentences total. No long speeches.
-- Plain spoken words ONLY. No asterisks, no *actions*, no #headers, no markdown, no quotes around your reply.
-- Do NOT list rules, do NOT explain the process, do NOT say "there are no trick questions".
-- Sound like a real person on a phone call, not a script.`,
-      `You are ${coach.name}, ${coach.role}. Speak naturally and briefly. Never use markdown or action words.`,
+- Plain spoken words ONLY. No asterisks, no *actions*, no markdown, no quotes around your reply.
+- Do NOT list rules, do NOT explain the interview process, do NOT say "there are no trick questions".
+- Never start with "Hello" or "Hi" as a standalone word — weave it naturally into your opening.
+- Sound like a real human on a video call, warm and genuine.`,
+      `You are ${coach.name}, ${coach.role}. ${coach.style} Speak naturally and briefly. Never use markdown or action words. You have a distinct personality — warm but professional, genuinely curious about the candidate.`,
       undefined,
-      { maxTokens: 100 }
+      { maxTokens: 120 }
     );
     const opening = full.replace(/^\s*["']?|["']?\s*$/g, "").trim();
     if (!opening) return;
@@ -561,49 +564,47 @@ STRICT rules:
     const isShortAnswer = wordCount < 20;
 
     // Get a natural acknowledgment + next question — no scores, no analysis
+    // Vary the acknowledgment style randomly to avoid sounding scripted
+    const ackStyles = ["brief empathy", "curious follow-on", "impressed observation", "relatable remark"];
+    const ackStyle = ackStyles[answeredCount % ackStyles.length];
     const response = await stream(
-      `You are ${coach.name} conducting a live ${typeMeta.label} interview. ${remainingMin} minutes remaining.
+      `You are ${coach.name} on a live ${typeMeta.label} interview call. ${remainingMin} minutes left.
 
 Candidate: ${firstName} | ${buildProfileSummary()}
 
-Interview conversation so far:
-${recentAnswered || "(This is the first answer)"}
+Recent exchanges:
+${recentAnswered || "(This is the first response)"}
 
-You just asked:
-"${currentQ.question}"
-
-${firstName} answered:
-"${recordedAnswer}"
+Your last question: "${currentQ.question}"
+${firstName} said: "${recordedAnswer}"
 
 ${isShortAnswer
-  ? `Note: Their answer is quite brief (${wordCount} words). They may be nervous or unsure. Gently acknowledge what they said and invite them to share more before moving on.`
+  ? `Their answer was brief (${wordCount} words) — they may be nervous. Acknowledge warmly and invite elaboration.`
   : ""}
 
-Your job:
-1. React naturally to something SPECIFIC they actually said — not a generic "That's great." Mention a detail from their answer.
-2. Then${isShortAnswer
-  ? ` ask them to elaborate: use "Could you tell me a bit more about that?" or "Can you share a specific example of that?"`
+Your task — two parts:
+1. ACKNOWLEDGE: React to something SPECIFIC from their answer in ${ackStyle} style — 1–2 sentences. Reference a real detail they mentioned. Never say "That's great!" generically.
+2. NEXT QUESTION: ${isShortAnswer
+  ? `Ask them to elaborate naturally: "Tell me more about that..." or "Give me a specific example..." or similar.`
   : remainingMin <= 3
-    ? ` ask one warm closing question — their career goals, what they're looking for in a role, or if they have any questions for you`
-    : ` either dig deeper into what they mentioned, or smoothly move to a new aspect relevant to ${typeMeta.label}`}
+    ? `Ask one warm closing question: about their goals, what excites them about this field, or if they have any questions for you.`
+    : `Either probe deeper into what they said OR pivot naturally to a new angle of ${typeMeta.label} — vary your approach, don't follow a predictable pattern.`}
 
-Rules — follow these exactly:
-- Use ${firstName}'s name once in a while (not every time)
-- React to their SPECIFIC words, not generically. If they mentioned a project, a company, a skill — reference it.
-- Natural Indian professional speech: "That makes sense.", "I see.", "Interesting.", "Right, okay.", "That's helpful."
-- NEVER use "Like, if you had to..." — it sounds robotic
-- Ask questions naturally: "Walk me through...", "How did you handle...", "What's your take on...", "Can you give me an example of..."
-- NEVER start the Next question with "Hello", "Hi", "Hey", "Tell me, Hello", or any greeting — jump straight into the question
-- The Next line is ONLY the question itself — no name, no pleasantry, just the question
-- Acknowledgment: 1–2 sentences max
+RULES — non-negotiable:
+- Use ${firstName}'s name at most once per 3 exchanges — not every time
+- React to THEIR exact words — mention a specific project, skill, company, or phrase they used
+- Natural Indian professional speech rhythm: "I see.", "Right, okay.", "Interesting.", "That makes sense.", "Ah, good point."
+- NEVER use filler like "That's great!" or "Wonderful!" or "Like, if you had to..."
+- NEVER start Next with any greeting — start directly with the question
+- The Next line must be the question ONLY — no name, no preamble
 - Ask exactly ONE question
 
-Output exactly two lines, no extra text:
-Ack: <your genuine reaction to their specific answer, 1–2 sentences>
-Next: <your next question — start directly with the question, never with a greeting>`,
-      `You are ${coach.name}, ${coach.role}. You are on a live voice interview call with ${firstName}. You are warm, perceptive, and genuinely curious — you listen carefully and respond to what the candidate actually says, not a generic script. You make candidates feel heard and comfortable.`,
+Output format — exactly two lines, nothing else:
+Ack: <genuine, specific reaction — 1–2 sentences>
+Next: <your question — start with the question itself, no greeting>`,
+      `You are ${coach.name}, ${coach.role}. ${coach.style} You are on a live voice interview with ${firstName}. You have a genuine, distinct personality — warm but focused, perceptive, and adaptable. You vary your acknowledgment style and question types naturally to keep the conversation dynamic, never formulaic.`,
       undefined,
-      { maxTokens: 200 }
+      { maxTokens: 220 }
     );
 
     // Robust parsing — tolerates multiline Ack, minor model format drift, or
@@ -971,111 +972,102 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
   // ── Setup ──────────────────────────────────────────────────────────────────
   if (phase === "setup") {
     return (
-      <div className="min-h-full container mx-auto px-4 max-w-4xl">
-        <div className="text-center mb-8 pt-6">
-          <h1 className="text-4xl font-display font-bold text-secondary mb-2">Interview Ace</h1>
-          <p className="text-muted-foreground">AI mock interviews with instant feedback · Voice-powered · India-focused</p>
-        </div>
-
-        {/* Coach selection */}
-        <div className="mb-8">
-          {/* ── SETTINGS BAR — directly above the interviewer grid ── */}
-          <div className="flex items-center gap-2 flex-wrap mb-3">
-            <span className="text-sm font-semibold text-secondary truncate">
-              {profile.name || user?.name || "Guest"}
-            </span>
-            <span className="text-muted-foreground/40">•</span>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="h-7 text-xs w-[160px] rounded-full border-dashed">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {INTERVIEW_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.icon} {t.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={experience} onValueChange={setExperience}>
-              <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {EXPERIENCE_LEVELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={String(duration)} onValueChange={v => setDuration(Number(v))}>
-              <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DURATIONS.map(d => <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">
-            Choose Your Interviewer
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {INTERVIEW_COACHES.map(c => (
-              <button
-                key={c.id}
-                onClick={() => setCoach(c)}
-                className={`text-left rounded-2xl border-2 p-4 transition-all hover:shadow-md ${
-                  coach.id === c.id
-                    ? "border-primary shadow-md bg-primary/5"
-                    : "border-border bg-card hover:border-primary/40"
-                }`}
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <AnimatedAvatar
-                    name={c.name}
-                    subtitle={c.role}
-                    isSpeaking={false}
-                    gender={c.gender}
-                    size="sm"
-                    imageSrc={c.imageSrc}
-                  />
-                  <div className="min-w-0">
-                    <p className="font-bold text-sm text-secondary truncate">{c.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{c.role}</p>
-                  </div>
-                  {coach.id === c.id && <CheckCircle2 className="w-4 h-4 text-primary ml-auto shrink-0" />}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-base">{c.icon}</span>
-                  <span className="text-xs font-semibold text-secondary">{c.specialty}</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{c.style}</p>
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 p-4 rounded-2xl bg-muted/40 border text-sm text-secondary italic">
-            "{coach.intro}"
+      <div className="container mx-auto px-4 max-w-4xl pt-3 pb-4">
+        {/* Compact header */}
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h1 className="text-xl font-display font-bold text-secondary leading-tight">Interview Ace</h1>
+            <p className="text-xs text-muted-foreground">AI mock interviews · Voice-powered · India-focused</p>
           </div>
         </div>
 
-        <Card className="max-w-lg mx-auto shadow-xl border-none">
-          <CardHeader>
-            <CardTitle>Ready to begin?</CardTitle>
-            <CardDescription>
-              {typeMeta.icon} {typeMeta.label} · {experience} · {duration} min with {coach.name}
-            </CardDescription>
-          </CardHeader>
-          <CardFooter className="flex-col gap-2 items-stretch">
-            <Button className="w-full h-12 font-bold text-base shadow-md shadow-primary/20" onClick={startSession} disabled={isStreaming}>
-              {isStreaming
-                ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Preparing session...</>
-                : <><PlayCircle className="w-5 h-5 mr-2" />Begin with {coach.name}</>}
-            </Button>
-            <p className="text-xs text-center text-muted-foreground">
+        {/* Settings bar */}
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <span className="text-sm font-semibold text-secondary truncate">
+            {profile.name || user?.name || "Guest"}
+          </span>
+          <span className="text-muted-foreground/40">•</span>
+          <Select value={type} onValueChange={setType}>
+            <SelectTrigger className="h-7 text-xs w-[150px] rounded-full border-dashed">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {INTERVIEW_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.icon} {t.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={experience} onValueChange={setExperience}>
+            <SelectTrigger className="h-7 text-xs w-[110px] rounded-full border-dashed">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {EXPERIENCE_LEVELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={String(duration)} onValueChange={v => setDuration(Number(v))}>
+            <SelectTrigger className="h-7 text-xs w-[110px] rounded-full border-dashed">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DURATIONS.map(d => <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Coach grid — compact */}
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Choose Your Interviewer</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
+          {INTERVIEW_COACHES.map(c => (
+            <button
+              key={c.id}
+              onClick={() => setCoach(c)}
+              className={`text-left rounded-xl border-2 p-3 transition-all hover:shadow-md ${
+                coach.id === c.id
+                  ? "border-primary shadow-md bg-primary/5"
+                  : "border-border bg-card hover:border-primary/40"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <AnimatedAvatar
+                  name={c.name}
+                  subtitle={c.role}
+                  isSpeaking={false}
+                  gender={c.gender}
+                  size="sm"
+                  imageSrc={c.imageSrc}
+                />
+                {coach.id === c.id && <CheckCircle2 className="w-3.5 h-3.5 text-primary ml-auto shrink-0" />}
+              </div>
+              <p className="font-bold text-xs text-secondary truncate">{c.name}</p>
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="text-xs">{c.icon}</span>
+                <span className="text-[10px] font-semibold text-muted-foreground truncate">{c.specialty}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Inline start bar */}
+        <div className="flex items-center gap-3 p-3 rounded-2xl bg-card border shadow-sm">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-secondary truncate">
+              {typeMeta.icon} {typeMeta.label} · {experience} · {duration} min · {coach.name}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
               {user ? (
-                <>Uses <span className="font-semibold text-secondary">{interviewCost} credits</span> · Balance: <span className="font-semibold text-secondary">{balance ?? "…"}</span> · <Link href="/credits" className="text-primary font-semibold hover:underline">Top up</Link></>
+                <>Uses <span className="font-semibold text-secondary">{interviewCost} credits</span> · Balance: <span className="font-semibold">{balance ?? "…"}</span> · <Link href="/credits" className="text-primary font-semibold hover:underline">Top up</Link></>
               ) : guestInterviewsRemaining > 0 ? (
-                <><span className="font-semibold text-green-700">{guestInterviewsRemaining} free {guestInterviewsRemaining === 1 ? "interview" : "interviews"}</span> left — no signup needed · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> for 20 free credits</>
+                <><span className="font-semibold text-green-700">{guestInterviewsRemaining} free {guestInterviewsRemaining === 1 ? "interview" : "interviews"}</span> left · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> for 20 free credits</>
               ) : (
-                <>Free interviews used up · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> to get 20 free credits</>
+                <>Free interviews used up · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> for 20 free credits</>
               )}
             </p>
-          </CardFooter>
-        </Card>
+          </div>
+          <Button className="shrink-0 font-bold shadow-md shadow-primary/20" onClick={startSession} disabled={isStreaming}>
+            {isStreaming
+              ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Preparing…</>
+              : <><PlayCircle className="w-4 h-4 mr-1.5" />Begin</>}
+          </Button>
+        </div>
       </div>
     );
   }

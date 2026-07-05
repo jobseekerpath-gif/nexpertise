@@ -1,0 +1,39 @@
+Voice AI Conversation Requirements
+Continuous Conversation
+The AI Teacher and AI Interviewer should never stop responding during an active session.
+They should continue speaking naturally until the user explicitly ends the conversation.
+If there is a long pause, the AI should gently re-engage the user instead of becoming inactive.
+Instant Persona & Language Switching
+When the user changes the AI Teacher/Interviewer, the current conversation should immediately stop.
+The new AI persona should initialize instantly and begin speaking in its own style without requiring a page refresh.
+If the user changes the native language, the AI should immediately switch to the selected language and continue the conversation naturally.
+Automatic Session Refresh
+If the voice session becomes stale or inactive for an extended period, automatically reinitialize the voice session in the background.
+This refresh should be seamless and should not require any user action.
+The conversation should resume naturally after reconnection.
+Natural Human Conversation
+The AI should not read chat messages or on-screen text aloud.
+It should generate spoken responses naturally, as if two humans are having a real conversation.
+Responses should sound spontaneous rather than scripted.
+Avoid Repetitive Introductions
+The AI should introduce itself only once at the beginning of a conversation.
+It should never repeatedly say things like:
+"Hello, I'm Priya."
+"Hello, I'm Priya Ma'am."
+After the initial greeting, it should continue the conversation naturally without reintroducing itself.
+Conversation Memory
+Maintain context throughout the session.
+Do not restart the conversation unless the user switches the AI persona, changes the language, or explicitly starts a new chat.
+Human-like Turn Taking
+Allow natural pauses.
+Use conversational fillers occasionally when appropriate (e.g., "Hmm...", "That's interesting...", "I see.").
+Ask follow-up questions naturally instead of waiting silently.
+No Silent Failures
+If the AI encounters an error or loses the connection, it should automatically reconnect and continue the conversation.
+The user should not need to manually restart the session.
+Single Active Voice Session
+Ensure that only one voice session is active at a time.
+When switching teachers or languages, terminate the previous voice session before starting the new one to prevent overlapping audio.
+Natural Greeting Behavior
+Greet the user only once at the start of a session.
+Do not repeat greetings after every response or reconnection unless a completely new conversation has started.

@@ -25,7 +25,7 @@
 - [AI provider fallback](ai-provider-fallback.md) — Claude is PRIMARY, Gemini fallback (no working GEMINI_API_KEY); route AI via generateTextWithFallback so calls don't waste 3-5s failing through dead Gemini models.
 - [Rozgar filter vs profile](rozgar-filter-priority.md) — job query must send the FILTER city/experience over profile location; two-layer filtering (backend query + client filterJobs) means an unsent filter shows a mismatch AND empties results.
 - [Journey progression](journey-progression.md) — SM-2 queue dead-ends when all lessons have future due dates; use "practice ahead" mode + mastery-based effectiveStage used in BOTH All Lessons and Roadmap locking.
-- [Live-chat recognition loop](live-chat-recognition-loop.md) — ONE startContinuous; blockFor direct-wakeup uses isSpawningRef+wakeTimerRef to prevent double-spawn race; 300ms block.
+- [Live-chat recognition loop](live-chat-recognition-loop.md) — ONE startContinuous; blockFor direct-wakeup uses isSpawningRef+wakeTimerRef to prevent double-spawn race; 300ms block; silence re-engagement via __silence__ sentinel after 10s; interview auto-submit needs ref pattern to avoid elapsedSeconds dep churn.
 - [Live chat news enrichment](live-chat-news-enrichment.md) — DuckDuckGo Instant Answer enriches AI context for news queries; NEWS_RE must be specific; 1500ms client timeout.
 - [Journey AI content endpoint](journey-ai-content.md) — GET /journey/lesson-content/:lessonId; in-memory cache capped at 200 entries (FIFO eviction); useEffect([expanded]) triggers fetch; static LESSON_CONTENT is immediate fallback.
 - [Sticky bars below nav](sticky-bars.md) — use sticky top-16 z-20 -mx-4 px-4 bg-white/95 backdrop-blur-sm border-b; works when page container has overflow-y-auto and is the scroll root.

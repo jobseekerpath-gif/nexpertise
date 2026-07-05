@@ -297,6 +297,10 @@ function EnglishGuruContent() {
    * cut the AI off abruptly. isStreaming alone doesn't cover the TTS window.
    */
   const aiBusyRef = useRef(false);
+  /** Tracks last user speech activity (interim transcript / phrase) for silence detection. */
+  const lastUserSpeechRef = useRef(Date.now());
+  /** Prevents re-entrant silence probes if one is already in-flight. */
+  const silenceProbeActiveRef = useRef(false);
 
   useEffect(() => {
     if (user?.name && !profile.name) updateProfile({ name: user.name });
@@ -324,6 +328,37 @@ function EnglishGuruContent() {
     setLevel(mapEnglishLevel(profile.englishLevel));
   }, [profile.englishLevel]);
 
+  // Update lastUserSpeechRef whenever recognition produces interim text
+  useEffect(() => {
+    if (speech.interimTranscript && liveChat) {
+      lastUserSpeechRef.current = Date.now();
+      silenceProbeActiveRef.current = false; // user is actively speaking — cancel any pending re-engage
+    }
+  }, [speech.interimTranscript, liveChat]);
+
+  // Silence re-engagement: if user hasn't spoken for 10 s during live chat,
+  // the AI gently re-engages rather than sitting in dead silence.
+  useEffect(() => {
+    if (!liveChat || convFlowState !== "user-speaking") {
+      silenceProbeActiveRef.current = false;
+      return;
+    }
+    // Reset the clock whenever we enter user-speaking state
+    lastUserSpeechRef.current = Date.now();
+    silenceProbeActiveRef.current = false;
+    const id = setInterval(() => {
+      if (aiBusyRef.current || !liveChatRef.current || silenceProbeActiveRef.current) return;
+      const silentMs = Date.now() - lastUserSpeechRef.current;
+      if (silentMs > 10_000) {
+        silenceProbeActiveRef.current = true;
+        lastUserSpeechRef.current = Date.now();
+        // Trigger re-engagement via the phrase handler using a sentinel value
+        handleConvPhraseRef.current?.("__silence__");
+      }
+    }, 2_500);
+    return () => clearInterval(id);
+  }, [liveChat, convFlowState]);
+
   // Sync tutor to profile when profile changes externally
   useEffect(() => {
     const byId = TUTORS.find(t => t.id === profile.preferredTutor);
@@ -349,11 +384,18 @@ function EnglishGuruContent() {
     aiBusyRef.current = false;
     setTutorId(id);
     updateProfile({ voiceStyle: t.voiceStyle as typeof profile.voiceStyle, voiceGender: t.voiceGender, preferredTutor: id });
-    // If live conversation is running, resume it with the new tutor's voice
-    // by having them introduce themselves, then hand back to the student.
+    // If live conversation is running, resume it with the new tutor's voice.
+    // Use a natural transition — not a scripted introduction — so the handoff
+    // feels like a real person stepping in mid-conversation.
     if (liveChatRef.current) {
       const shortName = t.name.replace(/\s+(Ma'am|Sir)$/i, "");
-      const greeting = `Hi! I'm ${shortName}. ${t.intro} Please go ahead!`;
+      const transitions = [
+        `I've got it from here! I'm ${shortName}. Please go ahead — I'm listening!`,
+        `Taking over now! ${shortName} here. Continue whenever you're ready.`,
+        `${shortName} stepping in! Right, so where were we? Go ahead!`,
+        `Here's ${shortName}! I'm all ears — carry on.`,
+      ];
+      const greeting = transitions[Math.floor(Math.random() * transitions.length)]!;
       setConvHistory(h => [...h, { role: "ai", text: greeting }]);
       setConvFlowState("ai-speaking");
       // Lock the busy flag AND kill the mic BEFORE speaking so the greeting
@@ -396,15 +438,15 @@ function EnglishGuruContent() {
   const displayed = isStreaming ? aiText : result;
   const teacherShort = tutor.name.replace(/\s+(Ma'am|Sir)$/i, "");
 
+  // Sentinel value for silence-probe turns (no visible user message added)
+  const SILENCE_MARKER = "__silence__";
+
   // Live chat phrase handler
   const handleConvPhrase = useCallback((phrase: string) => {
-    // In live chat mode, aiBusyRef.current alone gates re-entry (it stays true
-    // from phrase-accepted until TTS onEnd fires). Checking isStreaming here
-    // creates a stale-closure race: if the React render updating
-    // handleConvPhraseRef.current hasn't committed yet when the mic fires, the
-    // old closure (isStreaming=true) silently drops the next phrase.
-    // In typed mode isStreaming is the correct guard (there's no aiBusy cycle).
-    if (!phrase.trim() || (!liveChatRef.current && isStreaming) || aiBusyRef.current) return;
+    const isSilenceProbe = phrase === SILENCE_MARKER;
+    // Guard: normal phrases need content; silence probes just need the channel to be free.
+    if (!isSilenceProbe && (!phrase.trim() || (!liveChatRef.current && isStreaming) || aiBusyRef.current)) return;
+    if (isSilenceProbe && (aiBusyRef.current || !liveChatRef.current)) return;
     aiBusyRef.current = true;
     if (liveChatRef.current) {
       // Live voice mode: hard-stop the mic and block it for the whole
@@ -419,10 +461,19 @@ function EnglishGuruContent() {
     setConvFlowState("ai-thinking");
     void (async () => {
       try {
-        const userMsg = phrase.trim();
-        setConvHistory(h => [...h, { role: "user", text: userMsg }]);
-        const recentHistory = [...convHistoryRef.current.slice(-4), { role: "user" as const, text: userMsg }]
+        const userMsg = isSilenceProbe ? "" : phrase.trim();
+        // Only add normal phrases to visible conversation history
+        if (!isSilenceProbe) {
+          setConvHistory(h => [...h, { role: "user", text: userMsg }]);
+        }
+        // Build AI context: for silence probes, inject a re-engage instruction
+        const historySlice = [...convHistoryRef.current.slice(-4)];
+        if (!isSilenceProbe) historySlice.push({ role: "user" as const, text: userMsg });
+        const recentHistory = historySlice
           .map(m => `${m.role === "user" ? "Student" : teacherShort}: ${m.text}`).join("\n");
+        const silenceInstruction = isSilenceProbe
+          ? `\n[The student has been quiet for a moment. Gently re-engage — ask a warm natural follow-up question or check in based on the conversation so far. 1–2 sentences max.]\n`
+          : "";
         resetAI();
 
         // ── News / current-events enrichment ─────────────────────────────
@@ -433,7 +484,7 @@ function EnglishGuruContent() {
         // (e.g. "result" of a grammar exercise vs. "match result").
         const NEWS_RE = /\b(news|latest news|cricket (score|match|result|news)|ipl (score|match|result)|election (result|winner|news)|prime minister|petrol price|diesel price|gold price|dollar rate|stock market|sensex|nifty|box office|film release|weather forecast|covid|inflation rate|gdp|budget 2024|budget 2025)\b/i;
         let webContext = "";
-        if (NEWS_RE.test(userMsg)) {
+        if (!isSilenceProbe && NEWS_RE.test(userMsg)) {
           try {
             const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
             const ctxRes = await fetch(
@@ -457,18 +508,22 @@ function EnglishGuruContent() {
           : "";
 
         const response = await stream(
-          `${recentHistory}\n${teacherShort}:`,
-          `You are ${teacherShort}, a warm Indian English coach on a voice call with ${profile.name || "a student"} (${level} level). ${tutor.teachingStyle}. ${languageGuidance}
+          `${recentHistory}${silenceInstruction}\n${teacherShort}:`,
+          `You are ${teacherShort}, a warm, experienced Indian English coach on a live voice call with ${profile.name || "a student"} (${level} English level). ${tutor.teachingStyle}. ${languageGuidance}
+
+This is an ONGOING conversation. NEVER introduce yourself or say "Hello, I'm ${teacherShort}" — just continue naturally as a human teacher would mid-conversation.
 
 Rules for spoken replies:
-- Imagine you are speaking, not writing. Keep it to 2–3 short sentences max.
-- Use contractions: I'm, you're, that's, let's, it's.
-- Start with a natural reaction: "Oh nice!", "Hmm, right!", "Good point!", "Yes, exactly!" — whatever fits.
-- If they make a grammar mistake, quietly use the correct form in your own sentence without pointing it out.
-- Never use bullet points, numbered lists, dashes, or any formatting.
-- Never start your reply with your own name or a label like "Teacher:".
-- Always finish your thought completely — never cut off mid-sentence.
-- If asked about news, sports, films, prices, or current events: share what you know confidently using phrases like "from what I know" or "last I heard". Do NOT say you have no internet access or cannot search — just answer like a well-informed person would. Your knowledge goes up to early 2025; for very recent news, say "I may not have the very latest, but…" and share what you do know.${webContextNote}`,
+- Imagine you are SPEAKING, not writing. Keep it 2–3 short, punchy sentences max.
+- Use contractions always: I'm, you're, that's, let's, it's, can't, won't.
+- Vary your opening reactions — never use the same one twice: "Oh interesting!", "Hmm!", "Right, so...", "Actually...", "Oh nice!", "Ah I see!", "Yeah, and...", "Good point!", "That makes sense..."
+- Use natural fillers occasionally: "Hmm...", "You know...", "Actually...", "Let me think..."
+- Ask follow-up questions based on what they just said — never repeat a question already covered in this conversation.
+- If they make a grammar mistake, quietly use the correct form in YOUR next sentence — never point it out.
+- NEVER use bullet points, numbered lists, dashes, asterisks, or any formatting.
+- NEVER start your reply with your name or any label like "Teacher:".
+- Always finish your thought — never cut off mid-sentence.
+- If asked about news, sports, films, prices, or current events: answer confidently using "from what I know" or "last I heard". Do NOT say you have no internet. Your knowledge is up to early 2025; for very recent things, say "I may not have the very latest, but…".${webContextNote}`,
           undefined,
           { maxTokens: 300 }
         );
@@ -660,7 +715,7 @@ Rules for spoken replies:
             </div>
             {liveChat && (
               <div className="mt-2 flex items-center gap-1.5 text-xs text-green-600 font-semibold animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Live Chat ON
+                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Live ON
               </div>
             )}
           </div>
@@ -680,7 +735,7 @@ Rules for spoken replies:
               <p className="font-bold text-sm">{tutor.name}</p>
               <p className="text-xs text-muted-foreground">{tutor.role}</p>
               <Badge variant="secondary" className="text-xs mt-0.5">{level}</Badge>
-              {liveChat && <div className="text-xs text-green-600 font-semibold mt-0.5 animate-pulse">● Live Chat</div>}
+              {liveChat && <div className="text-xs text-green-600 font-semibold mt-0.5 animate-pulse">● Live</div>}
             </div>
             <Button variant="ghost" size="sm" className="text-xs shrink-0" onClick={() => setShowTutorPicker(true)}>
               <Users className="w-3.5 h-3.5" />
@@ -714,7 +769,7 @@ Rules for spoken replies:
                 <p className="text-xs text-muted-foreground italic leading-snug line-clamp-2 mt-0.5">"{tutor.intro}"</p>
                 {liveChat && (
                   <span className="flex items-center gap-1 text-xs text-green-600 font-semibold animate-pulse mt-1">
-                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Live Chat ON
+                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />Live ON
                   </span>
                 )}
               </div>
@@ -765,7 +820,7 @@ Rules for spoken replies:
             </Select>
             {liveChat && (
               <span className="ml-auto text-xs text-green-600 font-semibold animate-pulse flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />Live Chat
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />Live
               </span>
             )}
           </div>
@@ -794,7 +849,7 @@ Rules for spoken replies:
                   size="sm"
                   className={`font-bold shrink-0 w-full sm:w-auto ${liveChat ? "" : "bg-green-600 hover:bg-green-700"}`}
                   disabled={!speech.isSupported}>
-                  {liveChat ? <><StopCircle className="w-4 h-4 mr-1.5" />End Chat</> : <><Mic className="w-4 h-4 mr-1.5" />Start Live Chat</>}
+                  {liveChat ? <><StopCircle className="w-4 h-4 mr-1.5" />End</> : <><Mic className="w-4 h-4 mr-1.5" />Live</>}
                 </Button>
               </div>
               {!liveChat && (
