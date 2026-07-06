@@ -30,6 +30,7 @@
 - [Journey AI content endpoint](journey-ai-content.md) — GET /journey/lesson-content/:lessonId; in-memory cache capped at 200 entries (FIFO eviction); useEffect([expanded]) triggers fetch; static LESSON_CONTENT is immediate fallback.
 - [Sticky bars below nav](sticky-bars.md) — use sticky top-16 z-20 -mx-4 px-4 bg-white/95 backdrop-blur-sm border-b; works when page container has overflow-y-auto and is the scroll root.
 - [TTS global singleton](tts-global-singleton.md) — module-level _audio/_abort/_url + _stopListeners in use-edge-tts.ts; globalStop() always runs before speak(); relinquish ownerRef before calling globalStop() on unmount.
+- [TTS autoplay unlock](tts-autoplay-unlock.md) — two-layer unlock: AudioContext resume + pre-blessed HTMLAudioElement; reuse _audioCtx (don't recreate); blob.size < 512 guards against empty TTS pipe errors.
 - [Tailwind dynamic classes](tailwind-dynamic-classes.md) — never build class strings with template literals (e.g. opacity-${val}); Tailwind JIT won't detect them. Always use full class strings or ternary of two complete class strings.
 - [Credit-based access system](credit-system.md) — credits gate only live features (live 5/hr, interview 2–5); free 99 signup; idempotent grants via unique (type,reference); Stripe confirm-on-return; guarded init.
 - [Stripe integration gotchas](stripe-integration-gotchas.md) — Replit connector key is settings.secret (not secret_key); esbuild bundling silently breaks stripe-replit-sync migrations, so copy dist/migrations into the build.
