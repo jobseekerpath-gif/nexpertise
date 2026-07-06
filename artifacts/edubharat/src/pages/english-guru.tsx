@@ -199,6 +199,9 @@ function EnglishGuruContent() {
     const t = getTutorById(id);
     if (!t) return;
     synth.stop();
+    // Cancel any pending release/safety timer from an in-flight turn so it can't
+    // later fire and unblock the mic in the middle of the handoff greeting.
+    if (speakSafetyTimerRef.current) { clearTimeout(speakSafetyTimerRef.current); speakSafetyTimerRef.current = null; }
     // Unlock the busy flag — the previous AI reply may still be "speaking" as
     // far as the flag is concerned, which would silently block the next turn.
     aiBusyRef.current = false;
@@ -223,16 +226,22 @@ function EnglishGuruContent() {
       aiBusyRef.current = true;
       speechRef.current.pause();
       lastAiSpeechRef.current = greeting;
-      synth.speak(stripMarkdownForSpeech(greeting), uiLang, () => {
-        // Only unlock if the user hasn't already ended the live session
-        if (!liveChatRef.current) { aiBusyRef.current = false; return; }
+      // Release the mic when the greeting finishes. Guarded by a safety timer so
+      // that if TTS onEnd never fires (autoplay block, audio glitch, eviction)
+      // the mic and busy flag can't stay stuck — otherwise the conversation would
+      // freeze right after a teacher switch.
+      const releaseGreeting = () => {
+        if (speakSafetyTimerRef.current) { clearTimeout(speakSafetyTimerRef.current); speakSafetyTimerRef.current = null; }
         aiBusyRef.current = false;
+        if (!liveChatRef.current) return;
         setConvFlowState("user-speaking");
         // Echo-guard: 800 ms matches handleConvPhrase so teacher-switch greetings
         // never get self-captured by the mic on the next turn.
         lastAiSpeechEndRef.current = Date.now();
         speechRef.current.blockFor(800);
-      }, { voiceGender: t.voiceGender, voiceStyle: t.voiceStyle });
+      };
+      speakSafetyTimerRef.current = setTimeout(releaseGreeting, Math.max(greeting.length * 60 + 4000, 8000));
+      synth.speak(stripMarkdownForSpeech(greeting), uiLang, releaseGreeting, { voiceGender: t.voiceGender, voiceStyle: t.voiceStyle });
     }
   }, [synth, updateProfile, speech, uiLang]);
 
@@ -397,18 +406,17 @@ Rules for spoken replies:
   useEffect(() => { handleConvPhraseRef.current = handleConvPhrase; }, [handleConvPhrase]);
 
   // Continuity watchdog: browsers occasionally kill the SpeechRecognition loop
-  // (transient errors, tab backgrounding), which would make the teacher stop
-  // answering after a reply. While live chat is on and the AI isn't mid-turn,
-  // restart the loop if it has stopped. Only restarts when the loop is confirmed
-  // NOT running (isContinuous === false) so we never spawn a competing recognizer.
+  // (transient errors, tab backgrounding, OS mic hiccups), which would make the
+  // teacher stop answering after a reply. While live chat is on and the AI isn't
+  // mid-turn, re-kick the loop every few seconds. startContinuous() is now
+  // idempotent — if a recognizer is already spawning or listening it's a no-op
+  // (guarded by recognitionActiveRef); if the loop actually died, it respawns.
+  // This is what guarantees the conversation keeps going until the user ends it.
   useEffect(() => {
     if (!liveChat) return;
     const id = setInterval(() => {
-      const sp = speechRef.current;
       if (!liveChatRef.current || aiBusyRef.current) return;
-      if (!sp.isContinuous && sp.status !== "error") {
-        sp.startContinuous(p => handleConvPhraseRef.current?.(p));
-      }
+      speechRef.current.startContinuous(p => handleConvPhraseRef.current?.(p));
     }, 4000);
     return () => clearInterval(id);
   }, [liveChat]);

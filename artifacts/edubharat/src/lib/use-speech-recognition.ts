@@ -27,6 +27,14 @@ const LANG_MAP: Record<string, string> = {
   Punjabi: "pa-IN", Odia: "or-IN", Assamese: "as-IN", Urdu: "ur-IN", English: "en-IN",
 };
 
+/**
+ * If a recognizer has claimed the active slot but shown no lifecycle event
+ * (onstart/onresult) for this long, treat it as a zombie and force-respawn.
+ * Must comfortably exceed the browser's own silence auto-end (~5-8s with
+ * continuous=false) so a healthy but quiet recognizer is never killed early.
+ */
+const RECOGNITION_LEASE_MS = 15000;
+
 export function useSpeechRecognition(language = "English") {
   const [status, setStatus] = useState<SpeechRecognitionStatus>("idle");
   const [transcript, setTranscript] = useState("");
@@ -59,12 +67,38 @@ export function useSpeechRecognition(language = "English") {
   const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
-   * isSpawningRef — true from the moment spawnRecognition starts a new
-   * recognition instance until onstart (success) or onerror fires.
-   * Prevents the poll loop and a direct wakeup from both firing at nearly
-   * the same time and creating two overlapping recognition sessions.
+   * recognitionActiveRef — true from just before spawnRecognition calls
+   * .start() until that instance fully ends (onend) or errors. It stays true
+   * for the ENTIRE listening period, NOT just the brief start→onstart window.
+   * This single guard stops the two spawn triggers — the 250ms poll loop and
+   * blockFor()'s direct wakeup — from ever creating two overlapping recognizer
+   * instances (which abort each other and silently kill the mic after a turn
+   * or two). It also makes startContinuous() itself an idempotent no-op while a
+   * recognizer is live, so the continuity watchdog can re-kick it freely.
    */
-  const isSpawningRef = useRef(false);
+  const recognitionActiveRef = useRef(false);
+
+  /**
+   * recognitionGenRef — monotonically increasing token identifying the CURRENT
+   * recognizer instance. Each spawn increments it; every callback captures its
+   * own value and bails if it no longer matches. A non-matching callback is
+   * stale — it belongs to an instance we already stopped (e.g. a late onend
+   * from the recognizer pause() just stopped) and must NOT mutate shared state
+   * or schedule a respawn, or it would clobber the live instance and spawn a
+   * second overlapping one right after a pause()/blockFor() turn.
+   */
+  const recognitionGenRef = useRef(0);
+
+  /**
+   * recognitionActivityRef — epoch ms of the last sign of life from the active
+   * recognizer (spawn claim, onstart, or onresult). Used as a lease: if a
+   * recognizer holds the slot but shows no lifecycle event for longer than
+   * RECOGNITION_LEASE_MS, it is a zombie (onstart fired but onend/onerror never
+   * did — OS/tab suspension) and is force-recovered on the next spawn attempt.
+   * Without this, a zombie pins recognitionActiveRef true forever and the
+   * conversation goes silent with no way to self-heal.
+   */
+  const recognitionActivityRef = useRef(0);
 
   const langCode = LANG_MAP[language] ?? "en-IN";
   // Keep a ref so that spawnRecognition always reads the *current* language,
@@ -132,7 +166,7 @@ export function useSpeechRecognition(language = "English") {
       clearTimeout(wakeTimerRef.current);
       wakeTimerRef.current = null;
     }
-    isSpawningRef.current = false;
+    recognitionActiveRef.current = false;
     blockedUntilRef.current = Date.now() + 10 * 60 * 1000; // effectively "until resumed"
     try { recognitionRef.current?.stop(); } catch { /* ignore */ }
     setStatus("idle");
@@ -201,10 +235,25 @@ export function useSpeechRecognition(language = "English") {
 
         if (!shouldContinueRef.current) return;
 
-        // Single-flight guard: if we're already starting a recognition session
-        // (between .start() and onstart/onerror), skip — the in-flight instance
-        // will fire its callbacks and restart the loop itself.
-        if (isSpawningRef.current) return;
+        // Single-flight guard: if a recognition instance is already spawning OR
+        // actively listening, skip — that instance's own onend continues the
+        // loop. This is what lets the poll loop and blockFor()'s direct wakeup
+        // fire together safely, and makes startContinuous() idempotent so the
+        // continuity watchdog can re-kick it without spawning a competitor.
+        if (recognitionActiveRef.current) {
+          // Stale-active (zombie) breaker: the slot is claimed but the recognizer
+          // has shown no lifecycle event for the whole lease window — onstart
+          // fired yet onend/onerror never did (OS/tab suspension). Left alone it
+          // pins the slot forever and silences the chat. Invalidate its callbacks
+          // (bump the generation so its late events are ignored), stop the zombie,
+          // release the slot, and fall through to spawn a fresh instance. The
+          // continuity watchdog's periodic startContinuous() is what drives us
+          // back here to perform this recovery.
+          if (Date.now() - recognitionActivityRef.current < RECOGNITION_LEASE_MS) return;
+          recognitionGenRef.current++;
+          try { recognitionRef.current?.stop(); } catch { /* ignore */ }
+          recognitionActiveRef.current = false;
+        }
 
         // Honour the post-speech block window.
         // Poll at most every 250ms so a later SHORT blockFor() can release a
@@ -218,7 +267,15 @@ export function useSpeechRecognition(language = "English") {
         const recognition = createRecognitionInstance();
         if (!recognition) return;
 
-        isSpawningRef.current = true; // Claim the in-flight slot
+        // Claim the slot for the whole spawn+listen lifetime and stamp this
+        // instance with its own generation token. Every callback below checks
+        // isCurrent() and bails if the token no longer matches — meaning the
+        // instance was superseded (e.g. a late onend from a recognizer we
+        // stopped in pause()), so it must not mutate shared state or respawn.
+        const myGen = ++recognitionGenRef.current;
+        const isCurrent = () => myGen === recognitionGenRef.current;
+        recognitionActiveRef.current = true;
+        recognitionActivityRef.current = Date.now(); // lease heartbeat
 
         recognition.continuous = false;
         recognition.interimResults = true;
@@ -226,13 +283,21 @@ export function useSpeechRecognition(language = "English") {
         recognition.lang = langCodeRef.current;
 
         recognition.onstart = () => {
-          isSpawningRef.current = false; // Instance is live — release the slot
+          if (!isCurrent()) return;
+          recognitionActivityRef.current = Date.now(); // lease heartbeat
+          // Do NOT clear recognitionActiveRef here — the instance is now LIVE and
+          // must keep the slot claimed until onend/onerror, or a poll tick or a
+          // blockFor() direct wakeup would spawn a SECOND overlapping recognizer.
+          // Two recognizers abort each other and silently kill the mic after a
+          // turn or two (the "AI stops responding after 2 questions" bug).
           setStatus("listening");
           setInterimTranscript("");
           setError(null);
         };
 
         recognition.onresult = (event: { resultIndex: number; results: { isFinal: boolean; 0: { transcript: string } }[] }) => {
+          if (!isCurrent()) return;
+          recognitionActivityRef.current = Date.now(); // lease heartbeat
           let interim = "", final = "";
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const r = event.results[i]!;
@@ -247,7 +312,10 @@ export function useSpeechRecognition(language = "English") {
         };
 
         recognition.onerror = (event: { error: string }) => {
-          isSpawningRef.current = false; // Release slot on error too
+          // A stale instance's error belongs to a recognizer we already replaced;
+          // ignore it so it can't release the live instance's slot.
+          if (!isCurrent()) return;
+          recognitionActiveRef.current = false; // Release slot on error too
           if (event.error === "not-allowed") {
             shouldContinueRef.current = false;
             setError("Microphone permission denied.");
@@ -256,7 +324,11 @@ export function useSpeechRecognition(language = "English") {
         };
 
         recognition.onend = () => {
-          isSpawningRef.current = false; // Always release on end
+          // Ignore a late onend from a superseded instance — releasing the slot or
+          // rescheduling here would clobber the current recognizer and could spawn
+          // a second overlapping one (the post-turn double-spawn vector).
+          if (!isCurrent()) return;
+          recognitionActiveRef.current = false; // Always release on end
           setInterimTranscript("");
           if (shouldContinueRef.current) {
             setTimeout(spawnRecognition, 120);
@@ -269,7 +341,10 @@ export function useSpeechRecognition(language = "English") {
         try {
           recognition.start();
         } catch {
-          isSpawningRef.current = false; // Release if start() throws
+          recognitionActiveRef.current = false; // Release if start() throws
+          // start() threw before any event fired, so onend won't run to continue
+          // the loop — reschedule here so a transient failure can't kill it.
+          if (shouldContinueRef.current) setTimeout(spawnRecognition, 250);
         }
       };
 
@@ -285,7 +360,7 @@ export function useSpeechRecognition(language = "English") {
       clearTimeout(wakeTimerRef.current);
       wakeTimerRef.current = null;
     }
-    isSpawningRef.current = false;
+    recognitionActiveRef.current = false;
     try { recognitionRef.current?.stop(); } catch { /* ignore */ }
     recognitionRef.current = null;
     setStatus("idle");
