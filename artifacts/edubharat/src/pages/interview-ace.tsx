@@ -16,6 +16,7 @@ import { useCredits, chargeInterview, interviewCreditCost } from "@/lib/use-cred
 import { useGuestTrial, guestInterviewsLeft, consumeGuestInterview } from "@/lib/guest-trial";
 import { AnimatedAvatar } from "@/components/avatar";
 import { INTERVIEW_COACHES } from "@/lib/tutors";
+import { INTERVIEW_STAGES, stageIndexForProgress, functionalKnowledgeFor } from "@/lib/interview-format";
 import { useToast } from "@/hooks/use-toast";
 import { PageMeta } from "@/components/page-meta";
 import {
@@ -368,6 +369,9 @@ function InterviewAceContent() {
   const [saved, setSaved] = useState(false);
   const autoSubmitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const endingRef = useRef(false);
+  // Tracks the current structured-interview stage index so the agenda advances in
+  // order and never skips a stage, even if long answers make the clock jump ahead.
+  const stageIdxRef = useRef(0);
   const answerRef = useRef("");
   // Webcam for video call mode
   const webcamRef = useRef<HTMLVideoElement>(null);
@@ -410,7 +414,7 @@ function InterviewAceContent() {
       setQuestions(prev => prev.map((q, i) => i === currentIdx && !q.answer ? { ...q, answer: pending } : q));
     }
     const firstName = (profile.name || "there").split(" ")[0];
-    speakCoach(`That's all the time we have, ${firstName}. Thank you so much — you did really well today. Let me pull together your feedback now.`, { voiceGender: coach.gender });
+    speakCoach(`That is all the time we have, ${firstName}. Thank you for your time today. I will now prepare your feedback report.`, { voiceGender: coach.gender });
     setTimeout(() => setPhase("report"), 2600);
   }, [elapsedSeconds, duration, phase, currentIdx, profile.name, coach.gender, speakCoach, speech, resetStream]);
 
@@ -493,19 +497,19 @@ function InterviewAceContent() {
     const candidateName = profile.name || "there";
     const firstName = candidateName.split(" ")[0];
     const full = await stream(
-      `You are ${coach.name}, opening a ${typeMeta.label} interview with ${firstName} (${experience} level).
+      `You are ${coach.name}, a professional interviewer conducting a formal ${typeMeta.label} interview with ${firstName} (${experience} level).
 
-Give a warm, natural 2-sentence greeting — sound like a real human interviewer, not a script — then ask ONE natural opening question suited for this ${typeMeta.label}.
+This is a STRUCTURED interview that moves through a fixed sequence of assessment areas. You are at the FIRST stage: ${INTERVIEW_STAGES[0]!.label}.
 
-The opening question should feel fresh and specific to ${typeMeta.label}: ${typeMeta.value === "technical" ? "could be about their background, a project they're proud of, or a specific tech skill" : typeMeta.value === "hr" ? "about their background, their career journey, or what brought them here today" : "about their background and experience in this domain"}.
+Give a brief, professional introduction in 1-2 sentences — state your name and that you will be taking their interview today — then ask ONE clear opening question about ${INTERVIEW_STAGES[0]!.focus}.
 
 STRICT rules:
-- Maximum 3 sentences total. No long speeches.
+- Maximum 3 sentences total. Professional and businesslike.
+- Do NOT use casual or chatty language: no "Hey", no "good to see you", no "chatting", no "let's dive in", no "so tell me", no "excited to", no small talk.
 - Plain spoken words ONLY. No asterisks, no *actions*, no markdown, no quotes around your reply.
-- Do NOT list rules, do NOT explain the interview process, do NOT say "there are no trick questions".
-- Never start with "Hello" or "Hi" as a standalone word — weave it naturally into your opening.
-- Sound like a real human on a video call, warm and genuine.`,
-      `You are ${coach.name}, ${coach.role}. ${coach.style} Speak naturally and briefly. Never use markdown or action words. You have a distinct personality — warm but professional, genuinely curious about the candidate.`,
+- Do NOT list rules, do NOT explain the interview process.
+- Ask exactly ONE question.`,
+      `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct formal, structured interviews and assess candidates seriously. Speak in clear, professional, businesslike English. Never use markdown, action words, casual greetings, or small talk.`,
       undefined,
       { maxTokens: 120 }
     );
@@ -541,6 +545,7 @@ STRICT rules:
     setReport(null);
     setSaved(false);
     endingRef.current = false;
+    stageIdxRef.current = 0;
     setPhase("interview");
     // Camera does NOT start automatically — user must enable it via the button.
     // Set coachSpeaking BEFORE the delay so the auto-listen effect cannot fire
@@ -591,7 +596,7 @@ STRICT rules:
     const firstName = (profile.name || "there").split(" ")[0];
 
     if (isFinalQuestion) {
-      speakCoach(`Thank you, ${firstName}. It's been great speaking with you — that's all from my side. I'll put together your feedback report now.`, { voiceGender: coach.gender });
+      speakCoach(`Thank you, ${firstName}. That concludes our interview. I will now prepare your feedback report.`, { voiceGender: coach.gender });
       setTimeout(() => setPhase("report"), 1500);
       return;
     }
@@ -607,14 +612,22 @@ STRICT rules:
     const wordCount = recordedAnswer.split(/\s+/).filter(Boolean).length;
     const isShortAnswer = wordCount < 20;
 
-    // Get a natural acknowledgment + next question — no scores, no analysis
-    // Vary the acknowledgment style randomly to avoid sounding scripted
-    const ackStyles = ["brief empathy", "curious follow-on", "impressed observation", "relatable remark"];
-    const ackStyle = ackStyles[answeredCount % ackStyles.length];
+    // Move through the fixed assessment agenda IN ORDER. Progress is scaled
+    // against the questioning window (questions stop ~2 min before the clock runs
+    // out) so the closing stage is always reachable. We advance by at most one
+    // stage per question and never move backward — so no stage is ever skipped,
+    // even when long answers make the clock jump ahead several stages.
+    const progress = Math.min(1, elapsedSeconds / Math.max(60, (duration - 2) * 60));
+    const timeStageIdx = stageIndexForProgress(progress);
+    const stageIdx = timeStageIdx > stageIdxRef.current ? stageIdxRef.current + 1 : stageIdxRef.current;
+    const stage = INTERVIEW_STAGES[stageIdx]!;
+    const stageFocus = stage.key === "functional"
+      ? `${stage.focus} — ${functionalKnowledgeFor(typeMeta.value, typeMeta.label)}`
+      : stage.focus;
     let response = "";
     try {
     response = await stream(
-      `You are ${coach.name} on a live ${typeMeta.label} interview call. ${remainingMin} minutes left.
+      `You are ${coach.name} conducting a formal, STRUCTURED ${typeMeta.label} interview. ${remainingMin} minutes left.
 
 Candidate: ${firstName} | ${buildProfileSummary()}
 
@@ -622,35 +635,27 @@ Recent exchanges:
 ${recentAnswered || "(This is the first response)"}
 
 Your last question: "${currentQ.question}"
-${firstName} said: "${recordedAnswer}"
+${firstName} answered: "${recordedAnswer}"
+
+This interview follows a FIXED sequence of assessment stages and you must stay on track. You are CURRENTLY in the "${stage.label}" stage. Do NOT jump ahead to other stages or drift to unrelated topics.
 
 ${isShortAnswer
-  ? `Their answer was brief (${wordCount} words) — they may be nervous. Acknowledge warmly and invite elaboration.`
-  : ""}
-
-Your task — two parts:
-1. ACKNOWLEDGE: ONE short, natural reaction to something SPECIFIC they said — maximum 5 words, like "Right, I see" or "Interesting project" or "That makes sense". Do NOT summarize their whole answer. Do NOT repeat the question you just asked.
-2. NEXT QUESTION: ${isShortAnswer
-  ? `Ask them to elaborate naturally: "Tell me more about that..." or "Give me a specific example..." or similar.`
-  : remainingMin <= 3
-    ? `Ask one warm closing question: about their goals, what excites them about this field, or if they have any questions for you.`
-    : `Either probe deeper into what they said OR pivot naturally to a new angle of ${typeMeta.label} — vary your approach, don't follow a predictable pattern.`}
+  ? `Their answer was brief (${wordCount} words). Politely ask them to elaborate or give a specific example — remain within the "${stage.label}" stage.`
+  : `Ask the NEXT question for the "${stage.label}" stage. Focus on: ${stageFocus}. You may probe a little deeper on their last answer or move to the next point, but stay WITHIN this stage.`}
 
 RULES — non-negotiable:
-- Use ${firstName}'s name at most once per 3 exchanges — not every time
-- React to THEIR exact words — mention a specific project, skill, company, or phrase they used
-- Acknowledgment is a brief verbal nod, not a speech. Max 5 words.
-- NEVER repeat the question you just asked. NEVER repeat any question from the conversation history.
-- Natural Indian professional speech rhythm: "I see.", "Right, okay.", "Interesting.", "That makes sense.", "Ah, good point."
-- NEVER use filler like "That's great!" or "Wonderful!" or "Like, if you had to..."
-- NEVER start Next with any greeting — start directly with the question
-- The Next line must be the question ONLY — no name, no preamble
-- Ask exactly ONE question
+- Professional, businesslike tone. NO casual language, NO "chatting", NO small talk, NO praise like "that's great/wonderful/awesome", NO filler like "like" or "you know".
+- ACKNOWLEDGE with ONE short, neutral, professional phrase only — maximum 4 words (e.g. "Understood.", "Thank you.", "Noted.", "That is clear."). Do NOT summarise their answer.
+- Use ${firstName}'s name sparingly — at most once every few questions.
+- NEVER repeat any question already asked in this interview.
+- NEVER start the Next line with a greeting — start directly with the question.
+- The Next line must be the question ONLY — no name, no preamble.
+- Ask exactly ONE question.
 
 Output format — exactly two lines, nothing else:
-Ack: <brief specific reaction — max 5 words>
-Next: <your question — start with the question itself, no greeting>`,
-      `You are ${coach.name}, ${coach.role}. ${coach.style} You are on a live voice interview with ${firstName}. You have a genuine, distinct personality — warm but focused, perceptive, and adaptable. You vary your acknowledgment style and question types naturally to keep the conversation dynamic, never formulaic.`,
+Ack: <max 4 words, professional>
+Next: <the interview question only>`,
+      `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct a formal, structured interview and stay strictly on the current assessment stage, moving through the agenda in order. Speak in clear, professional English. Never use markdown, action words, casual greetings, or small talk.`,
       undefined,
       { maxTokens: 220 }
     );
@@ -679,7 +684,7 @@ Next: <your question — start with the question itself, no greeting>`,
     // missing labels. Prevents premature session-end if the model skips "Next:".
     const ackMatch = response.match(/^Ack:\s*([\s\S]+?)(?=\nNext:|\n\nNext:|$)/im);
     const nextMatch = response.match(/^Next:\s*([\s\S]+?)$/im);
-    let acknowledgment = ackMatch?.[1]?.trim().replace(/\n+/g, " ") ?? "That's helpful, thank you.";
+    let acknowledgment = ackMatch?.[1]?.trim().replace(/\n+/g, " ") ?? "Thank you.";
     let nextQuestion = nextMatch?.[1]?.trim().replace(/\n+/g, " ");
 
     // Fallback: if structured parsing failed, split by paragraphs/lines so the
@@ -691,7 +696,7 @@ Next: <your question — start with the question itself, no greeting>`,
         nextQuestion = lines[lines.length - 1];
       } else if (lines.length === 1 && lines[0]!.includes("?")) {
         nextQuestion = lines[0];
-        acknowledgment = "Right, okay.";
+        acknowledgment = "Understood.";
       }
     }
 
@@ -716,16 +721,18 @@ Next: <your question — start with the question itself, no greeting>`,
     // Safety: never let a parsing failure silently end the interview.
     // If the AI didn't return a parseable question, use a neutral probe.
     const FALLBACK_QUESTIONS = [
-      "Could you tell me a bit more about that?",
-      "Interesting — can you give me a specific example?",
-      "Walk me through that in a bit more detail.",
-      "What would you say was the biggest challenge there?",
+      "Could you elaborate on that a little more?",
+      "Can you give me a specific example?",
+      "Please walk me through that in more detail.",
+      "What was the biggest challenge you faced there?",
     ];
     if (!nextQuestion) {
       nextQuestion = FALLBACK_QUESTIONS[Math.floor(Math.random() * FALLBACK_QUESTIONS.length)];
-      acknowledgment = "Right, okay.";
+      acknowledgment = "Understood.";
     }
 
+    // Commit the stage advance now that we have a valid question to ask.
+    stageIdxRef.current = stageIdx;
     setQuestions(prev => [...prev, { question: nextQuestion! }]);
     setCurrentIdx(prev => prev + 1);
     setAnswer("");
