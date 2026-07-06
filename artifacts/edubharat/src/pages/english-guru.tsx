@@ -11,7 +11,6 @@ import { useAuth } from "@/lib/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits, startLiveBlock, tickLiveBlock, LIVE_BLOCK_SECONDS } from "@/lib/use-credits";
 import { useGuestTrial, guestLiveSecondsLeft, addGuestLiveSeconds } from "@/lib/guest-trial";
-import { useHistory } from "@/lib/use-history";
 import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
@@ -22,205 +21,11 @@ import { TUTORS, getTutorById } from "@/lib/tutors";
 import { PageMeta } from "@/components/page-meta";
 import { exportConversationPdf, exportConversationWord } from "@/lib/export-conversation";
 import {
-  Mic, MicOff, Volume2, VolumeX, BookOpen, PenLine, Languages,
-  SpellCheck, MessageCircle, Bookmark, BookmarkCheck, GraduationCap,
-  Briefcase, Loader2, StopCircle, ChevronRight,
+  Mic, MessageCircle, Loader2, StopCircle, ChevronRight,
   Users, FileText, FileDown,
 } from "lucide-react";
-
-const MODES = [
-  { value: "grammar", label: "Grammar Fix", icon: SpellCheck, desc: "Correct grammar with clear explanations" },
-  { value: "write", label: "Write Better", icon: PenLine, desc: "Polish your writing to sound professional" },
-  { value: "vocab", label: "Vocabulary", icon: BookOpen, desc: "Learn new words in your language" },
-  { value: "pronounce", label: "Pronunciation", icon: Volume2, desc: "Practice English pronunciation" },
-  { value: "lesson", label: "Daily Lesson", icon: GraduationCap, desc: "Structured lesson for your level" },
-  { value: "interview_english", label: "Interview English", icon: Briefcase, desc: "Professional phrases for interviews" },
-] as const;
-type Mode = typeof MODES[number]["value"];
-
-
-function MicButton({ isListening, isSupported, onStart, onStop, disabled }: {
-  isListening: boolean; isSupported: boolean; onStart: () => void; onStop: () => void; disabled?: boolean;
-}) {
-  return (
-    <Button type="button" variant={isListening ? "destructive" : "outline"} size="icon"
-      onClick={isListening ? onStop : onStart} disabled={!isSupported || disabled}
-      title={!isSupported ? "Voice not supported in this browser" : disabled ? "Mic unavailable during live chat" : isListening ? "Stop" : "Speak"} className="shrink-0 min-h-11 min-w-11">
-      {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-    </Button>
-  );
-}
-
-function ResultPanel({ title, content, isSpeaking, onSpeak, onStop, onSave, saved }: {
-  title: string; content: string; isSpeaking: boolean;
-  onSpeak: () => void; onStop: () => void; onSave: () => void; saved: boolean;
-}) {
-  return (
-    <div className="mt-3 p-3 bg-primary/5 rounded-xl border border-primary/20 animate-in fade-in slide-in-from-bottom-2">
-      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-        <h3 className="font-bold text-primary text-sm">{title}</h3>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={isSpeaking ? onStop : onSpeak} className="text-xs font-semibold h-8">
-            {isSpeaking ? <><VolumeX className="w-3.5 h-3.5 mr-1" />Stop</> : <><Volume2 className="w-3.5 h-3.5 mr-1" />Speak</>}
-          </Button>
-          <Button variant="outline" size="sm" onClick={onSave} disabled={saved} className="text-xs font-semibold h-8">
-            {saved ? <><BookmarkCheck className="w-3.5 h-3.5 mr-1 text-primary" />Saved</> : <><Bookmark className="w-3.5 h-3.5 mr-1" />Save</>}
-          </Button>
-        </div>
-      </div>
-      <div className="text-sm text-secondary whitespace-pre-wrap leading-relaxed">{content}</div>
-    </div>
-  );
-}
-
-function stripMarkdownForSpeech(text: string) {
-  return text
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/_{1,2}([^_]+)_{1,2}/g, "$1")
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/^\s*[-*+]\s+/gm, "")
-    .replace(/^\s*\d+[.)]\s+/gm, "")
-    .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
-function detectSpokenLanguage(text: string, fallback: string) {
-  if (/[\u0900-\u097F]/.test(text)) return "Hindi";
-  if (/[\u0980-\u09FF]/.test(text)) return "Bengali";
-  if (/[\u0B80-\u0BFF]/.test(text)) return "Tamil";
-  if (/[\u0C00-\u0C7F]/.test(text)) return "Telugu";
-  if (/[\u0A00-\u0A7F]/.test(text)) return "Punjabi";
-  if (/[\u0D00-\u0D7F]/.test(text)) return "Malayalam";
-  if (/[\u0C80-\u0CFF]/.test(text)) return "Kannada";
-  if (/[\u0A80-\u0AFF]/.test(text)) return "Gujarati";
-  if (/[\u0600-\u06FF]/.test(text)) return "Urdu";
-  return fallback;
-}
-
-/** Tutor selector — accessible modal dialog for choosing a teacher */
-function TutorSelector({
-  currentId,
-  onSelect,
-  onClose,
-}: {
-  currentId: string;
-  onSelect: (id: string) => void;
-  onClose: () => void;
-}) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const closeBtnRef = useRef<HTMLButtonElement>(null);
-
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  // Capture opener and restore focus on close
-  useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    return () => opener?.focus();
-  }, []);
-
-  // Initial focus — move to close button when dialog opens
-  useEffect(() => { closeBtnRef.current?.focus(); }, []);
-
-  // Focus trap inside the panel
-  useEffect(() => {
-    const panel = panelRef.current;
-    if (!panel) return;
-    const focusable = panel.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    if (!focusable.length) return;
-    const first = focusable[0]!;
-    const last = focusable[focusable.length - 1]!;
-    const trapFocus = (e: KeyboardEvent) => {
-      if (e.key !== "Tab") return;
-      if (e.shiftKey) {
-        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
-      } else {
-        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
-      }
-    };
-    panel.addEventListener("keydown", trapFocus);
-    return () => panel.removeEventListener("keydown", trapFocus);
-  }, []);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        className="absolute inset-0 bg-black/50"
-        role="presentation"
-        aria-hidden="true"
-        tabIndex={-1}
-        onClick={onClose}
-      />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="tutor-dialog-title"
-        className="relative bg-card rounded-2xl border shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5"
-      >
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h2 id="tutor-dialog-title" className="text-xl font-display font-bold text-secondary">Choose Your AI Guru</h2>
-            <p className="text-sm text-muted-foreground">Each teacher has a unique specialization and style</p>
-          </div>
-          <Button ref={closeBtnRef} variant="ghost" size="sm" onClick={onClose} aria-label="Close">✕</Button>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          {TUTORS.map(tutor => {
-            const isActive = tutor.id === currentId;
-            return (
-              <button
-                key={tutor.id}
-                onClick={() => { onSelect(tutor.id); onClose(); }}
-                aria-pressed={isActive}
-                className={`flex items-start gap-4 p-4 rounded-xl border-2 text-left transition-all hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${
-                  isActive
-                    ? "border-primary bg-primary/5 shadow-sm"
-                    : "border-border hover:border-primary/40 bg-muted/20 hover:bg-muted/40"
-                }`}
-              >
-                <img
-                  src={tutor.imageSrc}
-                  alt=""
-                  aria-hidden="true"
-                  width={64}
-                  height={64}
-                  className="w-16 h-16 rounded-full object-cover object-top border-2 shrink-0"
-                  style={{ borderColor: isActive ? tutor.accentColor : "#e2e8f0" }}
-                  loading="lazy"
-                  decoding="async"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-bold text-secondary text-sm">{tutor.name}</p>
-                    {isActive && <Badge className="text-[10px] h-4 px-1.5">Active</Badge>}
-                  </div>
-                  <p className="text-xs font-medium text-primary mt-0.5">{tutor.role}</p>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{tutor.specialization}</p>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {tutor.languages.slice(0, 2).map(l => (
-                      <span key={l} className="text-[10px] rounded-full border bg-background px-2 py-0.5">{l}</span>
-                    ))}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
+import { stripMarkdownForSpeech, mapEnglishLevel } from "@/lib/english-tools";
+import { MicButton, TutorSelector } from "@/components/english/shared-ui";
 
 export default function EnglishGuru() {
   return (
@@ -239,26 +44,12 @@ function EnglishGuruContent() {
   const { toast } = useToast();
   const { balance } = useCredits();
   const { liveSecondsLeft: guestLiveLeft } = useGuestTrial();
-  const { save } = useHistory();
   const { track } = useProgress();
   const { text: aiText, isStreaming, error: aiError, stream, reset: resetAI } = useGeminiStream();
   const synth = useEdgeTTS();
   const { profile, updateProfile } = useStudentProfile();
 
-  const [mode, setMode] = useState<Mode>(() => {
-    if (typeof window === "undefined") return "grammar";
-    const requested = new URLSearchParams(window.location.search).get("mode");
-    return (MODES.some(m => m.value === requested) ? requested : "grammar") as Mode;
-  });
   const [uiLang, setUiLang] = useState(profile.preferredLanguage);
-
-  // Map extended englishLevel field ("Beginner (A1)" etc) to UI level
-  const mapEnglishLevel = (raw: string): string => {
-    const l = raw.toLowerCase();
-    if (l.startsWith("adv") || l.includes("c1") || l.includes("c2")) return "Advanced";
-    if (l.startsWith("int") || l.startsWith("upp") || l.includes("b1") || l.includes("b2")) return "Intermediate";
-    return "Beginner";
-  };
 
   const [level, setLevel] = useState(() => mapEnglishLevel(profile.englishLevel));
   const [tutorId, setTutorId] = useState(() => {
@@ -272,10 +63,6 @@ function EnglishGuruContent() {
 
   const tutor = getTutorById(tutorId) ?? TUTORS[0]!;
 
-  const [grammarInput, setGrammarInput] = useState("");
-  const [writeInput, setWriteInput] = useState("");
-  const [vocabTopic, setVocabTopic] = useState("");
-  const [pronounceWord, setPronounceWord] = useState("");
   const [convHistory, setConvHistory] = useState<{ role: "user" | "ai"; text: string }[]>([]);
   const [convInput, setConvInput] = useState("");
   const [liveChat, setLiveChat] = useState(false);
@@ -283,8 +70,6 @@ function EnglishGuruContent() {
   const convInputRef = useRef<HTMLTextAreaElement>(null);
   const convScrollRef = useRef<HTMLDivElement>(null);
 
-  const [result, setResult] = useState("");
-  const [savedMap, setSavedMap] = useState<Record<string, boolean>>({});
   const speech = useSpeechRecognition(uiLang);
   /**
    * speechRef — always-current speech handle so handleConvPhrase doesn't need
@@ -451,27 +236,6 @@ function EnglishGuruContent() {
     }
   }, [synth, updateProfile, speech, uiLang]);
 
-  const handleStream = useCallback(async (prompt: string, system: string, saveTitle: string) => {
-    resetAI();
-    setResult("");
-    synth.stop();
-    const full = await stream(prompt, system);
-    setResult(full);
-    if (full) {
-      track("English Guru", saveTitle);
-    }
-    // NOTE: tool results are NOT auto-spoken. Each result panel has its own
-    // "listen" button; auto-speaking here made the tutor talk out loud even
-    // when the user never started a live conversation.
-    return full;
-  }, [stream, resetAI, synth, track]);
-
-  const saveResult = useCallback((key: string, title: string, content: string) => {
-    save({ tool: "English Guru", title, content });
-    setSavedMap(m => ({ ...m, [key]: true }));
-  }, [save]);
-
-  const displayed = isStreaming ? aiText : result;
   const teacherShort = tutor.name.replace(/\s+(Ma'am|Sir)$/i, "");
 
   // Sentinel value for silence-probe turns (no visible user message added)
@@ -903,8 +667,8 @@ Rules for spoken replies:
           </div>
 
           {/* ── LIVE CONVERSATION — top section with its own heading ── */}
-          <section className={`flex flex-col min-h-0 ${liveChat ? "flex-1" : "lg:flex-none"}`}>
-            <Card className={`flex flex-col overflow-hidden border-2 transition-all flex-1 min-h-0 max-h-[calc(100dvh-6rem)] ${liveChat ? "lg:max-h-none" : "lg:max-h-[56vh]"} ${liveChat ? "border-green-400 bg-green-50/30" : "border-green-200/70 bg-green-50/10"}`}>
+          <section className="flex flex-col min-h-0 flex-1">
+            <Card className={`flex flex-col overflow-hidden border-2 transition-all flex-1 min-h-0 max-h-[calc(100dvh-6rem)] lg:max-h-none ${liveChat ? "border-green-400 bg-green-50/30" : "border-green-200/70 bg-green-50/10"}`}>
             <CardContent className="pt-3 pb-3 space-y-2 flex min-h-0 flex-1 flex-col">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
@@ -1024,215 +788,6 @@ Rules for spoken replies:
           </Card>
           </section>
 
-          {/* ── MODE SELECTOR STRIP — hidden during live chat so the conversation fills the screen ── */}
-          <div className={`flex items-center gap-2 flex-wrap shrink-0 mt-3 mb-2 sticky bottom-0 z-10 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2 bg-background/95 backdrop-blur-sm border-t lg:static lg:bg-transparent lg:backdrop-filter-none lg:border-0 lg:mx-0 lg:px-0 lg:py-0 ${liveChat ? "hidden" : ""}`}>
-            {MODES.map(m => {
-              const MIcon = m.icon;
-              const active = mode === m.value;
-              return (
-                <button
-                  key={m.value}
-                  onClick={() => { setMode(m.value as Mode); setResult(""); resetAI(); setLiveChat(false); speech.stop(); setConvFlowState("idle"); }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all
-                    ${active
-                      ? "bg-orange-500 text-white border-orange-500 shadow-sm"
-                      : "bg-white text-muted-foreground border-border hover:border-orange-300 hover:text-orange-600"
-                    }`}
-                >
-                  <MIcon className="w-3 h-3 shrink-0" />
-                  {m.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* ── PRACTICE TOOLS — hidden during live chat ── */}
-          <div className={`shrink-0 ${liveChat ? "hidden" : ""}`}>
-          {/* ── GRAMMAR FIX ── */}
-          {mode === "grammar" && (
-            <Card>
-              <CardContent className="pt-3 space-y-2">
-                <Textarea placeholder="Type or speak your text..." className="min-h-[80px] text-sm"
-                  value={grammarInput} onChange={e => setGrammarInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && grammarInput.trim() && !isStreaming) { e.preventDefault(); handleStream(`Fix grammar: "${grammarInput}". List each correction with brief ${uiLang} explanation.`, `Encouraging English teacher named ${teacherShort} for Indian ${level} learners. ${tutor.teachingStyle}.`, "Grammar Fix"); } }} />
-                <div className="flex items-center gap-2">
-                  <MicButton isListening={speech.isListening} isSupported={speech.isSupported}
-                    onStart={() => speech.start(t => setGrammarInput(p => p + t))} onStop={speech.stop} disabled={liveChat} />
-                  {speech.interimTranscript && <span className="text-xs text-muted-foreground italic flex-1 truncate">{speech.interimTranscript}</span>}
-                  <Button className="ml-auto font-bold" disabled={isStreaming || !grammarInput.trim()}
-                    onClick={() => handleStream(
-                      `Fix grammar: "${grammarInput}". List each correction with brief ${uiLang} explanation.`,
-                      `Encouraging English teacher named ${teacherShort} for Indian ${level} learners. ${tutor.teachingStyle}.`,
-                      "Grammar Fix"
-                    )}>
-                    {isStreaming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <SpellCheck className="w-4 h-4 mr-2" />}
-                    Fix Grammar
-                  </Button>
-                </div>
-                {aiError && <p className="text-sm text-destructive">{aiError}</p>}
-                {displayed && <ResultPanel title="Corrections:" content={displayed} isSpeaking={synth.isSpeaking}
-                  onSpeak={() => speak(displayed)} onStop={synth.stop}
-                  onSave={() => saveResult("grammar", `Grammar: "${grammarInput.slice(0, 50)}"`, displayed)} saved={!!savedMap["grammar"]} />}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ── WRITE BETTER ── */}
-          {mode === "write" && (
-            <Card>
-              <CardContent className="pt-3 space-y-2">
-                <Textarea placeholder="Type your draft..." className="min-h-[80px] text-sm"
-                  value={writeInput} onChange={e => setWriteInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && writeInput.trim() && !isStreaming) { e.preventDefault(); handleStream(`Improve this to sound professional: "${writeInput}". Show improved version + 3 key changes made.`, `Writing coach named ${teacherShort} for Indian ${level} English learners. ${tutor.teachingStyle}.`, "Write Better"); } }} />
-                <div className="flex items-center gap-2">
-                  <MicButton isListening={speech.isListening} isSupported={speech.isSupported}
-                    onStart={() => speech.start(t => setWriteInput(p => p + t))} onStop={speech.stop} disabled={liveChat} />
-                  <Button className="ml-auto font-bold" disabled={isStreaming || !writeInput.trim()}
-                    onClick={() => handleStream(
-                      `Improve this to sound professional: "${writeInput}". Show improved version + 3 key changes made.`,
-                      `Writing coach named ${teacherShort} for Indian ${level} English learners. ${tutor.teachingStyle}.`,
-                      "Write Better"
-                    )}>
-                    {isStreaming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenLine className="w-4 h-4 mr-2" />}
-                    Improve Writing
-                  </Button>
-                </div>
-                {displayed && <ResultPanel title="Improved Version:" content={displayed} isSpeaking={synth.isSpeaking}
-                  onSpeak={() => speak(displayed)} onStop={synth.stop}
-                  onSave={() => saveResult("write", `Write Better: "${writeInput.slice(0, 50)}"`, displayed)} saved={!!savedMap["write"]} />}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ── VOCABULARY ── */}
-          {mode === "vocab" && (
-            <Card>
-              <CardContent className="pt-3 space-y-2">
-                <Input placeholder="Topic (e.g. Job Interview, Office, Technology)" className="h-9 text-sm"
-                  value={vocabTopic} onChange={e => setVocabTopic(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && vocabTopic.trim() && !isStreaming) { handleStream(`8 English words for "${vocabTopic}" (${level} level). Format: word — ${uiLang} meaning — example sentence.`, `English teacher named ${teacherShort} for Indian job seekers. Practical, commonly-used vocabulary.`, `Vocabulary: ${vocabTopic}`); } }} />
-                <Button className="font-bold w-full" disabled={isStreaming || !vocabTopic.trim()}
-                  onClick={() => handleStream(
-                    `8 English words for "${vocabTopic}" (${level} level). Format: word — ${uiLang} meaning — example sentence.`,
-                    `English teacher named ${teacherShort} for Indian job seekers. Practical, commonly-used vocabulary.`,
-                    `Vocabulary: ${vocabTopic}`
-                  )}>
-                  {isStreaming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <BookOpen className="w-4 h-4 mr-2" />}
-                  Generate Vocabulary
-                </Button>
-                {displayed && <ResultPanel title={`Vocabulary (${uiLang} meanings):`} content={displayed} isSpeaking={synth.isSpeaking}
-                  onSpeak={() => speak(displayed)} onStop={synth.stop}
-                  onSave={() => saveResult("vocab", `Vocabulary: ${vocabTopic}`, displayed)} saved={!!savedMap["vocab"]} />}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ── PRONUNCIATION ── */}
-          {mode === "pronounce" && (
-            <Card>
-              <CardContent className="pt-3 space-y-2">
-                <p className="text-xs text-muted-foreground">AI says the word — you repeat and practise.</p>
-                <div className="flex gap-2">
-                  <Input placeholder="English word or phrase to practise"
-                    value={pronounceWord} onChange={e => setPronounceWord(e.target.value)} className="h-9 flex-1 text-sm"
-                    onKeyDown={e => { if (e.key === "Enter" && pronounceWord.trim() && !isStreaming) { handleStream(`Pronunciation guide for "${pronounceWord}": phonetic spelling, syllable breakdown, ${uiLang} guide, common Indian mistakes, 3 example sentences.`, `Pronunciation coach named ${teacherShort} for Indian ${level} learners. Simple phonetics.`, `Pronunciation: ${pronounceWord}`); } }} />
-                  <Button variant="outline" size="icon" className="h-11 w-11 shrink-0"
-                    onClick={() => speak(pronounceWord, "English")} disabled={!pronounceWord.trim() || synth.isSpeaking}>
-                    <Volume2 className="w-4 h-4" />
-                  </Button>
-                </div>
-                <Button className="font-bold w-full" disabled={isStreaming || !pronounceWord.trim()}
-                  onClick={() => handleStream(
-                    `Pronunciation guide for "${pronounceWord}": phonetic spelling, syllable breakdown, ${uiLang} guide, common Indian mistakes, 3 example sentences.`,
-                    `Pronunciation coach named ${teacherShort} for Indian ${level} learners. Simple phonetics.`,
-                    `Pronunciation: ${pronounceWord}`
-                  )}>
-                  {isStreaming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Volume2 className="w-4 h-4 mr-2" />}
-                  Get Pronunciation Guide
-                </Button>
-                {displayed && <ResultPanel title="Pronunciation Guide:" content={displayed} isSpeaking={synth.isSpeaking}
-                  onSpeak={() => speak(displayed)} onStop={synth.stop}
-                  onSave={() => saveResult("pronounce", `Pronunciation: ${pronounceWord}`, displayed)} saved={!!savedMap["pronounce"]} />}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ── DAILY LESSON ── */}
-          {mode === "lesson" && (
-            <Card>
-              <CardContent className="pt-3 space-y-2">
-                <p className="text-xs text-muted-foreground">A fresh lesson tailored to your level and native language.</p>
-                <Button className="font-bold w-full h-10" disabled={isStreaming}
-                  onClick={() => {
-                    const LESSON_TOPICS = [
-                      "Greetings and Professional Introductions","Workplace Emails and Messages","Telephone Etiquette","Presenting Ideas in Meetings","Job Interview Phrases","Describing Your Work Experience","Polite Disagreement at Work","Asking and Giving Directions","Numbers, Dates and Time","Shopping and Negotiating","Expressing Opinions Clearly","Talking About Health and Wellbeing","Travel and Transportation","Banking and Financial Terms","Media and Current Events","Sports and Recreation Vocabulary","Technology and Social Media","Family and Relationships","Food and Restaurant English","Education and Learning Terms","Describing People and Personalities","Office Small Talk","Following Instructions","Making and Refusing Requests","Apologies and Reconciliation","Reports and Data Language","Leadership and Teamwork Phrases","Problem-Solving Language","Celebrations and Social Events","Environmental and Science Terms",
-                    ];
-                    const INDIAN_CONTEXTS = [
-                      "a software engineer in Bengaluru","a sales executive in Mumbai","a fresh graduate applying to an MNC","a bank teller in Chennai","a nurse at a Delhi hospital","a shop manager in Hyderabad","a government employee in Pune","a college student in Kolkata","a call centre agent in Noida","a schoolteacher in Jaipur","a pharmacist in Ahmedabad","a logistics coordinator in Surat",
-                    ];
-                    // Fully random every click — topic, context, and a unique seed so no two lessons look alike
-                    const topic = LESSON_TOPICS[Math.floor(Math.random() * LESSON_TOPICS.length)]!;
-                    const ctx   = INDIAN_CONTEXTS[Math.floor(Math.random() * INDIAN_CONTEXTS.length)]!;
-                    const seed  = Math.random().toString(36).slice(2, 8);
-                    handleStream(
-                      `[uid:${seed}] Write a fresh ${level}-level English lesson on: "${topic}"
-Tailor every example to: ${ctx}.
-
-Write ONLY plain text. No *, **, #, ---, bullets, or markdown of any kind.
-
-Structure:
-
-1. TODAY'S TOPIC
-Two sentences about "${topic}" and why it helps someone like ${ctx}.
-
-2. WHY IT MATTERS
-Two specific real-life examples from ${ctx}'s daily work or life.
-
-3. KEY WORDS
-Five English words for this topic. For each: the word, its ${uiLang} meaning, one example sentence from ${ctx}'s world.
-
-4. PRACTICE SENTENCES
-Two fill-in-the-blank exercises set in ${ctx}'s situation. Show the answers below each.
-
-5. TODAY'S TASK
-One specific 10-minute speaking or writing activity the student can do right now.
-
-Teach warmly and directly. No markdown at all.`,
-                      `You are ${teacherShort}, an English teacher for Indian ${level} students. ${tutor.teachingStyle}. Native language: ${uiLang}. Every generation must feel completely fresh — different words, different sentences, different scenarios every time. Plain text only, numbered sections only.`,
-                      `Daily Lesson: ${topic}`
-                    );
-                  }}>
-                  {isStreaming ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <GraduationCap className="w-5 h-5 mr-2" />}
-                  Generate Today's Lesson
-                </Button>
-                {displayed && <ResultPanel title={`${level} English Lesson:`} content={displayed} isSpeaking={synth.isSpeaking}
-                  onSpeak={() => speak(stripMarkdownForSpeech(displayed), "English")} onStop={synth.stop}
-                  onSave={() => saveResult("lesson", `Daily Lesson: ${level}`, displayed)} saved={!!savedMap["lesson"]} />}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ── INTERVIEW ENGLISH ── */}
-          {mode === "interview_english" && (
-            <Card>
-              <CardContent className="pt-3 space-y-2">
-                <p className="text-xs text-muted-foreground">Essential phrases and expressions for job interviews.</p>
-                <Button className="font-bold w-full h-10" disabled={isStreaming}
-                  onClick={() => handleStream(
-                    `10 essential interview phrases for Indian ${level} learners. Each: the phrase — when to use it — ${uiLang} meaning — example in context.`,
-                    `Career English coach named ${teacherShort} for Indian job seekers. Practical, interview-ready expressions. ${tutor.teachingStyle}.`,
-                    "Interview English"
-                  )}>
-                  {isStreaming ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Briefcase className="w-5 h-5 mr-2" />}
-                  Get Interview Phrases
-                </Button>
-                {displayed && <ResultPanel title="Interview Phrases:" content={displayed} isSpeaking={synth.isSpeaking}
-                  onSpeak={() => speak(stripMarkdownForSpeech(displayed), "English")} onStop={synth.stop}
-                  onSave={() => saveResult("interview_eng", "Interview English Phrases", displayed)} saved={!!savedMap["interview_eng"]} />}
-              </CardContent>
-            </Card>
-          )}
-          </div>
         </main>
       </div>
     </div>

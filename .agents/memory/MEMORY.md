@@ -33,8 +33,8 @@
 - [TTS global singleton](tts-global-singleton.md) — module-level _audio/_abort/_url + _stopListeners in use-edge-tts.ts; globalStop() always runs before speak(); relinquish ownerRef before calling globalStop() on unmount.
 - [TTS autoplay unlock](tts-autoplay-unlock.md) — two-layer unlock: AudioContext resume + pre-blessed HTMLAudioElement; reuse _audioCtx (don't recreate); blob.size < 512 guards against empty TTS pipe errors.
 - [Tailwind dynamic classes](tailwind-dynamic-classes.md) — never build class strings with template literals (e.g. opacity-${val}); Tailwind JIT won't detect them. Always use full class strings or ternary of two complete class strings.
-- [Credit-based access system](credit-system.md) — credits gate only live features (live 5/hr, interview 2–5); free 99 signup; idempotent grants via unique (type,reference); Stripe confirm-on-return; guarded init.
-- [Stripe integration gotchas](stripe-integration-gotchas.md) — Replit connector key is settings.secret (not secret_key); esbuild bundling silently breaks stripe-replit-sync migrations, so copy dist/migrations into the build.
+- [Credit-based access system](credit-system.md) — credits gate only live features (live 5/5hr, interview 5/session); 20-credit signup; idempotent grants via unique (type,reference); top-ups via UPI+UTR (auto-approve), NOT Stripe.
+- [esbuild bundled sibling-file hazard](esbuild-bundled-sibling-files.md) — bundled pkgs reading sibling files via import.meta __dirname resolve to the BUNDLE dir; copy their files into the build. (App payments are UPI; no Stripe SDK in code.)
 - [Edge TTS SSML constraints](edge-tts-ssml.md) — never inject <break> tags; they silently cause 0-byte audio; percentage rate strings also break it; use enum values or plain text only.
 - [Session isAdmin flag pattern](session-isadmin-pattern.md) — every non-admin login path must delete req.session.isAdmin or privilege sticks across re-auths.
 - [Guest trial + auth gating](guest-trial.md) — device-local localStorage free trial (no credits); ALWAYS wait for useAuth().isLoading before the guest-vs-paid branch or signed-in users skip the charge.

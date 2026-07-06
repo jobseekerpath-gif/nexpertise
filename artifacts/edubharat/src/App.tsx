@@ -14,6 +14,7 @@ const queryClient = new QueryClient();
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Home = lazy(() => import("@/pages/home"));
 const EnglishGuru = lazy(() => import("@/pages/english-guru"));
+const ToolsPro = lazy(() => import("@/pages/tools-pro"));
 const InterviewAce = lazy(() => import("@/pages/interview-ace"));
 const RozgarSamachar = lazy(() => import("@/pages/rozgar-samachar"));
 const ResumeIntelligence = lazy(() => import("@/pages/resume-intelligence"));
@@ -66,6 +67,7 @@ function Router() {
         <Layout>
           <Switch>
             <Route path="/" component={Home} />
+            <Route path="/tools-pro" component={ToolsPro} />
             <Route path="/history" component={History} />
             <Route path="/login" component={Login} />
             <Route path="/progress" component={Progress} />

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Bookmark, LogIn, LogOut, User, BarChart2, Menu, X, BookOpen, Mic, Newspaper, Settings, FileText, Route, Coins } from "lucide-react";
+import { Bookmark, LogIn, LogOut, User, BarChart2, Menu, X, BookOpen, Mic, Newspaper, Settings, FileText, Route, Coins, Sparkles } from "lucide-react";
 import { useHistory } from "@/lib/use-history";
 import { useAuth } from "@/lib/use-auth";
 import { useCredits } from "@/lib/use-credits";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 
 const NAV_LINKS = [
   { href: "/english-guru",      label: "English Guru",      icon: BookOpen },
+  { href: "/tools-pro",         label: "Tools Pro",         icon: Sparkles },
   { href: "/learning-journey",  label: "My Journey",        icon: Route },
   { href: "/interview-ace",     label: "Interview Ace",     icon: Mic },
   { href: "/rozgar-samachar",   label: "Rozgar Samachar",   icon: Newspaper },
