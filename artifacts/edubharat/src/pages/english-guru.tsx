@@ -15,7 +15,7 @@ import { useHistory } from "@/lib/use-history";
 import { useProgress } from "@/lib/use-progress";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
-import { useEdgeTTS } from "@/lib/use-edge-tts";
+import { useEdgeTTS, unlockAudio } from "@/lib/use-edge-tts";
 import { useStudentProfile } from "@/lib/use-student-profile";
 import { AnimatedAvatar } from "@/components/avatar";
 import { TUTORS, getTutorById } from "@/lib/tutors";
@@ -603,6 +603,9 @@ Rules for spoken replies:
   useEffect(() => { handleConvPhraseRef.current = handleConvPhrase; }, [handleConvPhrase]);
 
   const toggleLiveChat = useCallback(async () => {
+    // Unlock browser autoplay policy synchronously within the user-gesture stack.
+    // Must run before any await so Chrome still considers this a gesture-initiated play.
+    unlockAudio();
     if (liveChat) {
       setLiveChat(false);
       setConvFlowState("idle");
@@ -895,6 +898,11 @@ Rules for spoken replies:
                   {convFlowState === "ai-thinking" && `${tutor.name} is thinking...`}
                   {convFlowState === "ai-speaking" && `${tutor.name} is speaking... (mic restarts when done)`}
                   {convFlowState === "idle" && "Live chat off"}
+                </div>
+              )}
+              {liveChat && aiError && (
+                <div className="mx-1 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+                  {aiError} — tap mic to try again
                 </div>
               )}
               {(convHistory.length > 0 || isStreaming) && (

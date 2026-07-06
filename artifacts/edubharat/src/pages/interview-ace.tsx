@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { useHistory } from "@/lib/use-history";
 import { useGeminiStream } from "@/lib/use-gemini-stream";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
-import { useEdgeTTS } from "@/lib/use-edge-tts";
+import { useEdgeTTS, unlockAudio } from "@/lib/use-edge-tts";
 import { useStudentProfile } from "@/lib/use-student-profile";
 import { useAuth } from "@/lib/use-auth";
 import { useCredits, chargeInterview, interviewCreditCost } from "@/lib/use-credits";
@@ -455,6 +455,9 @@ function InterviewAceContent() {
   }, [questions]);
 
   const startSession = useCallback(async () => {
+    // Unlock browser autoplay policy synchronously within the user-gesture stack.
+    // Must run before any await so Chrome still considers this a gesture-initiated play.
+    unlockAudio();
     // Don't decide guest vs. paid until auth has resolved — otherwise a signed-in
     // user could slip onto the free path before /api/auth/me returns.
     if (authLoading) {

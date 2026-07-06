@@ -9,11 +9,10 @@ const router: IRouter = Router();
 const GEMINI_MODEL_CHAIN = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"] as const;
 const ANTHROPIC_MODEL_CHAIN = ["claude-haiku-4-5", "claude-sonnet-4-5"] as const;
 
-function getAnthropicModelChain(maxTokens: number) {
-  // Always start with the cheapest model. Only escalate to bigger models on rate limits.
-  if (maxTokens <= 160) {
-    return ["claude-haiku-4-5"] as const;
-  }
+function getAnthropicModelChain(_maxTokens: number) {
+  // Always try haiku first; fall back to sonnet on rate-limit regardless of token count.
+  // Previously, ≤160-token calls only tried haiku with no fallback, so any haiku hiccup
+  // silently returned empty text in live chat and interview ace.
   return ANTHROPIC_MODEL_CHAIN;
 }
 
