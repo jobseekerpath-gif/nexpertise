@@ -37,6 +37,19 @@ Fix: mirror both via refs (`speechRef`, `speakRef`) updated by `useEffect`, then
 
 **Adding new `useRef` calls to `useSpeechRecognition` causes transient HMR "more hooks" errors** in all pages that use it (EnglishGuruContent, InterviewAceContent). They self-resolve on next full page load — they are HMR artifacts, not real bugs.
 
+## Unmount cleanup is mandatory (cross-page recognizer leak)
+`useSpeechRecognition` MUST stop the loop on unmount: `useEffect(() => stop, [stop])` (`stop` is a []-dep useCallback, stable). Without it, navigating away from English Guru or Interview Ace leaves the recognition loop alive in the background.
+
+**Why:** a leaked loop keeps the mic and can make the page you just left emit a second AI reply (the "two AIs at once" bug spanning English Guru + Interview Ace), AND it competes with the destination page's fresh recognizer, throwing silent InvalidStateErrors that break multi-turn continuity ("teacher answers once then goes quiet"). This one missing cleanup was the root cause of TWO separately-reported bugs.
+
+## Phrase-level echo guard (belt-and-suspenders, on top of blockFor)
+The 800ms mic block after TTS is the PRIMARY echo defense; a secondary phrase-similarity guard in `handleConvPhrase` drops a captured phrase arriving within ~2.5s of the AI finishing that closely matches the AI's last spoken text. Track `lastAiSpeechRef` (text) + `lastAiSpeechEndRef` (ts): set text before speaking + in greeting; set ts in `releaseTurn` (live branch) + greeting onEnd.
+
+**Why thresholds matter:** match only LONG fragments (substring needs phrase len ≥10) OR multi-word high overlap (≥4 words, ratio ≥0.85). Loose thresholds (substring len≥4, overlap≥0.8) wrongly drop legit short replies like "yes" / "okay tell me more". Echo-guard must NEVER swallow a real answer.
+
+## Continuity watchdog (English Guru)
+While `liveChat` is on, a 4s interval restarts the loop ONLY when it is confirmed stopped (`speechRef.current.isContinuous === false && status !== "error"`) and `!aiBusyRef.current`. The `isContinuous===false` gate is essential: `startContinuous` has NO re-entry guard against an already-live recognizer, so an unconditional restart would double-spawn.
+
 ## Re-entry guard (prevents AI cut off mid-sentence)
 Any handler that triggers TTS through the **global-singleton** `speak()` (`use-edge-tts.ts`) must guard against re-entry for the WHOLE think+speak window, not just `isStreaming`. A late/echoed recognition `final` can fire the handler again during TTS playback; the new `speak()` runs `globalStop()` first and cuts the in-progress audio off abruptly.
 

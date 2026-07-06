@@ -298,6 +298,13 @@ export function useSpeechRecognition(language = "English") {
     setError(null);
   }, [stop]);
 
+  // Stop recognition when the component using this hook unmounts. Without this,
+  // navigating away from a live conversation or interview leaves the recognition
+  // loop running in the background — it keeps holding the mic and can make a
+  // second AI reply on the page you just left (the "two AIs at once" bug), and
+  // it competes with the new page's recognizer, breaking multi-turn continuity.
+  useEffect(() => stop, [stop]);
+
   return {
     status,
     transcript,

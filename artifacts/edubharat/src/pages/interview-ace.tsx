@@ -352,6 +352,10 @@ function InterviewAceContent() {
   const [questions, setQuestions] = useState<QA[]>([]);
   const questionsRef = useRef<QA[]>([]);
   useEffect(() => { questionsRef.current = questions; }, [questions]);
+  // phaseRef mirrors `phase` so async callbacks (e.g. an in-flight submit) can
+  // tell if the interview already ended without capturing a stale `phase`.
+  const phaseRef = useRef(phase);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answer, setAnswer] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -363,6 +367,7 @@ function InterviewAceContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const autoSubmitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const endingRef = useRef(false);
   const answerRef = useRef("");
   // Webcam for video call mode
   const webcamRef = useRef<HTMLVideoElement>(null);
@@ -384,15 +389,30 @@ function InterviewAceContent() {
     return () => clearInterval(id);
   }, [phase, sessionStart]);
 
-  // Auto-end when duration is up and current answer is processed
+  // Auto-end when the interview clock runs out. This fires even if the mic is
+  // still recording (candidate went quiet near the end) — otherwise the session
+  // could hang past its duration and never produce feedback. The coach gives a
+  // short natural sign-off, any in-progress answer is captured so it counts in
+  // the report, then we move to the report phase.
   useEffect(() => {
-    if (phase !== "interview") return;
-    const durationSeconds = duration * 60;
-    if (elapsedSeconds >= durationSeconds && currentQ && !isStreaming && !isRecording) {
-      // Time is up — end the interview
-      setPhase("report");
+    if (phase !== "interview" || endingRef.current) return;
+    if (elapsedSeconds < duration * 60) return;
+    endingRef.current = true;
+    // Abort any in-flight "next question" stream so it can't resolve after the
+    // sign-off and tack on an extra question / make the coach speak again.
+    resetStream();
+    if (autoSubmitRef.current) { clearTimeout(autoSubmitRef.current); autoSubmitRef.current = null; }
+    speech.stop();
+    setIsRecording(false);
+    setAutoListenEnabled(false);
+    const pending = answerRef.current.trim();
+    if (pending) {
+      setQuestions(prev => prev.map((q, i) => i === currentIdx && !q.answer ? { ...q, answer: pending } : q));
     }
-  }, [elapsedSeconds, duration, phase, currentQ, isStreaming, isRecording]);
+    const firstName = (profile.name || "there").split(" ")[0];
+    speakCoach(`That's all the time we have, ${firstName}. Thank you so much — you did really well today. Let me pull together your feedback now.`, { voiceGender: coach.gender });
+    setTimeout(() => setPhase("report"), 2600);
+  }, [elapsedSeconds, duration, phase, currentIdx, profile.name, coach.gender, speakCoach, speech, resetStream]);
 
   const clearAutoSubmitTimer = useCallback(() => {
     if (autoSubmitRef.current) clearTimeout(autoSubmitRef.current);
@@ -520,6 +540,7 @@ STRICT rules:
     setElapsedSeconds(0);
     setReport(null);
     setSaved(false);
+    endingRef.current = false;
     setPhase("interview");
     // Camera does NOT start automatically — user must enable it via the button.
     // Set coachSpeaking BEFORE the delay so the auto-listen effect cannot fire
@@ -641,6 +662,11 @@ Next: <your question — start with the question itself, no greeting>`,
       return;
     }
 
+    // If the interview ended (time ran out, or the user ended it) while this
+    // stream was in flight, abandon the result — never ask another question or
+    // speak over the closing sign-off. coachSpeaking is owned by the end effect.
+    if (endingRef.current || phaseRef.current !== "interview") return;
+
     // stream() swallows network errors and returns "" — treat that the same as a thrown error
     if (!response.trim()) {
       setCoachSpeaking(false);
@@ -738,6 +764,7 @@ Next: <your question — start with the question itself, no greeting>`,
   }, [currentIdx, questions, resetStream, speakCoach, clearAutoSubmitTimer]);
 
   const endEarly = useCallback(() => {
+    endingRef.current = true;
     clearAutoSubmitTimer();
     speech.stop();
     synth.stop();

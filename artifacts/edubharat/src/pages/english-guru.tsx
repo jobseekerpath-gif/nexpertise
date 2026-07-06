@@ -404,6 +404,11 @@ function EnglishGuruContent() {
    */
   const speakRef = useRef(speak);
   useEffect(() => { speakRef.current = speak; }, [speak]);
+  // Echo-rejection state: the AI's most recent spoken text and when it finished.
+  // handleConvPhrase uses these to drop mic captures that are really the AI's
+  // own voice coming back through the speaker.
+  const lastAiSpeechRef = useRef("");
+  const lastAiSpeechEndRef = useRef(0);
 
   const handleSelectTutor = useCallback((id: string) => {
     const t = getTutorById(id);
@@ -432,6 +437,7 @@ function EnglishGuruContent() {
       // can't be picked up as user input (same pattern as handleConvPhrase).
       aiBusyRef.current = true;
       speechRef.current.pause();
+      lastAiSpeechRef.current = greeting;
       synth.speak(stripMarkdownForSpeech(greeting), uiLang, () => {
         // Only unlock if the user hasn't already ended the live session
         if (!liveChatRef.current) { aiBusyRef.current = false; return; }
@@ -439,6 +445,7 @@ function EnglishGuruContent() {
         setConvFlowState("user-speaking");
         // Echo-guard: 800 ms matches handleConvPhrase so teacher-switch greetings
         // never get self-captured by the mic on the next turn.
+        lastAiSpeechEndRef.current = Date.now();
         speechRef.current.blockFor(800);
       }, { voiceGender: t.voiceGender, voiceStyle: t.voiceStyle });
     }
@@ -452,10 +459,12 @@ function EnglishGuruContent() {
     setResult(full);
     if (full) {
       track("English Guru", saveTitle);
-      void speak(full);
     }
+    // NOTE: tool results are NOT auto-spoken. Each result panel has its own
+    // "listen" button; auto-speaking here made the tutor talk out loud even
+    // when the user never started a live conversation.
     return full;
-  }, [stream, resetAI, synth, speak, track]);
+  }, [stream, resetAI, synth, track]);
 
   const saveResult = useCallback((key: string, title: string, content: string) => {
     save({ tool: "English Guru", title, content });
@@ -474,6 +483,23 @@ function EnglishGuruContent() {
     // Guard: normal phrases need content; silence probes just need the channel to be free.
     if (!isSilenceProbe && (!phrase.trim() || (!liveChatRef.current && isStreaming) || aiBusyRef.current)) return;
     if (isSilenceProbe && (aiBusyRef.current || !liveChatRef.current)) return;
+    // Echo guard: a phrase arriving within ~2.5s of the AI finishing, that closely
+    // matches what the AI just said, is the mic hearing the speaker — not the user.
+    // Drop it so the teacher never "replies to its own voice".
+    if (!isSilenceProbe && Date.now() - lastAiSpeechEndRef.current < 2500) {
+      const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+      const p = norm(phrase);
+      const ai = norm(lastAiSpeechRef.current);
+      if (p.length >= 6 && ai) {
+        const words = p.split(" ");
+        const aiWords = new Set(ai.split(" "));
+        const overlap = words.filter(w => aiWords.has(w)).length / words.length;
+        // Substring match only for longer fragments; overlap match needs several
+        // words at a high ratio — so short legit replies ("yes", "okay, tell me
+        // more") are never mistaken for the AI's own echo.
+        if ((p.length >= 10 && ai.includes(p)) || (words.length >= 4 && words.length <= 14 && overlap >= 0.85)) return;
+      }
+    }
     // Real user phrase resets the silence-nudge counter
     if (!isSilenceProbe) { silenceProbeCountRef.current = 0; silenceProbeActiveRef.current = false; }
     aiBusyRef.current = true;
@@ -563,6 +589,7 @@ Rules for spoken replies:
           if (liveChatRef.current) {
             // 800 ms block — generous enough to outlast speaker echo so the
             // mic can't capture the AI's own voice on the second turn.
+            lastAiSpeechEndRef.current = Date.now();
             speechRef.current.blockFor(800);
             setConvFlowState("user-speaking");
           } else {
@@ -585,6 +612,7 @@ Rules for spoken replies:
           // Always use uiLang for TTS — AI was instructed to respond in uiLang.
           // Use speakRef so we always call the latest speak closure even though
           // handleConvPhrase no longer has `speak` in its deps.
+          lastAiSpeechRef.current = cleanResponse;
           speakRef.current(cleanResponse, uiLang, releaseTurn);
         } else {
           releaseTurn();
@@ -601,6 +629,23 @@ Rules for spoken replies:
   }, [stream, resetAI, track, isStreaming, profile.name, tutor.teachingStyle, uiLang, teacherShort]);
 
   useEffect(() => { handleConvPhraseRef.current = handleConvPhrase; }, [handleConvPhrase]);
+
+  // Continuity watchdog: browsers occasionally kill the SpeechRecognition loop
+  // (transient errors, tab backgrounding), which would make the teacher stop
+  // answering after a reply. While live chat is on and the AI isn't mid-turn,
+  // restart the loop if it has stopped. Only restarts when the loop is confirmed
+  // NOT running (isContinuous === false) so we never spawn a competing recognizer.
+  useEffect(() => {
+    if (!liveChat) return;
+    const id = setInterval(() => {
+      const sp = speechRef.current;
+      if (!liveChatRef.current || aiBusyRef.current) return;
+      if (!sp.isContinuous && sp.status !== "error") {
+        sp.startContinuous(p => handleConvPhraseRef.current?.(p));
+      }
+    }, 4000);
+    return () => clearInterval(id);
+  }, [liveChat]);
 
   const toggleLiveChat = useCallback(async () => {
     // Unlock browser autoplay policy synchronously within the user-gesture stack.
@@ -905,8 +950,16 @@ Rules for spoken replies:
                   {aiError} — tap mic to try again
                 </div>
               )}
-              {(convHistory.length > 0 || isStreaming) && (
+              {(convHistory.length > 0 || isStreaming || (liveChat && !!speech.interimTranscript)) && (
                 <div ref={convScrollRef} className="flex flex-col gap-3 flex-1 min-h-[260px] lg:min-h-0 overflow-y-auto pr-1 pt-1">
+                  {liveChat && speech.interimTranscript && (
+                    <div className="flex gap-2 justify-end">
+                      <div className="max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words bg-primary/60 text-primary-foreground italic">
+                        {speech.interimTranscript}
+                        <span className="inline-block w-0.5 h-3.5 ml-0.5 align-middle bg-primary-foreground/80 animate-pulse" />
+                      </div>
+                    </div>
+                  )}
                   {isStreaming && !aiText && (
                     <div className="flex gap-2 justify-start">
                       <div className="px-4 py-2.5 bg-muted rounded-2xl">
