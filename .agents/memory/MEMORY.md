@@ -2,6 +2,7 @@
 - [Resume Intelligence module](resume-intelligence.md) — section parsing uses positional string splitting (not regex) to avoid Edit-tool corruption with special chars.
 - [Database persistence patterns](task1-db-persistence.md) — offline-first hooks, schema/API conventions, and rebuild steps for EduBharat DB features.
 - [Tutor portrait system](tutor-portraits.md) — real AI-generated photos replace cartoon SVG; SVG is fallback only; imgFailed resets on imageSrc change; TUTORS array in lib/tutors.ts.
+- [Avatar lip movement](avatar-lip-movement.md) — talking portraits use a CSS puppet-jaw on the real photo; never drive it from the TTS audio graph (breaks autoplay); generateImage can't inpaint frames.
 - [Speech voice fallback](speech-voice-fallback.md) — browser voice lists vary; match by locale/name, then shape pitch/rate when a perfect Indian voice is missing.
 - [Claude live-chat budgeting](claude-live-chat-budgeting.md) — live tutoring should use compact history and low token caps; minimize cost, never promise a fixed per-response price.
 - [English Guru compact layout](english-guru-compact-layout.md) — live conversation uses a footer-free full-viewport shell; only the chat panel scrolls.
@@ -35,7 +36,7 @@
 - [TTS global singleton](tts-global-singleton.md) — module-level _audio/_abort/_url + _stopListeners in use-edge-tts.ts; globalStop() always runs before speak(); relinquish ownerRef before calling globalStop() on unmount.
 - [TTS autoplay unlock](tts-autoplay-unlock.md) — two-layer unlock: AudioContext resume + pre-blessed HTMLAudioElement; reuse _audioCtx (don't recreate); blob.size < 512 guards against empty TTS pipe errors.
 - [Tailwind dynamic classes](tailwind-dynamic-classes.md) — never build class strings with template literals (e.g. opacity-${val}); Tailwind JIT won't detect them. Always use full class strings or ternary of two complete class strings.
-- [Credit-based access system](credit-system.md) — credits gate only live features (live 5/5hr, interview 5/session); 20-credit signup; idempotent grants via unique (type,reference); top-ups via UPI+UTR (auto-approve), NOT Stripe.
+- [Credit-based access system](credit-system.md) — credits gate only live features (live 5/5hr; interview metered per block, ≤5/session, server-authoritative meter); 20-credit signup; idempotent grants; top-ups via UPI+UTR (auto-approve), NOT Stripe.
 - [esbuild bundled sibling-file hazard](esbuild-bundled-sibling-files.md) — bundled pkgs reading sibling files via import.meta __dirname resolve to the BUNDLE dir; copy their files into the build. (App payments are UPI; no Stripe SDK in code.)
 - [Edge TTS SSML constraints](edge-tts-ssml.md) — never inject <break> tags; they silently cause 0-byte audio; percentage rate strings also break it; use enum values or plain text only.
 - [Session isAdmin flag pattern](session-isadmin-pattern.md) — every non-admin login path must delete req.session.isAdmin or privilege sticks across re-auths.

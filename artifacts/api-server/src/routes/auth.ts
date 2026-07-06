@@ -17,6 +17,15 @@ declare module "express-session" {
     isAdmin?: boolean;
     /** Temporary: guest ID to merge on next successful login (Google OAuth flow) */
     pendingGuestId?: string;
+    /**
+     * Server-authoritative meter for the in-progress mock interview. `id` is a
+     * server-minted token (never sent by the client) used as the idempotent ledger
+     * reference `interview:<id>:<block>`, so per-block charges are at-most-once and
+     * the cap can't be bypassed by a replayed or forged id. Only ONE interview is
+     * active per session at a time (a second /charge is rejected while unexpired);
+     * `expiresAt` lets an abandoned meter be replaced so the user is never locked out.
+     */
+    interview?: { id: string; blocksCharged: number; startedAt: number; expiresAt: number };
   }
 }
 

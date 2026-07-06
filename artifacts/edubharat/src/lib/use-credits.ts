@@ -10,9 +10,18 @@ export const CREDIT_QUICK_PICKS = [49, 99, 199, 499, 999];
 export const LIVE_BLOCK_SECONDS = 12 * 60;
 export const LIVE_HOURLY_COST = 5;
 
-/** Interview cost is a flat 5 credits per session (mirrors the server). */
+/** Interviews are metered per block: 1 credit each, first block charged at start. */
+export const INTERVIEW_BLOCK_COST = 1;
+/** A full interview is 5 blocks, so it costs at most 5 credits (the old flat price). */
+export const INTERVIEW_MAX_BLOCKS = 5;
+
+/** Maximum credits a full interview can cost (all blocks). Used for display. */
 export function interviewCreditCost(_durationMinutes: number): number {
-  return 5;
+  return INTERVIEW_BLOCK_COST * INTERVIEW_MAX_BLOCKS;
+}
+/** Seconds per interview block for a session of the given length (min 30s). */
+export function interviewBlockSeconds(durationMinutes: number): number {
+  return Math.max(30, Math.round((durationMinutes * 60) / INTERVIEW_MAX_BLOCKS));
 }
 
 export type CreditsState = { balance: number | null; authenticated: boolean; loaded: boolean };
@@ -58,6 +67,8 @@ export type SpendResult = {
   balance: number | null;
   charged?: number;
   required?: number;
+  blockSeconds?: number;
+  interviewId?: string;
   error?: string;
 };
 
@@ -96,19 +107,23 @@ async function spend(path: string): Promise<SpendResult> {
   };
 }
 
+async function spendBody(path: string, body: unknown): Promise<SpendResult> {
+  const { res, data } = await post(path, body);
+  applyBalance(data);
+  return {
+    ok: res.ok,
+    status: res.status,
+    balance: (data["balance"] as number) ?? state.balance,
+    charged: data["charged"] as number | undefined,
+    required: data["required"] as number | undefined,
+    blockSeconds: data["blockSeconds"] as number | undefined,
+    interviewId: data["interviewId"] as string | undefined,
+    error: data["error"] as string | undefined,
+  };
+}
+
 export function chargeInterview(durationMinutes: number): Promise<SpendResult> {
-  return (async () => {
-    const { res, data } = await post("/api/credits/interview/charge", { durationMinutes });
-    applyBalance(data);
-    return {
-      ok: res.ok,
-      status: res.status,
-      balance: (data["balance"] as number) ?? state.balance,
-      charged: data["charged"] as number | undefined,
-      required: data["required"] as number | undefined,
-      error: data["error"] as string | undefined,
-    };
-  })();
+  return spendBody("/api/credits/interview/charge", { durationMinutes });
 }
 
 export function startLiveBlock(): Promise<SpendResult> {
@@ -116,6 +131,15 @@ export function startLiveBlock(): Promise<SpendResult> {
 }
 export function tickLiveBlock(): Promise<SpendResult> {
   return spend("/api/credits/live/tick");
+}
+export function tickInterview(block: number, interviewId?: string): Promise<SpendResult> {
+  return spendBody("/api/credits/interview/tick", { block, interviewId });
+}
+/** Release the server-side interview meter (call when the interview ends). Only
+ * clears it if this interview id still owns the meter, so one tab can't wipe
+ * another tab's in-progress interview. */
+export function endInterview(interviewId?: string): Promise<SpendResult> {
+  return spendBody("/api/credits/interview/end", { interviewId });
 }
 
 // ── UPI payment helpers ──────────────────────────────────────────────────────

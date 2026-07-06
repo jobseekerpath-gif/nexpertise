@@ -84,6 +84,60 @@ function FallbackSVG({
   );
 }
 
+/**
+ * Time-based "talking mouth" for real portraits. We can't lip-sync to the actual
+ * TTS audio (routing it through an AudioContext risks breaking autoplay unlock)
+ * and we have no open-mouth frame, so we animate a feathered copy of the lower
+ * face: a subtle vertical jaw-drop that opens and closes at a natural, slightly
+ * randomized speech cadence. It only mounts while speaking, so the idle photo is
+ * pixel-identical to before.
+ */
+function PhotoMouth({ imageSrc, px }: { imageSrc: string; px: number }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      if (!alive) return;
+      setOpen((o) => !o);
+      // Short open/close beats, with the occasional longer closed pause (word gap).
+      const beat = 85 + Math.random() * 95; // ~85–180ms
+      const pause = Math.random() < 0.16 ? 150 + Math.random() * 200 : 0;
+      timer = setTimeout(tick, beat + pause);
+    };
+    timer = setTimeout(tick, 70);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, []);
+
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        WebkitMaskImage: "linear-gradient(to bottom, transparent 56%, black 67%)",
+        maskImage: "linear-gradient(to bottom, transparent 56%, black 67%)",
+      }}
+      aria-hidden="true"
+    >
+      <img
+        src={imageSrc}
+        alt=""
+        width={px}
+        height={px}
+        className="w-full h-full object-cover object-top"
+        style={{
+          transformOrigin: "50% 58%",
+          transform: open ? "scaleY(1.055)" : "scaleY(1)",
+          transition: "transform 70ms ease-out",
+        }}
+        draggable={false}
+      />
+    </div>
+  );
+}
+
 export function AnimatedAvatar({
   name,
   subtitle,
@@ -117,23 +171,8 @@ export function AnimatedAvatar({
               onError={() => setImgFailed(true)}
               draggable={false}
             />
-            {/* Lip-sync overlay — animated bars mimicking mouth movement when speaking */}
-            {isSpeaking && (
-              <div className="absolute bottom-0 left-0 right-0 flex items-end justify-center gap-[3px] pb-2 px-3">
-                {[5, 9, 12, 9, 7, 11, 8, 5].map((h, i) => (
-                  <span
-                    key={i}
-                    className="rounded-full bg-orange-400/90"
-                    style={{
-                      width: "3px",
-                      height: `${h}px`,
-                      animation: `lipBar 0.${3 + (i % 4)}s ease-in-out infinite alternate`,
-                      animationDelay: `${i * 0.06}s`,
-                    }}
-                  />
-                ))}
-              </div>
-            )}
+            {/* Talking mouth — a subtle jaw movement on the real photo while speaking */}
+            {isSpeaking && imageSrc && <PhotoMouth imageSrc={imageSrc} px={sz.px} />}
             {/* Thinking indicator */}
             {isThinking && !isSpeaking && (
               <div className="absolute bottom-0 left-0 right-0 flex justify-center pb-1.5">

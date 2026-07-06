@@ -9,6 +9,20 @@ export const SIGNUP_GRANT = 20;
 export const LIVE_BLOCK_SECONDS = 12 * 60;
 export const LIVE_BLOCK_COST = 1;
 
+/**
+ * Interviews are metered by actual usage: each session is split into 5 equal
+ * blocks and 1 credit is charged per block entered (the first block upfront).
+ * Leaving early costs only for the blocks used; a full session still costs at
+ * most 5 credits — the previous flat price.
+ */
+export const INTERVIEW_BLOCK_COST = 1;
+export const INTERVIEW_MAX_BLOCKS = 5;
+
+/** Seconds per interview block for a session of the given length (min 30s). */
+export function interviewBlockSeconds(durationMinutes: number): number {
+  return Math.max(30, Math.round((durationMinutes * 60) / INTERVIEW_MAX_BLOCKS));
+}
+
 export type CreditType =
   | "signup_grant"
   | "purchase"
@@ -17,9 +31,9 @@ export type CreditType =
   | "refund"
   | "adjustment";
 
-/** Interview cost is a flat 5 credits per session, regardless of duration. */
+/** Maximum credits a full interview can cost (all blocks). Used for display. */
 export function interviewCreditCost(_durationMinutes: number): number {
-  return 5;
+  return INTERVIEW_BLOCK_COST * INTERVIEW_MAX_BLOCKS;
 }
 
 export async function getBalance(userId: number): Promise<number> {
@@ -122,9 +136,11 @@ export async function spendCredits(args: {
   amount: number;
   type: CreditType;
   description?: string;
-}): Promise<{ ok: boolean; balance: number }> {
-  const r = await mutate({ ...args, amount: -Math.abs(args.amount), idempotent: false });
-  return { ok: r.ok, balance: r.balance };
+  reference?: string | null;
+  idempotent?: boolean;
+}): Promise<{ ok: boolean; balance: number; already?: boolean }> {
+  const r = await mutate({ ...args, amount: -Math.abs(args.amount), idempotent: args.idempotent ?? false });
+  return { ok: r.ok, balance: r.balance, already: r.ok ? r.already : undefined };
 }
 
 /** Grant the one-time welcome bonus. Idempotent per user (reference = signup:<id>). */

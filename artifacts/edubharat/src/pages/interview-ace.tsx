@@ -12,7 +12,7 @@ import { useSpeechRecognition } from "@/lib/use-speech-recognition";
 import { useEdgeTTS, unlockAudio } from "@/lib/use-edge-tts";
 import { useStudentProfile } from "@/lib/use-student-profile";
 import { useAuth } from "@/lib/use-auth";
-import { useCredits, chargeInterview, interviewCreditCost } from "@/lib/use-credits";
+import { useCredits, chargeInterview, tickInterview, endInterview, interviewCreditCost, interviewBlockSeconds, INTERVIEW_MAX_BLOCKS } from "@/lib/use-credits";
 import { useGuestTrial, guestInterviewsLeft, consumeGuestInterview } from "@/lib/guest-trial";
 import { AnimatedAvatar } from "@/components/avatar";
 import { INTERVIEW_COACHES } from "@/lib/tutors";
@@ -372,6 +372,13 @@ function InterviewAceContent() {
   // Tracks the current structured-interview stage index so the agenda advances in
   // order and never skips a stage, even if long answers make the clock jump ahead.
   const stageIdxRef = useRef(0);
+  // Interview credits are metered per block (1 credit each). The first block is
+  // charged at start; this counts blocks charged so the meter stops at the max
+  // (a full session costs at most INTERVIEW_MAX_BLOCKS credits).
+  const interviewBlocksChargedRef = useRef(1);
+  // Server-minted token for THIS tab's interview (from /charge); presented on
+  // every tick/end so this tab can only bill/clear the interview it started.
+  const interviewIdRef = useRef<string | null>(null);
   const answerRef = useRef("");
   // Webcam for video call mode
   const webcamRef = useRef<HTMLVideoElement>(null);
@@ -525,14 +532,17 @@ STRICT rules:
         if (charge.status === 402) {
           toast({
             title: "Not enough credits",
-            description: `This interview needs ${interviewCreditCost(duration)} credits — you have ${charge.balance ?? 0}. Top up to continue.`,
+            description: `You need at least 1 credit to start (interviews are billed by the minute, up to ${interviewCreditCost(duration)}). You have ${charge.balance ?? 0}. Top up to continue.`,
             variant: "destructive",
           });
+        } else if (charge.status === 409) {
+          toast({ title: "Interview already in progress", description: "Finish or close your other interview tab before starting a new one.", variant: "destructive" });
         } else {
           toast({ title: "Couldn't start interview", description: charge.error ?? "Please try again.", variant: "destructive" });
         }
         return;
       }
+      interviewIdRef.current = charge.interviewId ?? null;
     }
     // The opening combines greeting + first question — store as first QA entry
     setQuestions([{ question: opening }]);
@@ -780,6 +790,50 @@ Next: <the interview question only>`,
     setAutoListenEnabled(false);
     setPhase("report");
   }, [speech, synth, clearAutoSubmitTimer, stopWebcam]);
+
+  // Keep a live ref to endEarly so the long-interval billing timer below is not
+  // torn down every render. endEarly's deps (speech/synth) are fresh objects each
+  // render and this page re-renders every second — without the ref the interval
+  // would be cleared before a block ever elapses, so ticks would never fire.
+  const endEarlyRef = useRef(endEarly);
+  useEffect(() => { endEarlyRef.current = endEarly; }, [endEarly]);
+
+  // Release the server-side interview meter when the interview ends (any path to
+  // the report) or the user leaves mid-interview, so the "one interview per
+  // account at a time" lock frees promptly and the next start isn't rejected.
+  const activeUserRef = useRef(user);
+  useEffect(() => { activeUserRef.current = user; }, [user]);
+  useEffect(() => {
+    if (phase === "report" && user) void endInterview(interviewIdRef.current ?? undefined);
+  }, [phase, user]);
+  useEffect(() => () => { if (activeUserRef.current) void endInterview(interviewIdRef.current ?? undefined); }, []);
+
+  // Meter interview credits by ACTUAL usage: 1 credit per block entered, with the
+  // first block already charged at start, so leaving early costs less and a full
+  // session costs at most INTERVIEW_MAX_BLOCKS credits. If the balance runs out
+  // mid-interview, end gracefully to the report. Guests use free trials, not credits.
+  useEffect(() => {
+    if (phase !== "interview" || !user) return;
+    interviewBlocksChargedRef.current = 1; // block 1 was charged at start
+    const blockMs = interviewBlockSeconds(duration) * 1000;
+    const id = setInterval(async () => {
+      if (phaseRef.current !== "interview" || endingRef.current) return;
+      if (interviewBlocksChargedRef.current >= INTERVIEW_MAX_BLOCKS) { clearInterval(id); return; }
+      const nextBlock = interviewBlocksChargedRef.current + 1;
+      const r = await tickInterview(nextBlock, interviewIdRef.current ?? undefined);
+      if (r.ok) {
+        interviewBlocksChargedRef.current = nextBlock;
+      } else if (r.status === 402 || r.status === 401 || r.status === 409) {
+        clearInterval(id);
+        if (endingRef.current) return;
+        if (r.status === 402) {
+          toast({ title: "Credits used up", description: "Wrapping up your interview now. Top up to practise longer next time.", variant: "destructive" });
+        }
+        endEarlyRef.current();
+      }
+    }, blockMs);
+    return () => clearInterval(id);
+  }, [phase, user, duration, toast]);
 
   useEffect(() => {
     // coachSpeaking guard: don't start mic while the AI coach is speaking — prevents
@@ -1130,7 +1184,7 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               {user ? (
-                <>Uses <span className="font-semibold text-secondary">{interviewCost} credits</span> · Balance: <span className="font-semibold">{balance ?? "…"}</span> · <Link href="/credits" className="text-primary font-semibold hover:underline">Top up</Link></>
+                <>Up to <span className="font-semibold text-secondary">{interviewCost} credits</span> · billed by the minute · Balance: <span className="font-semibold">{balance ?? "…"}</span> · <Link href="/credits" className="text-primary font-semibold hover:underline">Top up</Link></>
               ) : guestInterviewsRemaining > 0 ? (
                 <><span className="font-semibold text-green-700">{guestInterviewsRemaining} free {guestInterviewsRemaining === 1 ? "interview" : "interviews"}</span> left · <Link href="/login" className="text-primary font-semibold hover:underline">Sign in</Link> for 20 free credits</>
               ) : (
