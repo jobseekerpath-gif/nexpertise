@@ -390,7 +390,9 @@ Rules for spoken replies:
     })();
   // `speech` and `speak` intentionally removed from deps — accessed via
   // speechRef/speakRef so the callback isn't re-created on every render.
-  }, [stream, resetAI, track, isStreaming, profile.name, tutor.teachingStyle, uiLang, teacherShort]);
+  // `level` and `uiLang` ARE deps so a filter change is picked up on the very
+  // next turn (handleConvPhraseRef is refreshed by the effect below).
+  }, [stream, resetAI, track, isStreaming, profile.name, tutor.teachingStyle, uiLang, level, teacherShort]);
 
   useEffect(() => { handleConvPhraseRef.current = handleConvPhrase; }, [handleConvPhrase]);
 
@@ -623,19 +625,20 @@ Rules for spoken replies:
             <span className="text-muted-foreground/40">•</span>
             <span className="text-xs font-medium text-muted-foreground">Native language</span>
             <Select value={uiLang} onValueChange={(v) => {
+              if (v === uiLang) return;
               setUiLang(v);
               updateProfile({ preferredLanguage: v });
-              // Instantly apply during live chat: abort current AI/TTS so the next
-              // turn picks up the new language without waiting for the current one to finish.
-              if (liveChatRef.current) {
-                synth.stop();
-                aiBusyRef.current = false;
-                // Clear the mic pause-block (speech.pause sets a 10-min timer;
-                // blockFor(0) expires it immediately so the loop can respawn).
-                speech.blockFor(0);
-                // Abort any in-flight stream (resets isStreaming via its finally block).
-                resetAI();
-                setConvFlowState("user-speaking");
+              // Live chat: DON'T interrupt the conversation. The new language reaches
+              // the AI on its next turn (uiLang is a handleConvPhrase dep) and the
+              // recognizer reads it on its next spawn (langCodeRef) — so continuity is
+              // never broken and the change applies right away. If it's the student's
+              // turn, softly restart the mic so their next words are recognised in the
+              // new language immediately; the loop stays alive (pause()+blockFor keep
+              // shouldContinue true). Never touch the mic while the AI is mid-turn
+              // (aiBusyRef) or it would capture the coach's own voice as input.
+              if (liveChatRef.current && !aiBusyRef.current) {
+                speech.pause();
+                speech.blockFor(150);
               }
             }}>
               <SelectTrigger className="h-7 text-xs w-[120px] rounded-full border-dashed" aria-label="Native language">
@@ -648,9 +651,12 @@ Rules for spoken replies:
               </SelectContent>
             </Select>
             <Select value={level} onValueChange={(v) => {
+              if (v === level) return;
               setLevel(v);
-              // Instantly apply during live chat (same pattern as uiLang above)
-              if (liveChatRef.current) { synth.stop(); aiBusyRef.current = false; setConvFlowState("user-speaking"); }
+              updateProfile({ englishLevel: v });
+              // Applies to the AI's next turn immediately (level is a handleConvPhrase
+              // dep, so handleConvPhraseRef is refreshed). The live session is left
+              // completely untouched — no stop, no abort — so continuity is preserved.
             }}>
               <SelectTrigger className="h-7 text-xs w-[110px] rounded-full border-dashed">
                 <SelectValue />

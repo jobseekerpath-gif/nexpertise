@@ -26,6 +26,7 @@
 - [Rozgar filter vs profile](rozgar-filter-priority.md) — job query must send the FILTER city/experience over profile location; two-layer filtering (backend query + client filterJobs) means an unsent filter shows a mismatch AND empties results.
 - [Journey progression](journey-progression.md) — SM-2 queue dead-ends when all lessons have future due dates; use "practice ahead" mode + mastery-based effectiveStage used in BOTH All Lessons and Roadmap locking.
 - [Live-chat recognition loop](live-chat-recognition-loop.md) — ONE startContinuous; recognition hooks MUST stop on unmount (leaked recognizer = "two AIs" + broken continuity); layered echo guard; speechRef/speakRef avoid stale-closure race.
+- [Live filter continuity](live-filter-continuity.md) — mid-session setting changes (language/level) apply via the turn-handler's deps + langCodeRef (next turn), NEVER by synth.stop()/stream-abort (drops the reply → broken continuity).
 - [Interview timed end + stream race](interview-timeout-end.md) — end at time-up even while recording; async turn handlers must re-check endingRef/phaseRef after every await or a late stream adds a question after the sign-off.
 - [Live chat news enrichment](live-chat-news-enrichment.md) — DuckDuckGo Instant Answer enriches AI context for news queries; NEWS_RE must be specific; 1500ms client timeout.
 - [Journey AI content endpoint](journey-ai-content.md) — GET /journey/lesson-content/:lessonId; in-memory cache capped at 200 entries (FIFO eviction); useEffect([expanded]) triggers fetch; static LESSON_CONTENT is immediate fallback.
