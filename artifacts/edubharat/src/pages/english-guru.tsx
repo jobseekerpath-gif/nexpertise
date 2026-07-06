@@ -776,7 +776,7 @@ Rules for spoken replies:
         </aside>
 
         {/* Main content */}
-        <main className="order-1 lg:order-2 min-w-0 lg:flex lg:flex-col lg:min-h-0 lg:overflow-hidden max-lg:overflow-y-auto max-lg:min-h-0">
+        <main className="order-1 lg:order-2 min-w-0 lg:flex lg:flex-col lg:min-h-0 lg:overflow-y-auto max-lg:overflow-y-auto max-lg:min-h-0">
           {/* ── MOBILE HERO — Change Teacher at top, then student greeting + tutor ── */}
           <div className="lg:hidden flex flex-col shrink-0 mb-2 gap-1.5">
             <Button
@@ -858,8 +858,8 @@ Rules for spoken replies:
           </div>
 
           {/* ── LIVE CONVERSATION — top section with its own heading ── */}
-          <section className="flex flex-col min-h-0 flex-1">
-            <Card className={`flex flex-col overflow-hidden border-2 transition-all flex-1 min-h-0 max-h-[calc(100dvh-6rem)] lg:max-h-none ${liveChat ? "border-green-400 bg-green-50/30" : "border-green-200/70 bg-green-50/10"}`}>
+          <section className={`flex flex-col min-h-0 ${liveChat ? "flex-1" : "lg:flex-none"}`}>
+            <Card className={`flex flex-col overflow-hidden border-2 transition-all flex-1 min-h-0 max-h-[calc(100dvh-6rem)] ${liveChat ? "lg:max-h-none" : "lg:max-h-[56vh]"} ${liveChat ? "border-green-400 bg-green-50/30" : "border-green-200/70 bg-green-50/10"}`}>
             <CardContent className="pt-3 pb-3 space-y-2 flex min-h-0 flex-1 flex-col">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
@@ -994,13 +994,14 @@ Rules for spoken replies:
           </div>
 
           {/* ── PRACTICE TOOLS — hidden during live chat ── */}
-          <div className={`shrink-0 min-h-0 lg:overflow-y-auto lg:max-h-[35%] ${liveChat ? "hidden" : ""}`}>
+          <div className={`shrink-0 ${liveChat ? "hidden" : ""}`}>
           {/* ── GRAMMAR FIX ── */}
           {mode === "grammar" && (
             <Card>
               <CardContent className="pt-3 space-y-2">
                 <Textarea placeholder="Type or speak your text..." className="min-h-[80px] text-sm"
-                  value={grammarInput} onChange={e => setGrammarInput(e.target.value)} />
+                  value={grammarInput} onChange={e => setGrammarInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && grammarInput.trim() && !isStreaming) { e.preventDefault(); handleStream(`Fix grammar: "${grammarInput}". List each correction with brief ${uiLang} explanation.`, `Encouraging English teacher named ${teacherShort} for Indian ${level} learners. ${tutor.teachingStyle}.`, "Grammar Fix"); } }} />
                 <div className="flex items-center gap-2">
                   <MicButton isListening={speech.isListening} isSupported={speech.isSupported}
                     onStart={() => speech.start(t => setGrammarInput(p => p + t))} onStop={speech.stop} disabled={liveChat} />
@@ -1028,7 +1029,8 @@ Rules for spoken replies:
             <Card>
               <CardContent className="pt-3 space-y-2">
                 <Textarea placeholder="Type your draft..." className="min-h-[80px] text-sm"
-                  value={writeInput} onChange={e => setWriteInput(e.target.value)} />
+                  value={writeInput} onChange={e => setWriteInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && writeInput.trim() && !isStreaming) { e.preventDefault(); handleStream(`Improve this to sound professional: "${writeInput}". Show improved version + 3 key changes made.`, `Writing coach named ${teacherShort} for Indian ${level} English learners. ${tutor.teachingStyle}.`, "Write Better"); } }} />
                 <div className="flex items-center gap-2">
                   <MicButton isListening={speech.isListening} isSupported={speech.isSupported}
                     onStart={() => speech.start(t => setWriteInput(p => p + t))} onStop={speech.stop} disabled={liveChat} />
@@ -1054,7 +1056,8 @@ Rules for spoken replies:
             <Card>
               <CardContent className="pt-3 space-y-2">
                 <Input placeholder="Topic (e.g. Job Interview, Office, Technology)" className="h-9 text-sm"
-                  value={vocabTopic} onChange={e => setVocabTopic(e.target.value)} />
+                  value={vocabTopic} onChange={e => setVocabTopic(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && vocabTopic.trim() && !isStreaming) { handleStream(`8 English words for "${vocabTopic}" (${level} level). Format: word — ${uiLang} meaning — example sentence.`, `English teacher named ${teacherShort} for Indian job seekers. Practical, commonly-used vocabulary.`, `Vocabulary: ${vocabTopic}`); } }} />
                 <Button className="font-bold w-full" disabled={isStreaming || !vocabTopic.trim()}
                   onClick={() => handleStream(
                     `8 English words for "${vocabTopic}" (${level} level). Format: word — ${uiLang} meaning — example sentence.`,
@@ -1078,7 +1081,8 @@ Rules for spoken replies:
                 <p className="text-xs text-muted-foreground">AI says the word — you repeat and practise.</p>
                 <div className="flex gap-2">
                   <Input placeholder="English word or phrase to practise"
-                    value={pronounceWord} onChange={e => setPronounceWord(e.target.value)} className="h-9 flex-1 text-sm" />
+                    value={pronounceWord} onChange={e => setPronounceWord(e.target.value)} className="h-9 flex-1 text-sm"
+                    onKeyDown={e => { if (e.key === "Enter" && pronounceWord.trim() && !isStreaming) { handleStream(`Pronunciation guide for "${pronounceWord}": phonetic spelling, syllable breakdown, ${uiLang} guide, common Indian mistakes, 3 example sentences.`, `Pronunciation coach named ${teacherShort} for Indian ${level} learners. Simple phonetics.`, `Pronunciation: ${pronounceWord}`); } }} />
                   <Button variant="outline" size="icon" className="h-11 w-11 shrink-0"
                     onClick={() => speak(pronounceWord, "English")} disabled={!pronounceWord.trim() || synth.isSpeaking}>
                     <Volume2 className="w-4 h-4" />
