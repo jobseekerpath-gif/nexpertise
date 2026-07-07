@@ -1,7 +1,6 @@
 import { Router, type IRouter, type Request } from "express";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { Resend } from "resend";
 import crypto from "crypto";
 import { db, usersTable, otpsTable } from "@workspace/db";
 import { eq, and, gt, sql } from "drizzle-orm";
@@ -9,6 +8,7 @@ import { mergeGuestProgress } from "./journey";
 import { ensureSignupGrant } from "../lib/credits";
 import { geolocateIp } from "../lib/geo";
 import { logger } from "../lib/logger";
+import { sendEmail, isEmailConfigured } from "../lib/mailer";
 
 declare module "express-session" {
   interface SessionData {
@@ -205,14 +205,15 @@ setupPassport();
 router.get("/auth/config", (_req, res) => {
   const hasGoogleId = !!(process.env["GOOGLE_CLIENT_ID"] ?? process.env["GOOGLE CLIENT ID"]);
   const hasGoogleSecret = !!(process.env["GOOGLE_CLIENT_SECRET"] ?? process.env["GOOGLE CLIENT SECRET"]);
-  const hasResend = !!process.env["RESEND_API_KEY"];
+  const emailReady = isEmailConfigured();
 
   res.json({
     googleConfigured: hasGoogleId && hasGoogleSecret,
     googleCallbackUrl: getCallbackURL(),
-    otpEmailConfigured: hasResend,
-    // In dev mode, OTP code is returned in the /auth/otp/send response
-    otpDevMode: !hasResend,
+    otpEmailConfigured: emailReady,
+    // When email isn't configured (e.g. off-Replit dev), the OTP code is returned
+    // in the /auth/otp/send response so login still works.
+    otpDevMode: !emailReady,
   });
 });
 
@@ -283,24 +284,23 @@ router.post("/auth/otp/send", async (req, res) => {
 
     await db.insert(otpsTable).values({ email, code: hashed, expiresAt, used: false });
 
-    const resendKey = process.env["RESEND_API_KEY"];
-    if (resendKey) {
-      const resend = new Resend(resendKey);
-      await resend.emails.send({
-        from: "EduBharat <onboarding@resend.dev>",
-        to: email,
-        subject: "Your EduBharat Login Code",
-        html: `<div style="font-family:sans-serif;max-width:480px;margin:auto">
+    const html = `<div style="font-family:sans-serif;max-width:480px;margin:auto">
           <h2 style="color:#f97316">EduBharat</h2>
           <p>Your one-time login code is:</p>
           <h1 style="font-size:48px;letter-spacing:8px;color:#1e293b">${code}</h1>
           <p style="color:#64748b">This code expires in 10 minutes. Do not share it with anyone.</p>
-        </div>`,
-      });
+        </div>`;
+    const sent = await sendEmail({ to: email, subject: "Your EduBharat Login Code", html });
+    if (sent.dev && process.env.NODE_ENV !== "production") {
+      // Connector not attached in local/off-Replit dev — surface the code so login still works.
+      res.json({ success: true, dev: code });
+    } else if (sent.ok && !sent.dev) {
       res.json({ success: true });
     } else {
-      // Dev mode: return the code in the response (no email configured)
-      res.json({ success: true, dev: code });
+      // Either a real delivery failure, or email is unconfigured in production (which must
+      // never happen). Fail closed — never leak the login code in the response.
+      req.log.error({ email, unconfigured: !!sent.dev }, "OTP email not delivered");
+      res.status(502).json({ error: "Couldn't send your login code. Please try again in a moment." });
     }
   } catch (err) {
     req.log.error({ err }, "OTP send error");

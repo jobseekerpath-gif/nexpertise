@@ -189,7 +189,7 @@ function LoginContent() {
               <div className="space-y-3">
                 {config?.otpDevMode && (
                   <div className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded p-2.5">
-                    <strong>Dev mode:</strong> OTP email not configured (no <code>RESEND_API_KEY</code>). The 6-digit code will appear on screen after you click Send OTP.
+                    <strong>Dev mode:</strong> Email isn't connected, so your 6-digit code will appear on screen after you click Send OTP.
                   </div>
                 )}
                 <div className="relative">
@@ -221,7 +221,7 @@ function LoginContent() {
                     <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
                       <p className="text-xs text-amber-700 mb-1">Dev mode — your code is:</p>
                       <p className="text-3xl font-bold tracking-[0.4em] text-amber-900">{devCode}</p>
-                      <p className="text-xs text-amber-600 mt-1">Configure RESEND_API_KEY to send real emails</p>
+                      <p className="text-xs text-amber-600 mt-1">Email isn't connected — this code is shown for testing only</p>
                     </div>
                   )}
                 </div>

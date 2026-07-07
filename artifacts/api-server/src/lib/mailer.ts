@@ -1,26 +1,49 @@
-import { Resend } from "resend";
+import { ReplitConnectors } from "@replit/connectors-sdk";
 import { logger } from "./logger";
 
 // Resend's sandbox sender. Works out of the box but only delivers to the account
-// owner until a domain is verified in Resend. Swap for your verified domain later.
+// owner until you verify a domain in Resend — then swap this for your own address.
 const FROM = "EduBharat <onboarding@resend.dev>";
 
+let _connectors: ReplitConnectors | null = null;
+function connectors(): ReplitConnectors {
+  if (!_connectors) _connectors = new ReplitConnectors();
+  return _connectors;
+}
+
 /**
- * Send an email via Resend when RESEND_API_KEY is set, otherwise log it (dev mode).
- * Never throws — returns { ok } so callers can fire-and-forget safely.
+ * Whether the Replit Resend connector runtime is available. True on Replit
+ * (dev + deployments) once the connector is attached; false when running
+ * outside Replit, where we fall back to logging instead of sending.
+ */
+export function isEmailConfigured(): boolean {
+  return !!process.env["REPLIT_CONNECTORS_HOSTNAME"];
+}
+
+/**
+ * Send an email via the Resend connector. Never throws — returns { ok } so
+ * callers can fire-and-forget safely. When the connector runtime is absent
+ * (local/off-Replit), it logs the email and returns { ok: true, dev: true }
+ * so flows that need the payload can degrade gracefully.
  */
 export async function sendEmail(opts: { to: string; subject: string; html: string }): Promise<{ ok: boolean; dev?: boolean }> {
-  const key = process.env["RESEND_API_KEY"];
-  if (!key) {
-    logger.info({ to: opts.to, subject: opts.subject }, "[mailer] dev mode — email not sent (no RESEND_API_KEY)");
+  if (!isEmailConfigured()) {
+    logger.info({ to: opts.to, subject: opts.subject }, "[mailer] dev mode — email not sent (Resend connector not attached)");
     return { ok: true, dev: true };
   }
   try {
-    const resend = new Resend(key);
-    await resend.emails.send({ from: FROM, to: opts.to, subject: opts.subject, html: opts.html });
+    const resp = await connectors().proxy("resend", "/emails", {
+      method: "POST",
+      body: { from: FROM, to: opts.to, subject: opts.subject, html: opts.html },
+    });
+    if (!resp.ok) {
+      const detail = await resp.text().catch(() => "");
+      logger.error({ status: resp.status, detail: detail.slice(0, 300), to: opts.to }, "[mailer] Resend send failed");
+      return { ok: false };
+    }
     return { ok: true };
   } catch (err) {
-    logger.error({ err: (err as Error).message, to: opts.to }, "[mailer] send failed");
+    logger.error({ err: (err as Error).message, to: opts.to }, "[mailer] Resend send error");
     return { ok: false };
   }
 }
