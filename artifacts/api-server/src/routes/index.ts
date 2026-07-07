@@ -15,6 +15,8 @@ import newsRouter from "./news.js";
 import journeyRouter from "./journey.js";
 import creditsRouter from "./credits.js";
 import upiPaymentsRouter from "./upi-payments.js";
+import adminRouter from "./admin.js";
+import contentRouter from "./content.js";
 
 const router: IRouter = Router();
 
@@ -34,5 +36,7 @@ router.use(newsRouter);
 router.use(journeyRouter);
 router.use(creditsRouter);
 router.use(upiPaymentsRouter);
+router.use(adminRouter);
+router.use(contentRouter);
 
 export default router;

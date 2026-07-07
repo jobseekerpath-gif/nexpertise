@@ -1,12 +1,14 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Resend } from "resend";
 import crypto from "crypto";
 import { db, usersTable, otpsTable } from "@workspace/db";
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, sql } from "drizzle-orm";
 import { mergeGuestProgress } from "./journey";
 import { ensureSignupGrant } from "../lib/credits";
+import { geolocateIp } from "../lib/geo";
+import { logger } from "../lib/logger";
 
 declare module "express-session" {
   interface SessionData {
@@ -30,6 +32,44 @@ declare module "express-session" {
 }
 
 const router: IRouter = Router();
+
+/** Extract the real client IP (leftmost X-Forwarded-For hop behind the proxy). */
+function clientIp(req: Request): string | null {
+  const xff = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim();
+  return xff || req.ip || null;
+}
+
+/**
+ * Record sign-in origin for admin visibility. Writes IP + timestamp immediately and
+ * fills in geolocation once resolved. signup* columns are set only the first time
+ * (COALESCE); lastLogin* every time. Best-effort — never blocks or fails a login.
+ */
+async function recordLogin(userId: number, req: Request): Promise<void> {
+  try {
+    const ip = clientIp(req);
+    await db
+      .update(usersTable)
+      .set({
+        lastLoginIp: ip,
+        lastLoginAt: new Date(),
+        signupIp: sql`COALESCE(${usersTable.signupIp}, ${ip})`,
+      })
+      .where(eq(usersTable.id, userId));
+
+    const loc = await geolocateIp(ip);
+    if (loc) {
+      await db
+        .update(usersTable)
+        .set({
+          lastLoginLocation: loc,
+          signupLocation: sql`COALESCE(${usersTable.signupLocation}, ${loc})`,
+        })
+        .where(eq(usersTable.id, userId));
+    }
+  } catch (err) {
+    logger.warn({ err: (err as Error).message, userId }, "recordLogin failed");
+  }
+}
 
 /**
  * Determine the Google OAuth callback URL.
@@ -215,6 +255,8 @@ router.get(
         delete req.session.pendingGuestId;
         await mergeGuestProgress(pendingGuestId, String(u.id));
       }
+
+      void recordLogin(u.id, req);
     }
     res.redirect("/");
   }
@@ -315,6 +357,8 @@ router.post("/auth/otp/verify", async (req, res) => {
       await mergeGuestProgress(guestId, String(user[0].id));
     }
 
+    void recordLogin(user[0].id, req);
+
     res.json({ success: true, user: { id: user[0].id, email: user[0].email, name: user[0].name } });
   } catch (err) {
     req.log.error({ err }, "OTP verify error");
@@ -334,7 +378,7 @@ router.get("/auth/me", async (req, res) => {
     // Parse skills JSON for client convenience
     let skills: string[] = [];
     if (user.skills) { try { skills = JSON.parse(user.skills) as string[]; } catch { skills = []; } }
-    res.json({ user: { ...user, skills } });
+    res.json({ user: { ...user, skills, isAdmin: req.session.isAdmin === true } });
   } catch {
     res.json({ user: null });
   }

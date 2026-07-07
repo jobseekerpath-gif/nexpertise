@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { BookOpen, Briefcase, Newspaper, ArrowRight, Sparkles, CheckCircle2, Star } from "lucide-react";
 import { TUTORS } from "@/lib/tutors";
 import { HomeMeta } from "@/components/page-meta";
+import { useContent } from "@/lib/use-content";
 
 const FEATURED_TUTORS = TUTORS.slice(0, 3);
 
@@ -49,6 +50,13 @@ const PROOF_POINTS = [
 ];
 
 export default function Home() {
+  const heroBadge = useContent("home.hero.badge", "AI-powered career platform for India");
+  const heroSubtitle = useContent(
+    "home.hero.subtitle",
+    "EduBharat gives every Indian learner a personal AI mentor — for spoken English, mock interviews, and live career updates.",
+  );
+  const ctaPrimary = useContent("home.hero.ctaPrimary", "Start Learning Free");
+  const ctaSecondary = useContent("home.hero.ctaSecondary", "Browse Jobs");
   return (
     <>
       <HomeMeta />
@@ -62,7 +70,7 @@ export default function Home() {
             <div className="max-w-2xl animate-in slide-in-from-bottom-8 duration-700">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-semibold mb-5 border border-primary/20">
                 <Sparkles className="w-4 h-4" />
-                <span>AI-powered career platform for India</span>
+                <span>{heroBadge}</span>
               </div>
               <h1 className="max-w-xl text-4xl sm:text-5xl lg:text-6xl font-display font-extrabold tracking-tight text-secondary mb-5 leading-[1.05]">
                 Master English.<br />
@@ -70,7 +78,7 @@ export default function Home() {
                 <span className="text-primary">Get the Job.</span>
               </h1>
               <p className="text-base sm:text-lg text-muted-foreground mb-6 leading-relaxed max-w-xl">
-                EduBharat gives every Indian learner a personal AI mentor — for spoken English, mock interviews, and live career updates.
+                {heroSubtitle}
               </p>
               <ul className="space-y-2 mb-8">
                 {PROOF_POINTS.map(p => (
@@ -83,13 +91,13 @@ export default function Home() {
               <div className="flex flex-wrap gap-3">
                 <Link href="/english-guru">
                   <Button size="lg" className="h-12 px-7 text-base font-bold shadow-lg shadow-primary/20">
-                    Start Learning Free
+                    {ctaPrimary}
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </Button>
                 </Link>
                 <Link href="/rozgar-samachar">
                   <Button size="lg" variant="outline" className="h-12 px-7 text-base font-semibold">
-                    Browse Jobs
+                    {ctaSecondary}
                   </Button>
                 </Link>
               </div>

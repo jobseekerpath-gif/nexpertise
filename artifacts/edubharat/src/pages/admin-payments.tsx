@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Loader2, CheckCircle2, XCircle, RefreshCw, ShieldAlert, IndianRupee, Clock } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, RefreshCw, ShieldAlert, IndianRupee, Clock, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { PageMeta } from "@/components/page-meta";
 import { useAuth } from "@/lib/use-auth";
+import { AdminNav } from "@/components/admin-nav";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -21,6 +22,7 @@ type Payment = {
   status: string;
   rejectionReason: string | null;
   createdAt: string;
+  reversedAt: string | null;
 };
 
 function formatDate(iso: string) {
@@ -33,6 +35,7 @@ const STATUS_COLORS: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700",
   approved: "bg-green-100 text-green-700",
   rejected: "bg-red-100 text-red-600",
+  reversed: "bg-purple-100 text-purple-700",
 };
 
 export default function AdminPayments() {
@@ -45,8 +48,10 @@ export default function AdminPayments() {
   const [acting, setActing] = useState<Record<number, boolean>>({});
   const [rejectReason, setRejectReason] = useState<Record<number, string>>({});
   const [showRejectInput, setShowRejectInput] = useState<Record<number, boolean>>({});
+  const [reverseReason, setReverseReason] = useState<Record<number, string>>({});
+  const [showReverseInput, setShowReverseInput] = useState<Record<number, boolean>>({});
 
-  const isAdmin = user?.email === "admin@edubharat.in";
+  const isAdmin = user?.isAdmin === true;
 
   const fetchPayments = useCallback(async () => {
     setFetching(true);
@@ -114,6 +119,29 @@ export default function AdminPayments() {
     }
   }, [fetchPayments, rejectReason, toast]);
 
+  const reverse = useCallback(async (id: number) => {
+    setActing((a) => ({ ...a, [id]: true }));
+    try {
+      const res = await fetch(`${BASE}/api/credits/upi/reverse/${id}`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reverseReason[id] ?? "" }),
+      });
+      if (res.ok) {
+        toast({ title: "Payment reversed — credits clawed back" });
+        void fetchPayments();
+      } else {
+        const d = await res.json() as { error?: string };
+        toast({ title: "Reversal failed", description: d.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Network error", variant: "destructive" });
+    } finally {
+      setActing((a) => ({ ...a, [id]: false }));
+      setShowReverseInput((s) => ({ ...s, [id]: false }));
+    }
+  }, [fetchPayments, reverseReason, toast]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -130,6 +158,7 @@ export default function AdminPayments() {
   return (
     <div className="container mx-auto px-4 max-w-4xl py-8">
       <PageMeta title="Payments · Admin · EduBharat" description="Manage UPI payment approvals" />
+      <AdminNav />
 
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -249,10 +278,42 @@ export default function AdminPayments() {
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLORS[p.status] ?? ""}`}>
                         {p.status}
                       </span>
+                      {p.status === "approved" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-purple-300 text-purple-700 hover:bg-purple-50 font-bold h-7 text-xs"
+                          onClick={() => setShowReverseInput((s) => ({ ...s, [p.id]: !s[p.id] }))}
+                          disabled={acting[p.id]}
+                        >
+                          <RotateCcw className="w-3 h-3 mr-1" />Reverse
+                        </Button>
+                      )}
                     </div>
                   </div>
                   {p.rejectionReason && (
                     <p className="text-xs text-red-500 mt-1">Reason: {p.rejectionReason}</p>
+                  )}
+                  {p.reversedAt && (
+                    <p className="text-xs text-purple-600 mt-1">Reversed on {formatDate(p.reversedAt)}</p>
+                  )}
+                  {showReverseInput[p.id] && p.status === "approved" && (
+                    <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                      <Input
+                        placeholder="Reason for reversal (e.g. fake UTR found)"
+                        className="h-8 text-xs"
+                        value={reverseReason[p.id] ?? ""}
+                        onChange={(e) => setReverseReason((r) => ({ ...r, [p.id]: e.target.value }))}
+                      />
+                      <Button
+                        size="sm"
+                        className="h-8 shrink-0 text-xs bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                        onClick={() => void reverse(p.id)}
+                        disabled={acting[p.id]}
+                      >
+                        {acting[p.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Confirm claw-back"}
+                      </Button>
+                    </div>
                   )}
                 </CardContent>
               </Card>

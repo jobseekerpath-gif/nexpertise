@@ -11,6 +11,10 @@ const PgSession = connectPgSimple(session);
 
 const app: Express = express();
 
+// Behind Replit's proxy — trust X-Forwarded-* so req.ip is the real client IP
+// (used for admin visibility) and secure cookies work correctly in production.
+app.set("trust proxy", true);
+
 app.use(
   pinoHttp({
     logger,

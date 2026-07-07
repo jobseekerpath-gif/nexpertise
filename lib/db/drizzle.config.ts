@@ -12,4 +12,8 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL,
   },
+  // `user_sessions` is created and owned at runtime by connect-pg-simple, not by
+  // drizzle. Excluding it stops push from treating it as a drop and prompting a
+  // (non-interactive-unsafe) create/rename resolver when new tables are added.
+  tablesFilter: ["!user_sessions"],
 });

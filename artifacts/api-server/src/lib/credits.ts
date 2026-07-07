@@ -67,53 +67,57 @@ type MutateResult =
   | { ok: true; balance: number; already?: boolean }
   | { ok: false; reason: "insufficient" | "no_user"; balance: number };
 
+/** A drizzle transaction handle — the object passed to `db.transaction(cb)`. */
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 /**
- * Atomically change a user's balance and append a ledger row.
- * Locks the user row (FOR UPDATE) so concurrent spends/grants can't double-count.
+ * Core balance mutation, run against an existing transaction handle. Locks the
+ * user row (FOR UPDATE) so concurrent spends/grants can't double-count.
  */
-async function mutate({
-  userId,
-  amount,
-  type,
-  description,
-  reference = null,
-  idempotent = false,
-}: MutateArgs): Promise<MutateResult> {
-  return db.transaction(async (tx) => {
-    const locked = await tx
-      .select({ credits: usersTable.credits })
-      .from(usersTable)
-      .where(eq(usersTable.id, userId))
-      .for("update")
+async function mutateTx(
+  tx: Tx,
+  { userId, amount, type, description, reference = null, idempotent = false }: MutateArgs,
+): Promise<MutateResult> {
+  const locked = await tx
+    .select({ credits: usersTable.credits })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .for("update")
+    .limit(1);
+
+  if (locked.length === 0) return { ok: false, reason: "no_user", balance: 0 };
+  const current = locked[0]!.credits;
+
+  // Idempotency guard for grants/purchases: same (type, reference) is applied once.
+  if (idempotent && reference) {
+    const existing = await tx
+      .select({ id: creditTransactionsTable.id })
+      .from(creditTransactionsTable)
+      .where(and(eq(creditTransactionsTable.type, type), eq(creditTransactionsTable.reference, reference)))
       .limit(1);
+    if (existing.length > 0) return { ok: true, balance: current, already: true };
+  }
 
-    if (locked.length === 0) return { ok: false, reason: "no_user", balance: 0 };
-    const current = locked[0]!.credits;
+  const next = current + amount;
+  if (next < 0) return { ok: false, reason: "insufficient", balance: current };
 
-    // Idempotency guard for grants/purchases: same (type, reference) is applied once.
-    if (idempotent && reference) {
-      const existing = await tx
-        .select({ id: creditTransactionsTable.id })
-        .from(creditTransactionsTable)
-        .where(and(eq(creditTransactionsTable.type, type), eq(creditTransactionsTable.reference, reference)))
-        .limit(1);
-      if (existing.length > 0) return { ok: true, balance: current, already: true };
-    }
-
-    const next = current + amount;
-    if (next < 0) return { ok: false, reason: "insufficient", balance: current };
-
-    await tx.update(usersTable).set({ credits: next, updatedAt: new Date() }).where(eq(usersTable.id, userId));
-    await tx.insert(creditTransactionsTable).values({
-      userId,
-      amount,
-      balanceAfter: next,
-      type,
-      description: description ?? null,
-      reference,
-    });
-    return { ok: true, balance: next };
+  await tx.update(usersTable).set({ credits: next, updatedAt: new Date() }).where(eq(usersTable.id, userId));
+  await tx.insert(creditTransactionsTable).values({
+    userId,
+    amount,
+    balanceAfter: next,
+    type,
+    description: description ?? null,
+    reference,
   });
+  return { ok: true, balance: next };
+}
+
+/**
+ * Atomically change a user's balance and append a ledger row, in its own transaction.
+ */
+async function mutate(args: MutateArgs): Promise<MutateResult> {
+  return db.transaction((tx) => mutateTx(tx, args));
 }
 
 export async function grantCredits(args: {
@@ -131,6 +135,20 @@ export async function grantCredits(args: {
   return { ok: true, balance: r.balance, already: r.already };
 }
 
+/**
+ * Grant credits within an existing transaction — used when the grant must commit
+ * or roll back atomically with another change (e.g. flipping a UPI payment to
+ * "approved", so the status and the credit mint can never diverge).
+ */
+export async function grantCreditsTx(
+  tx: Tx,
+  args: { userId: number; amount: number; type: CreditType; description?: string; reference?: string | null },
+): Promise<{ ok: boolean; balance: number; already?: boolean }> {
+  const r = await mutateTx(tx, { ...args, amount: Math.abs(args.amount), idempotent: true });
+  if (!r.ok) return { ok: false, balance: r.balance };
+  return { ok: true, balance: r.balance, already: r.already };
+}
+
 export async function spendCredits(args: {
   userId: number;
   amount: number;
@@ -141,6 +159,59 @@ export async function spendCredits(args: {
 }): Promise<{ ok: boolean; balance: number; already?: boolean }> {
   const r = await mutate({ ...args, amount: -Math.abs(args.amount), idempotent: args.idempotent ?? false });
   return { ok: r.ok, balance: r.balance, already: r.ok ? r.already : undefined };
+}
+
+/**
+ * Claw back credits from a previously-granted (now reversed) UPI top-up, within
+ * an existing transaction. Deducts up to the granted amount but never drives the
+ * balance negative — if the user already spent some, we recover only what
+ * remains. Idempotent via (type, reference), so re-reversing is a safe no-op.
+ */
+export async function reverseCreditsTx(
+  tx: Tx,
+  args: { userId: number; amount: number; description?: string; reference: string },
+): Promise<{ ok: boolean; recovered: number; balance: number; already?: boolean }> {
+  const { userId, amount, description, reference } = args;
+  const type: CreditType = "adjustment";
+  const locked = await tx
+    .select({ credits: usersTable.credits })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .for("update")
+    .limit(1);
+  if (locked.length === 0) return { ok: false, recovered: 0, balance: 0 };
+  const current = locked[0]!.credits;
+
+  // Idempotency: a reversal for this payment is applied at most once.
+  const existing = await tx
+    .select({ id: creditTransactionsTable.id })
+    .from(creditTransactionsTable)
+    .where(and(eq(creditTransactionsTable.type, type), eq(creditTransactionsTable.reference, reference)))
+    .limit(1);
+  if (existing.length > 0) return { ok: true, recovered: 0, balance: current, already: true };
+
+  const recovered = Math.max(0, Math.min(Math.abs(amount), current));
+  const next = current - recovered;
+  await tx.update(usersTable).set({ credits: next, updatedAt: new Date() }).where(eq(usersTable.id, userId));
+  await tx.insert(creditTransactionsTable).values({
+    userId,
+    amount: -recovered,
+    balanceAfter: next,
+    type,
+    description: description ?? "Reversed UPI top-up (payment not confirmed)",
+    reference,
+  });
+  return { ok: true, recovered, balance: next };
+}
+
+/** Claw back credits in its own transaction (see reverseCreditsTx). */
+export async function reverseCredits(args: {
+  userId: number;
+  amount: number;
+  description?: string;
+  reference: string;
+}): Promise<{ ok: boolean; recovered: number; balance: number; already?: boolean }> {
+  return db.transaction((tx) => reverseCreditsTx(tx, args));
 }
 
 /** Grant the one-time welcome bonus. Idempotent per user (reference = signup:<id>). */

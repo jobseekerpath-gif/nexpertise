@@ -15,6 +15,7 @@ import {
   useCredits, submitUpiPayment, pollUpiPaymentStatus, fetchTransactions,
   CREDIT_MIN_PURCHASE, CREDIT_QUICK_PICKS, type CreditTx,
 } from "@/lib/use-credits";
+import { useContent } from "@/lib/use-content";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const UPI_ID = "abcfghijk@ybl";
@@ -53,6 +54,11 @@ export default function BuyCredits() {
   const { balance, authenticated, loaded } = useCredits();
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const heroTitle = useContent("credits.hero.title", "EduBharat Credits");
+  const heroSubtitle = useContent(
+    "credits.hero.subtitle",
+    "1 credit = ₹1. Pay via UPI — GPay, PhonePe, Paytm, or any UPI app. Credits never expire.",
+  );
 
   const [stage, setStage] = useState<Stage>("pick");
   const [amount, setAmount] = useState(99);
@@ -343,11 +349,8 @@ export default function BuyCredits() {
         <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-4 shadow-sm">
           <Coins className="w-8 h-8" />
         </div>
-        <h1 className="text-3xl sm:text-4xl font-display font-bold text-secondary mb-2">EduBharat Credits</h1>
-        <p className="text-muted-foreground max-w-xl mx-auto">
-          1 credit = <span className="font-semibold text-secondary">₹1</span>. Pay via UPI — GPay, PhonePe, Paytm, or any UPI app.
-          Credits never expire.
-        </p>
+        <h1 className="text-3xl sm:text-4xl font-display font-bold text-secondary mb-2">{heroTitle}</h1>
+        <p className="text-muted-foreground max-w-xl mx-auto">{heroSubtitle}</p>
       </div>
 
       {/* Balance / sign-in */}

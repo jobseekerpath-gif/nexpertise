@@ -6,6 +6,7 @@ export type AuthUser = {
   name?: string | null;
   picture?: string | null;
   preferredLanguage?: string | null;
+  isAdmin?: boolean;
 };
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";

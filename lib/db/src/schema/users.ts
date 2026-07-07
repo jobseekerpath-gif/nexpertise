@@ -37,6 +37,13 @@ export const usersTable = pgTable("users", {
   resumeFileName: text("resume_file_name"),
   resumeAnalysis: text("resume_analysis"), // JSON object stored as text
   experienceSummary: text("experience_summary"),
+  // Sign-in origin — captured on first sign-in (signup*) and refreshed each login
+  // (lastLogin*). Best-effort geolocation derived from IP; shown in the admin user directory.
+  signupIp: text("signup_ip"),
+  signupLocation: text("signup_location"),
+  lastLoginIp: text("last_login_ip"),
+  lastLoginLocation: text("last_login_location"),
+  lastLoginAt: timestamp("last_login_at"),
   // Credit-based access — 1 credit = ₹1. This balance is the source of truth for spend checks;
   // credit_transactions below is the audit trail + idempotency guard.
   credits: integer("credits").notNull().default(0),
@@ -198,9 +205,11 @@ export const upiPaymentsTable = pgTable("upi_payments", {
   credits: integer("credits").notNull(),        // credits to grant on approval
   amountInr: integer("amount_inr").notNull(),   // same value — 1 credit = ₹1
   utr: text("utr").notNull(),                   // UTR / reference number from student
-  status: text("status").notNull().default("pending"), // pending | approved | rejected
-  rejectionReason: text("rejection_reason"),
-  approvedBy: integer("approved_by"),           // admin userId
+  status: text("status").notNull().default("pending"), // pending | approved | rejected | reversed
+  rejectionReason: text("rejection_reason"),    // reason for a reject OR a reversal (claw-back)
+  approvedBy: integer("approved_by"),           // admin userId who approved/rejected
+  reversedBy: integer("reversed_by"),           // admin userId who reversed an already-approved payment
+  reversedAt: timestamp("reversed_at"),         // when the claw-back happened
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -209,6 +218,17 @@ export const upiPaymentsTable = pgTable("upi_payments", {
   uniqueIndex("upi_payments_utr_idx").on(table.utr),
 ]);
 export type UpiPayment = typeof upiPaymentsTable.$inferSelect;
+
+// ── Site Content (CMS) ───────────────────────────────────────────────────────
+// Editable text overrides for the web app. Defaults live in code (the content
+// registry on the client); a row here overrides the default for a given key.
+export const siteContentTable = pgTable("site_content", {
+  key: text("key").primaryKey(),      // e.g. "home.hero.title"
+  value: text("value").notNull(),
+  updatedBy: integer("updated_by"),   // admin userId
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export type SiteContent = typeof siteContentTable.$inferSelect;
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertOtpSchema = createInsertSchema(otpsTable).omit({ id: true, createdAt: true });
