@@ -235,10 +235,10 @@ function EnglishGuruContent() {
         aiBusyRef.current = false;
         if (!liveChatRef.current) return;
         setConvFlowState("user-speaking");
-        // Echo-guard: 800 ms matches handleConvPhrase so teacher-switch greetings
+        // Echo-guard: 1200 ms matches handleConvPhrase so teacher-switch greetings
         // never get self-captured by the mic on the next turn.
         lastAiSpeechEndRef.current = Date.now();
-        speechRef.current.blockFor(800);
+        speechRef.current.blockFor(1200);
       };
       speakSafetyTimerRef.current = setTimeout(releaseGreeting, Math.max(greeting.length * 60 + 4000, 8000));
       synth.speak(stripMarkdownForSpeech(greeting), uiLang, releaseGreeting, { voiceGender: t.voiceGender, voiceStyle: t.voiceStyle });
@@ -256,10 +256,10 @@ function EnglishGuruContent() {
     // Guard: normal phrases need content; silence probes just need the channel to be free.
     if (!isSilenceProbe && (!phrase.trim() || (!liveChatRef.current && isStreaming) || aiBusyRef.current)) return;
     if (isSilenceProbe && (aiBusyRef.current || !liveChatRef.current)) return;
-    // Echo guard: a phrase arriving within ~2.5s of the AI finishing, that closely
+    // Echo guard: a phrase arriving within ~3.5s of the AI finishing, that closely
     // matches what the AI just said, is the mic hearing the speaker — not the user.
     // Drop it so the teacher never "replies to its own voice".
-    if (!isSilenceProbe && Date.now() - lastAiSpeechEndRef.current < 2500) {
+    if (!isSilenceProbe && Date.now() - lastAiSpeechEndRef.current < 3500) {
       const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
       const p = norm(phrase);
       const ai = norm(lastAiSpeechRef.current);
@@ -295,7 +295,7 @@ function EnglishGuruContent() {
           setConvHistory(h => [...h, { role: "user", text: userMsg }]);
         }
         // Build AI context: for silence probes, inject a re-engage instruction
-        const historySlice = [...convHistoryRef.current.slice(-4)];
+        const historySlice = [...convHistoryRef.current.slice(-6)];
         if (!isSilenceProbe) historySlice.push({ role: "user" as const, text: userMsg });
         const recentHistory = historySlice
           .map(m => `${m.role === "user" ? "Student" : teacherShort}: ${m.text}`).join("\n");
@@ -347,6 +347,7 @@ Rules for spoken replies:
 - Vary your opening reactions — never use the same one twice: "Oh interesting!", "Hmm!", "Right, so...", "Actually...", "Oh nice!", "Ah I see!", "Yeah, and...", "Good point!", "That makes sense..."
 - Use natural fillers occasionally: "Hmm...", "You know...", "Actually...", "Let me think..."
 - Ask follow-up questions based on what they just said — never repeat a question already covered in this conversation.
+- NEVER restate, rephrase, or echo your own previous message — each reply must add something genuinely new and move the conversation forward.
 - If they make a grammar mistake, quietly use the correct form in YOUR next sentence — never point it out.
 - NEVER use bullet points, numbered lists, dashes, asterisks, or any formatting.
 - NEVER start your reply with your name or any label like "Teacher:".
@@ -360,10 +361,11 @@ Rules for spoken replies:
           if (speakSafetyTimerRef.current) { clearTimeout(speakSafetyTimerRef.current); speakSafetyTimerRef.current = null; }
           aiBusyRef.current = false;
           if (liveChatRef.current) {
-            // 800 ms block — generous enough to outlast speaker echo so the
-            // mic can't capture the AI's own voice on the second turn.
+            // 1200 ms block — generous enough to outlast speaker echo (incl.
+            // cross-script transliteration of the AI's own English speech) so the
+            // mic can't capture the AI's voice and feed it back as a "user" turn.
             lastAiSpeechEndRef.current = Date.now();
-            speechRef.current.blockFor(800);
+            speechRef.current.blockFor(1200);
             setConvFlowState("user-speaking");
           } else {
             setConvFlowState("idle");

@@ -87,10 +87,11 @@ function FallbackSVG({
 /**
  * Time-based "talking mouth" for real portraits. We can't lip-sync to the actual
  * TTS audio (routing it through an AudioContext risks breaking autoplay unlock)
- * and we have no open-mouth frame, so we animate a feathered copy of the lower
- * face: a subtle vertical jaw-drop that opens and closes at a natural, slightly
- * randomized speech cadence. It only mounts while speaking, so the idle photo is
- * pixel-identical to before.
+ * and we have no open-mouth frame, so we animate a feathered copy of ONLY the
+ * mouth/jaw band (~43%–66% of the portrait height): a subtle vertical jaw-drop
+ * hinged at the upper lip. Everything below the jaw (neck, collar, chest) is
+ * masked out entirely, so it never moves. It only mounts while speaking, so the
+ * idle photo is pixel-identical to before.
  */
 function PhotoMouth({ imageSrc, px }: { imageSrc: string; px: number }) {
   const [open, setOpen] = useState(false);
@@ -116,8 +117,10 @@ function PhotoMouth({ imageSrc, px }: { imageSrc: string; px: number }) {
     <div
       className="absolute inset-0 pointer-events-none"
       style={{
-        WebkitMaskImage: "linear-gradient(to bottom, transparent 56%, black 67%)",
-        maskImage: "linear-gradient(to bottom, transparent 56%, black 67%)",
+        // Only the mouth/jaw band is part of the animated copy; everything below
+        // ~66% (neck, collar, chest) is fully masked out so it can never move.
+        WebkitMaskImage: "linear-gradient(to bottom, transparent 43%, black 49%, black 59%, transparent 66%)",
+        maskImage: "linear-gradient(to bottom, transparent 43%, black 49%, black 59%, transparent 66%)",
       }}
       aria-hidden="true"
     >
@@ -128,8 +131,9 @@ function PhotoMouth({ imageSrc, px }: { imageSrc: string; px: number }) {
         height={px}
         className="w-full h-full object-cover object-top"
         style={{
-          transformOrigin: "50% 58%",
-          transform: open ? "scaleY(1.055)" : "scaleY(1)",
+          // Hinge at the upper lip so only the jaw/chin drops — never the chest.
+          transformOrigin: "50% 46%",
+          transform: open ? "scaleY(1.06)" : "scaleY(1)",
           transition: "transform 70ms ease-out",
         }}
         draggable={false}

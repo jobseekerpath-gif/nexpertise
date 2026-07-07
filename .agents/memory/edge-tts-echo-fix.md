@@ -29,6 +29,10 @@ Root cause: mic picks up AI voice from speakers (bad on laptop + mobile) because
 
 **Why:** 1200ms post-speech silence prevents recognition from spawning while room echo of AI voice is still audible (especially laptop/phone speakers).
 
+## Cross-script echo (native-language live chat)
+English Guru keeps a NATIVE-language recognizer (the app advertises native input), so when the AI speaks English the recognizer often transcribes that English audio PHONETICALLY into the native script. A word-overlap echo guard comparing Latin-script tokens then misses it, and the AI "hears itself" and repeats.
+**Fix (do NOT force English recognition — it breaks legit native input):** lean on TIME-based guards (the post-speech `blockFor` window + a wider "ignore input for N ms after AI speech ended" window), feed more recent turn history into the prompt, and add an explicit "never restate your own previous message" instruction. Keep ALL post-AI-speech release paths (including the tutor-switch greeting) on the SAME block duration — a stray shorter one leaves that path under-protected.
+
 ## API Limits
 - `/api/tts` rejects text > 3000 characters
 - Streams `audioStream` from `msedge-tts`'s `tts.toStream()` result (returns `{ audioStream, metadataStream }` — use `audioStream` not result directly)

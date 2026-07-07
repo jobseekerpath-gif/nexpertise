@@ -9,6 +9,7 @@
 - [Interview Ace auto-listen](interview-auto-listen.md) — mock interviews should start listening automatically after each question and feel conversational, not scripted.
 - [Interview Ace analytics](interview-analytics.md) — persist one canonical interview session per completed report, not per-question, so progress trends reflect full interviews.
 - [Interview structured format](interview-structured-format.md) — interviews follow a FIXED role-specific agenda (interview-format.ts), ordered no-skip stage ref scaled to the questioning window, professional non-chatty tone; live AI is web-only.
+- [Interview report generation](interview-report-generation.md) — split into 2 AI calls so a big per-question array can't truncate scores to uniform-60; competencies live in feedbackJson (no schema change).
 - [Rozgar profile feed](rozgar-profile-feed.md) — Rozgar should stay candidate-driven, with profile basics shaping every section and a live hiring pulse before AI summaries.
 - [Voice switching should stop playback](voice-switch-stop-playback.md) — changing tutor voice must cancel active speech immediately so male/female voices never mix.
 - [Compact page scroll shells](compact-page-scroll-shells.md) — full-viewport routes still need a real scroll path; inner panes alone can make the page feel frozen.

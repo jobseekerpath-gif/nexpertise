@@ -22,7 +22,7 @@ import { PageMeta } from "@/components/page-meta";
 import {
   Loader2, Mic, MicOff, PlayCircle, ChevronRight, Download, Volume2,
   LogOut, CheckCircle2, ChevronDown, MessageCircle, Pencil, Flame, Brain,
-  Star, Trophy, Clock, Timer, AlertCircle, Save, PhoneOff, VideoOff, Video,
+  Star, Trophy, Clock, Timer, AlertCircle, Save, PhoneOff, VideoOff, Video, Target,
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -67,6 +67,8 @@ type QA = {
 
 type Coach = typeof INTERVIEW_COACHES[number];
 
+type Competency = { score: number; comment: string };
+
 type InterviewReport = {
   overallScore: number;
   communicationScore: number;
@@ -74,6 +76,16 @@ type InterviewReport = {
   confidenceScore: number;
   technicalScore: number;
   roleFit: string;
+  /** Full HR competency-framework assessment (one score + comment per area). */
+  competencies?: {
+    functionalKnowledge: Competency;
+    communication: Competency;
+    collaboration: Competency;
+    personality: Competency;
+    education: Competency;
+    itSkills: Competency;
+    adaptability: Competency;
+  };
   strengths: string[];
   improvements: string[];
   nextSteps: string[];
@@ -82,6 +94,18 @@ type InterviewReport = {
     confidence: number; technical: number; feedback: string;
   }>;
 };
+
+/** The competency-framework rows, in display order, shared by the report UI and
+ *  the downloadable transcript. Keys match InterviewReport.competencies. */
+const COMPETENCY_ROWS = [
+  { key: "functionalKnowledge", label: "Functional / Domain Knowledge" },
+  { key: "communication", label: "Communication Skills" },
+  { key: "collaboration", label: "Collaboration & Teamwork" },
+  { key: "personality", label: "Personality & Disposition" },
+  { key: "education", label: "Educational Background" },
+  { key: "itSkills", label: "IT & Digital Skills" },
+  { key: "adaptability", label: "Adaptability & Flexibility" },
+] as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -127,10 +151,27 @@ function cleanForSpeech(text: string): string {
     .trim();
 }
 
+function parseCompetency(v: unknown): Competency {
+  const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  return {
+    score: Math.min(100, Math.max(0, Number(o["score"]) || 0)),
+    comment: String(o["comment"] || ""),
+  };
+}
+
 function parseReportJson(text: string): InterviewReport | null {
-  const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  let cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  // If the model wrapped the JSON in prose, keep only the outermost {...} block
+  // so a stray sentence before/after the object doesn't break JSON.parse.
+  const first = cleaned.indexOf("{");
+  const last = cleaned.lastIndexOf("}");
+  if (first !== -1 && last !== -1 && last > first) cleaned = cleaned.slice(first, last + 1);
   try {
     const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+    const comp =
+      parsed["competencies"] && typeof parsed["competencies"] === "object"
+        ? (parsed["competencies"] as Record<string, unknown>)
+        : undefined;
     return {
       overallScore: Math.min(100, Math.max(0, Number(parsed["overallScore"]) || 0)),
       communicationScore: Math.min(100, Math.max(0, Number(parsed["communicationScore"]) || 0)),
@@ -138,6 +179,17 @@ function parseReportJson(text: string): InterviewReport | null {
       confidenceScore: Math.min(100, Math.max(0, Number(parsed["confidenceScore"]) || 0)),
       technicalScore: Math.min(100, Math.max(0, Number(parsed["technicalScore"]) || 0)),
       roleFit: String(parsed["roleFit"] || ""),
+      competencies: comp
+        ? {
+            functionalKnowledge: parseCompetency(comp["functionalKnowledge"]),
+            communication: parseCompetency(comp["communication"]),
+            collaboration: parseCompetency(comp["collaboration"]),
+            personality: parseCompetency(comp["personality"]),
+            education: parseCompetency(comp["education"]),
+            itSkills: parseCompetency(comp["itSkills"]),
+            adaptability: parseCompetency(comp["adaptability"]),
+          }
+        : undefined,
       strengths: Array.isArray(parsed["strengths"]) ? parsed["strengths"].map(String) : [],
       improvements: Array.isArray(parsed["improvements"]) ? parsed["improvements"].map(String) : [],
       nextSteps: Array.isArray(parsed["nextSteps"]) ? parsed["nextSteps"].map(String) : [],
@@ -278,6 +330,9 @@ function InterviewAceContent() {
   // fixing the "stops after 1 question" bug caused by the effect firing eagerly
   // between when the stream ends and when speakCoach actually starts TTS.
   const [coachSpeaking, setCoachSpeaking] = useState(false);
+  // coachThinking drives the "considering your answer" indicator during the
+  // deliberate pause between the candidate finishing and the interviewer replying.
+  const [coachThinking, setCoachThinking] = useState(false);
   // Safety timer: if TTS is aborted or the fetch hangs, onEnd never fires and
   // coachSpeaking gets stuck true permanently — the mic never starts. This ref
   // holds a fallback timer that force-clears the flag after a generous timeout.
@@ -369,6 +424,12 @@ function InterviewAceContent() {
   const [saved, setSaved] = useState(false);
   const autoSubmitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const endingRef = useRef(false);
+  // Guards against a second interview turn starting before the current one finishes
+  // (record → stream → thinking pause → speak). Set synchronously at the top of
+  // submitCurrentAnswer; reset reactively below when the coach stops speaking — which
+  // marks the true end of a turn (coachSpeaking stays true through the thinking pause).
+  const turnInFlightRef = useRef(false);
+  useEffect(() => { if (!coachSpeaking) turnInFlightRef.current = false; }, [coachSpeaking]);
   // Tracks the current structured-interview stage index so the agenda advances in
   // order and never skips a stage, even if long answers make the clock jump ahead.
   const stageIdxRef = useRef(0);
@@ -582,6 +643,12 @@ STRICT rules:
 
   const submitCurrentAnswer = useCallback(async (userAnswer: string) => {
     if (!userAnswer || !currentQ) return;
+    // Non-reentrancy: never start a new turn while one is still in flight. The
+    // deliberate thinking pause leaves isStreaming false for ~4.5s, so a manual
+    // submit could otherwise start an overlapping turn and double-advance the
+    // stage. The ref is synchronous, closing even a same-tick double submit.
+    if (turnInFlightRef.current) return;
+    turnInFlightRef.current = true;
     clearAutoSubmitTimer();
     setIsRecording(false);
     speech.stop();
@@ -595,7 +662,7 @@ STRICT rules:
 
     const elapsedMin = Math.floor(elapsedSeconds / 60);
     const remainingMin = duration - elapsedMin;
-    const isFinalQuestion = remainingMin <= 2;
+    const isFinalQuestion = elapsedSeconds >= duration * 60 - 60;
 
     // Record the answer without generating per-question feedback
     setQuestions(prev => prev.map((q, i) => i === currentIdx
@@ -623,11 +690,11 @@ STRICT rules:
     const isShortAnswer = wordCount < 20;
 
     // Move through the fixed assessment agenda IN ORDER. Progress is scaled
-    // against the questioning window (questions stop ~2 min before the clock runs
+    // against the questioning window (questions stop ~1 min before the clock runs
     // out) so the closing stage is always reachable. We advance by at most one
     // stage per question and never move backward — so no stage is ever skipped,
     // even when long answers make the clock jump ahead several stages.
-    const progress = Math.min(1, elapsedSeconds / Math.max(60, (duration - 2) * 60));
+    const progress = Math.min(1, elapsedSeconds / Math.max(60, duration * 60 - 60));
     const timeStageIdx = stageIndexForProgress(progress);
     const stageIdx = timeStageIdx > stageIdxRef.current ? stageIdxRef.current + 1 : stageIdxRef.current;
     const stage = INTERVIEW_STAGES[stageIdx]!;
@@ -635,6 +702,10 @@ STRICT rules:
       ? `${stage.focus} — ${functionalKnowledgeFor(typeMeta.value, typeMeta.label)}`
       : stage.focus;
     let response = "";
+    // Start the deliberate "thinking" pause the moment we begin processing the
+    // answer, so the interviewer never replies the instant the candidate stops.
+    const thinkStart = Date.now();
+    setCoachThinking(true);
     try {
     response = await stream(
       `You are ${coach.name} conducting a formal, STRUCTURED ${typeMeta.label} interview. ${remainingMin} minutes left.
@@ -651,7 +722,7 @@ This interview follows a FIXED sequence of assessment stages and you must stay o
 
 ${isShortAnswer
   ? `Their answer was brief (${wordCount} words). Politely ask them to elaborate or give a specific example — remain within the "${stage.label}" stage.`
-  : `Ask the NEXT question for the "${stage.label}" stage. Focus on: ${stageFocus}. You may probe a little deeper on their last answer or move to the next point, but stay WITHIN this stage.`}
+  : `Ask the NEXT question for the "${stage.label}" stage. Focus on: ${stageFocus}. Make it a genuine two-way exchange: if their last answer opened something worth exploring, ask a specific FOLLOW-UP that probes deeper — a "why", a "how", or a concrete example — before moving to the next point. Cover this stage thoroughly rather than rushing ahead. Stay WITHIN this stage.`}
 
 RULES — non-negotiable:
 - Professional, businesslike tone. NO casual language, NO "chatting", NO small talk, NO praise like "that's great/wonderful/awesome", NO filler like "like" or "you know".
@@ -672,6 +743,7 @@ Next: <the interview question only>`,
     } catch {
       // Stream threw — unlock mic and let the interview continue
       setCoachSpeaking(false);
+      setCoachThinking(false);
       speech.blockFor(300);
       setIsRecording(false);
       return;
@@ -680,11 +752,12 @@ Next: <the interview question only>`,
     // If the interview ended (time ran out, or the user ended it) while this
     // stream was in flight, abandon the result — never ask another question or
     // speak over the closing sign-off. coachSpeaking is owned by the end effect.
-    if (endingRef.current || phaseRef.current !== "interview") return;
+    if (endingRef.current || phaseRef.current !== "interview") { setCoachThinking(false); return; }
 
     // stream() swallows network errors and returns "" — treat that the same as a thrown error
     if (!response.trim()) {
       setCoachSpeaking(false);
+      setCoachThinking(false);
       speech.blockFor(300);
       setIsRecording(false);
       return;
@@ -741,6 +814,18 @@ Next: <the interview question only>`,
       acknowledgment = "Understood.";
     }
 
+    // Deliberate "thinking" pause: a real interviewer weighs the answer for a few
+    // seconds before responding instead of firing back instantly. The streaming
+    // latency already counts toward this, so we only wait for the remainder.
+    const THINK_MIN_MS = 4500;
+    const thinkElapsed = Date.now() - thinkStart;
+    if (thinkElapsed < THINK_MIN_MS) {
+      await new Promise(resolve => setTimeout(resolve, THINK_MIN_MS - thinkElapsed));
+    }
+    // Re-check after the await — the interview may have ended during the pause.
+    if (endingRef.current || phaseRef.current !== "interview") { setCoachThinking(false); return; }
+    setCoachThinking(false);
+
     // Commit the stage advance now that we have a valid question to ask.
     stageIdxRef.current = stageIdx;
     setQuestions(prev => [...prev, { question: nextQuestion! }]);
@@ -763,7 +848,7 @@ Next: <the interview question only>`,
   useEffect(() => { submitCurrentAnswerRef.current = submitCurrentAnswer; }, [submitCurrentAnswer]);
 
   const submitAnswer = useCallback(() => {
-    if (!answer.trim()) return;
+    if (!answer.trim() || turnInFlightRef.current) return;
     void submitCurrentAnswer(answer.trim());
   }, [answer, submitCurrentAnswer]);
 
@@ -849,17 +934,18 @@ Next: <the interview question only>`,
         return next;
       });
       clearAutoSubmitTimer();
-      // 800ms silence → auto-submit: snappy, human-paced turn-taking while
-      // still leaving room for short thinking pauses mid-answer.
+      // 2500ms silence → auto-submit: gives the candidate room to think and give
+      // longer, continuous answers with natural mid-sentence pauses, instead of
+      // being cut off after a brief silence.
       // Uses submitCurrentAnswerRef (not submitCurrentAnswer directly) so the
       // closure always calls the latest version without adding submitCurrentAnswer
       // to deps. Without this, elapsedSeconds (a dep of submitCurrentAnswer) gives
       // it a new reference every second → effect re-runs every second → cleanup
-      // fires clearAutoSubmitTimer() before 800ms elapses → answer never submitted.
+      // fires clearAutoSubmitTimer() before it elapses → answer never submitted.
       autoSubmitRef.current = setTimeout(() => {
         const latest = answerRef.current.trim();
         if (latest) void submitCurrentAnswerRef.current(latest);
-      }, 800);
+      }, 2500);
     });
     // No clearAutoSubmitTimer in cleanup: timer must survive normal dep changes.
     // Unmount cleanup is handled by the dedicated effect above. Clearing here
@@ -908,7 +994,7 @@ Profile: ${buildProfileSummary()}
 Full interview transcript:
 ${transcript}
 
-Return ONLY a valid JSON object with exactly these keys (no markdown, no extra text):
+Score the candidate across the FULL HR competency framework. Return ONLY a valid JSON object with exactly these keys (no markdown, no extra text, no commentary before or after):
 {
   "overallScore": 0-100,
   "communicationScore": 0-100,
@@ -916,26 +1002,24 @@ Return ONLY a valid JSON object with exactly these keys (no markdown, no extra t
   "confidenceScore": 0-100,
   "technicalScore": 0-100,
   "roleFit": "one honest sentence about this candidate for this role",
+  "competencies": {
+    "functionalKnowledge": {"score": 0-100, "comment": "1-2 sentences on the role/domain knowledge shown"},
+    "communication": {"score": 0-100, "comment": "1-2 sentences on clarity, articulation and language"},
+    "collaboration": {"score": 0-100, "comment": "1-2 sentences on teamwork and coordination evidence"},
+    "personality": {"score": 0-100, "comment": "1-2 sentences on disposition, confidence, energy and integrity"},
+    "education": {"score": 0-100, "comment": "1-2 sentences on educational background and its fit"},
+    "itSkills": {"score": 0-100, "comment": "1-2 sentences on digital/IT comfort and data-security awareness"},
+    "adaptability": {"score": 0-100, "comment": "1-2 sentences on flexibility and openness to change"}
+  },
   "strengths": ["3 specific observed strengths"],
   "improvements": ["3 specific improvement areas"],
-  "nextSteps": ["3 concrete actionable steps"],
-  "questionScores": [
-    {
-      "score": 1-10,
-      "communication": 1-10,
-      "grammar": 1-10,
-      "confidence": 1-10,
-      "technical": 1-10,
-      "feedback": "2-3 sentence natural feedback on this answer"
-    }
-  ]
+  "nextSteps": ["3 concrete actionable steps"]
 }
 
-Include one entry in questionScores for each question in order (${answered.length} entries total).
-Be honest, specific, and encouraging. Use Indian hiring context.`,
+Score every competency from evidence in the transcript. If a competency was not directly tested, infer conservatively from overall performance and say so briefly in its comment. Be honest, specific, and encouraging. Use Indian hiring context.`,
         `You are a senior hiring manager and interview coach evaluating an Indian candidate. Give human, realistic, non-robotic feedback.`,
         undefined,
-        { maxTokens: 3000 }
+        { maxTokens: 2200 }
       );
 
       const parsed = parseReportJson(reportText) ?? {
@@ -950,9 +1034,11 @@ Be honest, specific, and encouraging. Use Indian hiring context.`,
         nextSteps: ["Practice STAR method answers", "Record yourself and review", "Schedule another mock interview next week"],
       };
 
-      // If questionScores is missing (e.g. JSON was truncated), run a focused
-      // follow-up call to get per-question feedback only.
-      if (!parsed.questionScores || parsed.questionScores.length === 0) {
+      // Per-question feedback is ALWAYS fetched in a separate, focused call.
+      // Keeping it out of the main report keeps that JSON small, so the overall
+      // scores and competencies never get lost to truncation (the old cause of a
+      // uniform-60 fallback when a long questionScores array overflowed the cap).
+      {
         const fbText = await stream(
           `You are an interview coach. For each answer below, give a 2-3 sentence honest, natural, specific feedback.
 
@@ -962,9 +1048,14 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
 [{"score":1-10,"communication":1-10,"grammar":1-10,"confidence":1-10,"technical":1-10,"feedback":"2-3 sentences"}]`,
           `You are a concise interview evaluator. Be honest, specific, and encouraging.`,
           undefined,
-          { maxTokens: 1500 }
+          { maxTokens: 2000 }
         );
-        const cleaned = fbText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+        let cleaned = fbText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+        const firstBracket = cleaned.indexOf("[");
+        const lastBracket = cleaned.lastIndexOf("]");
+        if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+          cleaned = cleaned.slice(firstBracket, lastBracket + 1);
+        }
         try {
           const arr = JSON.parse(cleaned) as Array<Record<string, unknown>>;
           if (Array.isArray(arr)) {
@@ -1071,6 +1162,14 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
       report ? `Technical: ${report.technicalScore}%` : "Technical: N/A",
       report ? `Role Fit: ${report.roleFit}` : "Role Fit: N/A",
       ``,
+      ...(report?.competencies ? [
+        `COMPETENCY ASSESSMENT`,
+        ...COMPETENCY_ROWS.map(({ key, label }) => {
+          const c = report.competencies![key];
+          return `${label}: ${c.score}%${c.comment ? ` — ${c.comment}` : ""}`;
+        }),
+        ``,
+      ] : []),
       `STRENGTHS`,
       ...(report ? report.strengths : []),
       ``,
@@ -1253,11 +1352,37 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
                   <RingChart value={report.communicationScore} label="Communication" color="#3b82f6" />
                   <RingChart value={report.grammarScore} label="Grammar" color="#22c55e" />
                   <RingChart value={report.confidenceScore} label="Confidence" color="#f97316" />
-                  <RingChart value={report.technicalScore} label="Technical" color="#a855f7" />
+                  <RingChart value={report.technicalScore} label="Functional" color="#a855f7" />
                 </div>
                 <p className="text-sm text-secondary mt-5 text-center">{report.roleFit}</p>
               </CardContent>
             </Card>
+
+            {report.competencies && (
+              <Card className="border shadow-sm">
+                <CardHeader className="pb-2 pt-5 px-5">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Target className="w-4 h-4 text-primary" />
+                    Competency Assessment
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-5 space-y-4">
+                  {COMPETENCY_ROWS.map(({ key, label }) => {
+                    const c = report.competencies![key];
+                    return (
+                      <div key={key}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-bold text-secondary">{label}</span>
+                          <span className={`text-xs font-bold ${grade(c.score).color}`}>{c.score}%</span>
+                        </div>
+                        <Progress value={c.score} className="h-2" />
+                        {c.comment && <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{c.comment}</p>}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            )}
 
             <div className="grid sm:grid-cols-2 gap-4">
               <Card className="border shadow-sm">
@@ -1383,7 +1508,7 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
               name={coach.name}
               subtitle={coach.role}
               isSpeaking={synth.isSpeaking}
-              isThinking={isStreaming}
+              isThinking={isStreaming || coachThinking}
               gender={coach.gender}
               size="xl"
               imageSrc={coach.imageSrc}
@@ -1402,7 +1527,7 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
               ))}
             </div>
           )}
-          {isStreaming && !synth.isSpeaking && (
+          {(isStreaming || coachThinking) && !synth.isSpeaking && (
             <p className="text-white/50 text-xs animate-pulse">{coach.name} is thinking…</p>
           )}
         </div>
@@ -1495,7 +1620,7 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
           <Button
             size="sm"
             className="font-bold bg-primary hover:bg-primary/90 shrink-0"
-            disabled={!answer.trim() || isStreaming}
+            disabled={!answer.trim() || isStreaming || coachSpeaking || coachThinking}
             onClick={submitAnswer}
           >
             {isStreaming

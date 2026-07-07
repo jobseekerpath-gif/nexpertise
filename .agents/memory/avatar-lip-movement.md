@@ -10,6 +10,11 @@ Tutor and interviewer portraits (shared `AnimatedAvatar`, used by Interview Ace 
 - It only mounts while speaking, so the idle photo is pixel-identical to before. `FallbackSVG` keeps its own SVG mouth animation for the no-image / failed-image case.
 - Deliberately subtle. Lip movement on a static AI photo is inherently approximate; the goal is "alive", not accurate phoneme sync.
 
+## Animate ONLY the mouth band — never the chest/neck
+- The `PhotoMouth` mask must be a horizontal BAND over the mouth/jaw only (roughly mid-face), fully transparent ABOVE the upper lip AND BELOW the jaw so the neck, collar, and chest are never part of the moving copy. Hinge the `scaleY` transform-origin at the upper lip so the "jaw" opens downward without dragging the throat/chest.
+- **Why:** an earlier mask reached too low, so the `scaleY` visibly pumped the chest/collar. A user flagged chest movement as unacceptable ("vulgar", especially on the female teacher). Only the lips/jaw may move.
+- **How to apply:** if the effect ever looks like the body is "breathing", the mask is too tall — raise its lower edge, don't just reduce the scale.
+
 ## Rejected approaches (do not re-attempt without new capability)
 - **Audio-amplitude drive (AudioContext AnalyserNode on the TTS audio element):** would route the shared TTS `<audio>` through the Web Audio graph, which risks breaking the hard-won autoplay unlock — a known severe, user-visible regression (see tts-autoplay-unlock / tts-global-singleton). Not worth it for a cosmetic effect.
 - **Generated open-mouth frames + crossfade:** `generateImage` is text-to-image only (no img2img/inpainting), so a second "mouth open" frame doesn't match the original face — it morphs/glitches. Skip until an image-edit/inpaint capability exists.
