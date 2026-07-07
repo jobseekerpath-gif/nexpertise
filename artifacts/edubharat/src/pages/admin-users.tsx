@@ -249,11 +249,11 @@ export default function AdminUsers() {
                         <Globe className="w-3.5 h-3.5" /> Sign-in origin
                       </h3>
                       <div className="grid grid-cols-2 gap-3">
-                        <Field label="Signup IP" value={u.signupIp} />
-                        <Field label="Signup location" value={u.signupLocation} />
-                        <Field label="Last login IP" value={u.lastLoginIp} />
-                        <Field label="Last login location" value={u.lastLoginLocation} />
-                        <Field label="Last login" value={fmt(u.lastLoginAt)} />
+                        <Field label="Signup IP" value={u.signupIp ?? "Not recorded"} />
+                        <Field label="Signup location" value={u.signupLocation ?? "Not recorded"} />
+                        <Field label="Last login IP" value={u.lastLoginIp ?? "Not recorded"} />
+                        <Field label="Last login location" value={u.lastLoginLocation ?? "Not recorded"} />
+                        <Field label="Last login" value={u.lastLoginAt ? fmt(u.lastLoginAt) : "Not recorded"} />
                       </div>
                     </section>
 

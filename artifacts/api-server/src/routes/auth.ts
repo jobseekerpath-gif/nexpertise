@@ -423,6 +423,8 @@ router.post("/auth/admin-login", async (req, res) => {
     req.session.userName = user.name ?? undefined;
     req.session.isAdmin = true; // Only set here — after password-hash verification
 
+    void recordLogin(user.id, req);
+
     res.json({ success: true, user: { id: user.id, email: user.email, name: user.name } });
   } catch (err) {
     req.log?.error?.({ err }, "Admin login error");

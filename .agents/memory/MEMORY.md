@@ -21,6 +21,7 @@
 - [Replit secret naming](replit-secret-naming.md) — Replit secrets can be stored with spaces in their names (e.g. "GOOGLE CLIENT ID"). Always read with both variants: process.env["GOOGLE_CLIENT_ID"] ?? process.env["GOOGLE CLIENT ID"].
 - [Rozgar profile gate](rozgar-profile-gate.md) — gate requires both name AND location before showing feed; gate data must be persisted to useStudentProfile (updateProfile) not just local state.
 - [Admin login pattern](admin-login-pattern.md) — /auth/admin-login uses SHA-256 hash vs ADMIN_USERNAME + ADMIN_PASSWORD_HASH env vars; seeds admin@edubharat.in user on first successful login.
+- [Login-origin capture](login-origin-capture.md) — every login path must record sign-in origin; a blank IP is usually pre-feature rows + a null-hiding admin UI, not broken capture.
 - [Mobile tool AI calls](mobile-tool-ai.md) — Expo tool/[id].tsx calls /api/ai/chat with {prompt, system, maxTokens} body (NOT messages array); response is {text: string}.
 - [Interview Ace video call UI](interview-video-call.md) — fixed full-screen dark layout (z-30, top:56px); webcam PiP via getUserMedia; camera auto-off on ANY exit from interview phase + post-await race guard; PhoneOff hang-up.
 - [Interview verdict](interview-verdict.md) — Selected/Not Selected derived deterministically from overallScore (shared interviewVerdict, pass bar 60); AI supplies only the rationale; keep report + transcript + progress detail in lockstep.
