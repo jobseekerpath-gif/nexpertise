@@ -123,3 +123,99 @@ export function functionalKnowledgeFor(type: string, roleLabel: string): string 
     `Core functional and domain knowledge directly relevant to a ${roleLabel} role — ask practical, applied questions a real interview panel would ask.`
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Diversified beat rotation
+//
+// The interview must feel DIVERSIFIED across every assessment parameter, not a
+// chain of near-identical questions on one topic. Instead of spending many
+// consecutive questions inside a single "stage", we rotate through the competency
+// areas so CONSECUTIVE questions target DIFFERENT areas. Functional/domain
+// knowledge is the core, so it recurs in the rotation — but never back-to-back.
+// Breadth is front-loaded so even a short interview covers a wide spread.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type InterviewArea = {
+  key: string;
+  label: string;
+  /** What to probe for this area — roughly one question's worth. */
+  focus: string;
+};
+
+export const INTERVIEW_AREAS: Record<string, InterviewArea> = {
+  background: {
+    key: "background",
+    label: "Introduction & Educational Background",
+    focus:
+      "a brief self-introduction and their educational background — degree, key subjects, and notable curricular or extra-curricular achievements relevant to this role",
+  },
+  functional: {
+    key: "functional",
+    label: "Functional / Domain Knowledge",
+    focus: "role-specific functional and domain knowledge (the core of the interview)",
+  },
+  collaboration: {
+    key: "collaboration",
+    label: "Collaboration & Teamwork",
+    focus:
+      "how they work within a team — coordination, cooperation, handling disagreement, and a concrete example of collaborating toward a shared goal",
+  },
+  it_skills: {
+    key: "it_skills",
+    label: "IT & Digital Skills",
+    focus:
+      "comfort with office and email applications and smartphones/handheld devices, and awareness of basic data-security and confidentiality practices",
+  },
+  integrity: {
+    key: "integrity",
+    label: "Integrity & Commitment",
+    focus:
+      "honesty, integrity and respect for rules, plus commitment — ideally a behavioural example of upholding a rule or honouring a difficult commitment under pressure",
+  },
+  adaptability: {
+    key: "adaptability",
+    label: "Adaptability & Flexibility",
+    focus:
+      "openness to working at different locations, across different industries or roles, and how they cope with change and unfamiliar situations",
+  },
+  education: {
+    key: "education",
+    label: "Academic & Extra-curricular Depth",
+    focus:
+      "a deeper look at their academics and extra-curricular life — projects, leadership, competitions or activities, and what they learned from them",
+  },
+  motivation: {
+    key: "motivation",
+    label: "Motivation & Commitment",
+    focus:
+      "their motivation for this specific role, career goals, and reliability/commitment to the job",
+  },
+};
+
+/**
+ * Diversified rotation for questions AFTER the opening. Consecutive entries target
+ * DIFFERENT areas so the interview never becomes a chain of the same topic.
+ * Functional recurs (it is the core) but never back-to-back. The list cycles for
+ * longer interviews.
+ */
+const BEAT_ROTATION: string[] = [
+  "functional",
+  "collaboration",
+  "it_skills",
+  "functional",
+  "adaptability",
+  "integrity",
+  "functional",
+  "education",
+  "motivation",
+];
+
+/**
+ * The competency area for a given beat index. Beat 0 is always the opening
+ * introduction/education; later beats cycle through the diversified rotation.
+ */
+export function areaForBeat(index: number): InterviewArea {
+  if (index <= 0) return INTERVIEW_AREAS.background!;
+  const key = BEAT_ROTATION[(index - 1) % BEAT_ROTATION.length]!;
+  return INTERVIEW_AREAS[key]!;
+}

@@ -16,7 +16,7 @@ import { useCredits, chargeInterview, tickInterview, endInterview, interviewCred
 import { useGuestTrial, guestInterviewsLeft, consumeGuestInterview } from "@/lib/guest-trial";
 import { AnimatedAvatar } from "@/components/avatar";
 import { INTERVIEW_COACHES } from "@/lib/tutors";
-import { INTERVIEW_STAGES, stageIndexForProgress, functionalKnowledgeFor } from "@/lib/interview-format";
+import { INTERVIEW_AREAS, areaForBeat, functionalKnowledgeFor } from "@/lib/interview-format";
 import { useToast } from "@/hooks/use-toast";
 import { PageMeta } from "@/components/page-meta";
 import {
@@ -430,9 +430,13 @@ function InterviewAceContent() {
   // marks the true end of a turn (coachSpeaking stays true through the thinking pause).
   const turnInFlightRef = useRef(false);
   useEffect(() => { if (!coachSpeaking) turnInFlightRef.current = false; }, [coachSpeaking]);
-  // Tracks the current structured-interview stage index so the agenda advances in
-  // order and never skips a stage, even if long answers make the clock jump ahead.
-  const stageIdxRef = useRef(0);
+  // Diversified interview rotation: which "beat" (competency area) the current
+  // question targets. Advances one beat per answered question so consecutive
+  // questions cover DIFFERENT areas instead of chaining the same topic.
+  const beatIdxRef = useRef(0);
+  // Retries on the current beat, for the 2-attempt rule: a weak answer earns ONE
+  // gentle re-ask; after that we move on to a fresh area rather than dwelling.
+  const retryRef = useRef(0);
   // Interview credits are metered per block (1 credit each). The first block is
   // charged at start; this counts blocks charged so the meter stops at the max
   // (a full session costs at most INTERVIEW_MAX_BLOCKS credits).
@@ -567,17 +571,14 @@ function InterviewAceContent() {
     const full = await stream(
       `You are ${coach.name}, a professional interviewer conducting a formal ${typeMeta.label} interview with ${firstName} (${experience} level).
 
-This is a STRUCTURED interview that moves through a fixed sequence of assessment areas. You are at the FIRST stage: ${INTERVIEW_STAGES[0]!.label}.
+This interview will cover a broad range of areas. Start by warmly introducing yourself in 1-2 short sentences — say your name and that you will be taking ${firstName}'s interview today, and put them at ease — then ask ONE clear opening question about ${INTERVIEW_AREAS.background!.focus}.
 
-Give a brief, professional introduction in 1-2 sentences — state your name and that you will be taking their interview today — then ask ONE clear opening question about ${INTERVIEW_STAGES[0]!.focus}.
-
-STRICT rules:
-- Maximum 3 sentences total. Professional and businesslike.
-- Do NOT use casual or chatty language: no "Hey", no "good to see you", no "chatting", no "let's dive in", no "so tell me", no "excited to", no small talk.
+Rules:
+- Keep it to at most 3 sentences. Warm and professional — you want ${firstName} to feel relaxed. A little warmth is good; NO cheesy greetings like "Hey, good to see you", no small talk, no "let's dive in".
 - Plain spoken words ONLY. No asterisks, no *actions*, no markdown, no quotes around your reply.
 - Do NOT list rules, do NOT explain the interview process.
 - Ask exactly ONE question.`,
-      `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct formal, structured interviews and assess candidates seriously. Speak in clear, professional, businesslike English. Never use markdown, action words, casual greetings, or small talk.`,
+      `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct professional but warm, encouraging interviews that cover a broad range of areas. Speak in clear, natural spoken English. Never use markdown, action words, or effusive flattery.`,
       undefined,
       { maxTokens: 120 }
     );
@@ -616,7 +617,8 @@ STRICT rules:
     setReport(null);
     setSaved(false);
     endingRef.current = false;
-    stageIdxRef.current = 0;
+    beatIdxRef.current = 0;
+    retryRef.current = 0;
     setPhase("interview");
     // Camera does NOT start automatically — user must enable it via the button.
     // Set coachSpeaking BEFORE the delay so the auto-listen effect cannot fire
@@ -685,22 +687,37 @@ STRICT rules:
       .map((q, i) => `Q: ${q.question}\nA: ${q.answer}`)
       .join("\n\n");
 
-    // Detect short/vague answers so we can probe instead of jumping to next topic
+    // Detect whether the candidate could not answer, so we can apply the
+    // 2-attempt rule (give ONE more chance, then move on kindly) instead of
+    // drilling the same question over and over.
     const wordCount = recordedAnswer.split(/\s+/).filter(Boolean).length;
-    const isShortAnswer = wordCount < 20;
+    const lowerAnswer = recordedAnswer.toLowerCase();
+    const saysDontKnow = /\b(i (?:really |just )?(?:don'?t|do not) know|not sure|no idea|can'?t (?:recall|remember|answer)|don'?t (?:recall|remember)|i'?m not sure|no clue|not aware|please skip|skip this|next question|let'?s move on|move to the next)\b/.test(lowerAnswer);
+    const isWeakAnswer = saysDontKnow || wordCount < 8;
 
-    // Move through the fixed assessment agenda IN ORDER. Progress is scaled
-    // against the questioning window (questions stop ~1 min before the clock runs
-    // out) so the closing stage is always reachable. We advance by at most one
-    // stage per question and never move backward — so no stage is ever skipped,
-    // even when long answers make the clock jump ahead several stages.
-    const progress = Math.min(1, elapsedSeconds / Math.max(60, duration * 60 - 60));
-    const timeStageIdx = stageIndexForProgress(progress);
-    const stageIdx = timeStageIdx > stageIdxRef.current ? stageIdxRef.current + 1 : stageIdxRef.current;
-    const stage = INTERVIEW_STAGES[stageIdx]!;
-    const stageFocus = stage.key === "functional"
-      ? `${stage.focus} — ${functionalKnowledgeFor(typeMeta.value, typeMeta.label)}`
-      : stage.focus;
+    // DIVERSIFIED rotation: each question targets a DIFFERENT competency area so
+    // the interview never becomes a chain of near-identical questions. We advance
+    // one beat per answered question. 2-attempt rule: a weak answer re-probes the
+    // SAME area ONCE (a gentle rephrase/hint); if it is still weak we move on to a
+    // fresh area instead of dwelling. Refs are committed only after a valid
+    // question is produced (below), so an aborted/errored turn never skips.
+    const willRetry = isWeakAnswer && retryRef.current < 1;
+    const nextRetry = willRetry ? retryRef.current + 1 : 0;
+    const targetBeatIdx = willRetry ? beatIdxRef.current : beatIdxRef.current + 1;
+    const area = areaForBeat(targetBeatIdx);
+    const areaFocus = area.key === "functional"
+      ? `${area.focus} — ${functionalKnowledgeFor(typeMeta.value, typeMeta.label)}`
+      : area.focus;
+
+    let directive: string;
+    if (willRetry) {
+      directive = `${firstName} struggled with that question${saysDontKnow ? " (they said they don't know)" : ` (only ${wordCount} words)`}. Give them ONE more chance: ask the SAME thing again but more simply, or offer a small hint, a concrete example, or an easier way in. Keep it warm and encouraging so they relax — this is still about "${area.label}".`;
+    } else if (isWeakAnswer) {
+      directive = `${firstName} could not answer that even after a second attempt — do NOT dwell on it or ask it again. Acknowledge briefly and kindly (something like "No problem, let's move on."), then ask a fresh question on a NEW area. New area — ${area.label}. Focus on: ${areaFocus}.`;
+    } else {
+      directive = `Now move to a DIFFERENT area to keep the interview varied — do NOT keep drilling the previous topic. New area — ${area.label}. Focus on: ${areaFocus}. You may briefly connect to what they just said, but the question itself must target this new area. Ask a genuinely fresh question you have not asked before.`;
+    }
+
     let response = "";
     // Start the deliberate "thinking" pause the moment we begin processing the
     // answer, so the interviewer never replies the instant the candidate stops.
@@ -708,7 +725,7 @@ STRICT rules:
     setCoachThinking(true);
     try {
     response = await stream(
-      `You are ${coach.name} conducting a formal, STRUCTURED ${typeMeta.label} interview. ${remainingMin} minutes left.
+      `You are ${coach.name} conducting a friendly but professional ${typeMeta.label} interview. ${remainingMin} minutes left.
 
 Candidate: ${firstName} | ${buildProfileSummary()}
 
@@ -718,25 +735,21 @@ ${recentAnswered || "(This is the first response)"}
 Your last question: "${currentQ.question}"
 ${firstName} answered: "${recordedAnswer}"
 
-This interview follows a FIXED sequence of assessment stages and you must stay on track. You are CURRENTLY in the "${stage.label}" stage. Do NOT jump ahead to other stages or drift to unrelated topics.
+${directive}
 
-${isShortAnswer
-  ? `Their answer was brief (${wordCount} words). Politely ask them to elaborate or give a specific example — remain within the "${stage.label}" stage.`
-  : `Ask the NEXT question for the "${stage.label}" stage. Focus on: ${stageFocus}. Make it a genuine two-way exchange: if their last answer opened something worth exploring, ask a specific FOLLOW-UP that probes deeper — a "why", a "how", or a concrete example — before moving to the next point. Cover this stage thoroughly rather than rushing ahead. Stay WITHIN this stage.`}
-
-RULES — non-negotiable:
-- Professional, businesslike tone. NO casual language, NO "chatting", NO small talk, NO praise like "that's great/wonderful/awesome", NO filler like "like" or "you know".
-- ACKNOWLEDGE with ONE short, neutral, professional phrase only — maximum 4 words (e.g. "Understood.", "Thank you.", "Noted.", "That is clear."). Do NOT summarise their answer.
-- Use ${firstName}'s name sparingly — at most once every few questions.
-- NEVER repeat any question already asked in this interview.
-- NEVER start the Next line with a greeting — start directly with the question.
-- The Next line must be the question ONLY — no name, no preamble.
-- Ask exactly ONE question.
+STYLE — important:
+- Warm, encouraging and human — you genuinely want ${firstName} to do well and feel at ease. You MAY add a light, tasteful touch of humour now and then to relax them, but never sarcasm, never at their expense, and keep it to a brief aside.
+- Acknowledge their answer with ONE short, genuine phrase (max about 6 words). Do NOT summarise their whole answer and do NOT pile on flattery.
+- Ask EXACTLY ONE question, and NEVER repeat a question already asked in this interview.
+- The interview must feel DIVERSIFIED across many areas (domain knowledge, teamwork, IT skills, adaptability, integrity, motivation, education) — not a chain of similar questions.
+- Use ${firstName}'s name sparingly.
+- Plain spoken words ONLY: no markdown, no asterisks, no *actions*, no stage directions, no quotes around your reply.
+- The Next line must be the question ONLY — no greeting, no preamble, no name.
 
 Output format — exactly two lines, nothing else:
-Ack: <max 4 words, professional>
+Ack: <short, warm acknowledgement, max ~6 words>
 Next: <the interview question only>`,
-      `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct a formal, structured interview and stay strictly on the current assessment stage, moving through the agenda in order. Speak in clear, professional English. Never use markdown, action words, casual greetings, or small talk.`,
+      `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct a professional but warm, encouraging interview that covers a BROAD range of areas and never fixates on one topic. Light, tasteful humour to relax the candidate is welcome. Speak in clear, natural spoken English. Never use markdown, action words, or effusive flattery.`,
       undefined,
       { maxTokens: 220 }
     );
@@ -826,8 +839,9 @@ Next: <the interview question only>`,
     if (endingRef.current || phaseRef.current !== "interview") { setCoachThinking(false); return; }
     setCoachThinking(false);
 
-    // Commit the stage advance now that we have a valid question to ask.
-    stageIdxRef.current = stageIdx;
+    // Commit the beat advance + retry counter now that we have a valid question.
+    beatIdxRef.current = targetBeatIdx;
+    retryRef.current = nextRetry;
     setQuestions(prev => [...prev, { question: nextQuestion! }]);
     setCurrentIdx(prev => prev + 1);
     setAnswer("");
@@ -934,9 +948,9 @@ Next: <the interview question only>`,
         return next;
       });
       clearAutoSubmitTimer();
-      // 2500ms silence → auto-submit: gives the candidate room to think and give
-      // longer, continuous answers with natural mid-sentence pauses, instead of
-      // being cut off after a brief silence.
+      // 5000ms silence → auto-submit: gives the candidate a full 4-5 seconds to
+      // think and construct longer, continuous answers with natural mid-sentence
+      // pauses, instead of being cut off after a brief silence.
       // Uses submitCurrentAnswerRef (not submitCurrentAnswer directly) so the
       // closure always calls the latest version without adding submitCurrentAnswer
       // to deps. Without this, elapsedSeconds (a dep of submitCurrentAnswer) gives
@@ -945,7 +959,7 @@ Next: <the interview question only>`,
       autoSubmitRef.current = setTimeout(() => {
         const latest = answerRef.current.trim();
         if (latest) void submitCurrentAnswerRef.current(latest);
-      }, 2500);
+      }, 5000);
     });
     // No clearAutoSubmitTimer in cleanup: timer must survive normal dep changes.
     // Unmount cleanup is handled by the dedicated effect above. Clearing here

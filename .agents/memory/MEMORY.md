@@ -2,13 +2,13 @@
 - [Resume Intelligence module](resume-intelligence.md) — section parsing uses positional string splitting (not regex) to avoid Edit-tool corruption with special chars.
 - [Database persistence patterns](task1-db-persistence.md) — offline-first hooks, schema/API conventions, and rebuild steps for EduBharat DB features.
 - [Tutor portrait system](tutor-portraits.md) — real AI-generated photos replace cartoon SVG; SVG is fallback only; imgFailed resets on imageSrc change; TUTORS array in lib/tutors.ts.
-- [Avatar lip movement](avatar-lip-movement.md) — talking portraits use a CSS puppet-jaw on the real photo; never drive it from the TTS audio graph (breaks autoplay); generateImage can't inpaint frames.
+- [Avatar lip movement](avatar-lip-movement.md) — talking portraits use a CSS puppet-jaw on the real photo (keep amplitude TINY — big scaleY reads as a stretched face); never drive it from the TTS audio graph (breaks autoplay); generateImage can't inpaint frames.
 - [Speech voice fallback](speech-voice-fallback.md) — browser voice lists vary; match by locale/name, then shape pitch/rate when a perfect Indian voice is missing.
 - [Claude live-chat budgeting](claude-live-chat-budgeting.md) — live tutoring should use compact history and low token caps; minimize cost, never promise a fixed per-response price.
 - [English Guru compact layout](english-guru-compact-layout.md) — live conversation uses a footer-free full-viewport shell; only the chat panel scrolls.
 - [Interview Ace auto-listen](interview-auto-listen.md) — mock interviews should start listening automatically after each question and feel conversational, not scripted.
 - [Interview Ace analytics](interview-analytics.md) — persist one canonical interview session per completed report, not per-question, so progress trends reflect full interviews.
-- [Interview structured format](interview-structured-format.md) — interviews follow a FIXED role-specific agenda (interview-format.ts), ordered no-skip stage ref scaled to the questioning window, professional non-chatty tone; live AI is web-only.
+- [Interview structured format](interview-structured-format.md) — diversify competencies via a beat rotation (breadth, NOT single-topic chains, NOT random pivoting); 2-attempt rule; warm tone + light humour; ~5s think window; live AI web-only.
 - [Interview report generation](interview-report-generation.md) — split into 2 AI calls so a big per-question array can't truncate scores to uniform-60; competencies live in feedbackJson (no schema change).
 - [Rozgar profile feed](rozgar-profile-feed.md) — Rozgar should stay candidate-driven, with profile basics shaping every section and a live hiring pulse before AI summaries.
 - [Voice switching should stop playback](voice-switch-stop-playback.md) — changing tutor voice must cancel active speech immediately so male/female voices never mix.

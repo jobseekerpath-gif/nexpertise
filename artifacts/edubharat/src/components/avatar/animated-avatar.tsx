@@ -87,11 +87,13 @@ function FallbackSVG({
 /**
  * Time-based "talking mouth" for real portraits. We can't lip-sync to the actual
  * TTS audio (routing it through an AudioContext risks breaking autoplay unlock)
- * and we have no open-mouth frame, so we animate a feathered copy of ONLY the
- * mouth/jaw band (~43%–66% of the portrait height): a subtle vertical jaw-drop
- * hinged at the upper lip. Everything below the jaw (neck, collar, chest) is
- * masked out entirely, so it never moves. It only mounts while speaking, so the
- * idle photo is pixel-identical to before.
+ * and we have no open-mouth frame, so we animate a feathered copy of ONLY a tight
+ * band over the mouth/chin (~49%–66% of the portrait height). The motion is a
+ * small jaw-drop — a slight downward shift plus a very slight vertical give —
+ * hinged at the upper lip, kept deliberately subtle so it reads as speech rather
+ * than the whole lower face stretching. Everything above the mouth and below the
+ * chin (neck, collar, chest) is masked out entirely, so it never moves. It only
+ * mounts while speaking, so the idle photo is pixel-identical to before.
  */
 function PhotoMouth({ imageSrc, px }: { imageSrc: string; px: number }) {
   const [open, setOpen] = useState(false);
@@ -101,12 +103,13 @@ function PhotoMouth({ imageSrc, px }: { imageSrc: string; px: number }) {
     const tick = () => {
       if (!alive) return;
       setOpen((o) => !o);
-      // Short open/close beats, with the occasional longer closed pause (word gap).
-      const beat = 85 + Math.random() * 95; // ~85–180ms
-      const pause = Math.random() < 0.16 ? 150 + Math.random() * 200 : 0;
+      // Natural speaking cadence: quick open/close beats with the occasional
+      // longer closed pause (a word gap).
+      const beat = 100 + Math.random() * 120; // ~100–220ms
+      const pause = Math.random() < 0.2 ? 180 + Math.random() * 240 : 0;
       timer = setTimeout(tick, beat + pause);
     };
-    timer = setTimeout(tick, 70);
+    timer = setTimeout(tick, 80);
     return () => {
       alive = false;
       clearTimeout(timer);
@@ -117,10 +120,11 @@ function PhotoMouth({ imageSrc, px }: { imageSrc: string; px: number }) {
     <div
       className="absolute inset-0 pointer-events-none"
       style={{
-        // Only the mouth/jaw band is part of the animated copy; everything below
-        // ~66% (neck, collar, chest) is fully masked out so it can never move.
-        WebkitMaskImage: "linear-gradient(to bottom, transparent 43%, black 49%, black 59%, transparent 66%)",
-        maskImage: "linear-gradient(to bottom, transparent 43%, black 49%, black 59%, transparent 66%)",
+        // Only a tight band over the mouth/chin is part of the animated copy; the
+        // upper face and everything below the chin (neck, collar, chest) is fully
+        // masked out so it can never move.
+        WebkitMaskImage: "linear-gradient(to bottom, transparent 49%, black 54%, black 61%, transparent 66%)",
+        maskImage: "linear-gradient(to bottom, transparent 49%, black 54%, black 61%, transparent 66%)",
       }}
       aria-hidden="true"
     >
@@ -131,10 +135,12 @@ function PhotoMouth({ imageSrc, px }: { imageSrc: string; px: number }) {
         height={px}
         className="w-full h-full object-cover object-top"
         style={{
-          // Hinge at the upper lip so only the jaw/chin drops — never the chest.
-          transformOrigin: "50% 46%",
-          transform: open ? "scaleY(1.06)" : "scaleY(1)",
-          transition: "transform 70ms ease-out",
+          // Hinge at the upper lip: a small downward jaw-drop (translate + a hair
+          // of vertical give). Kept tiny so the chin lowers naturally instead of
+          // the face visibly stretching — and never touches the chest.
+          transformOrigin: "50% 48%",
+          transform: open ? "translateY(0.7%) scaleY(1.025)" : "translateY(0) scaleY(1)",
+          transition: "transform 100ms ease-out",
         }}
         draggable={false}
       />
