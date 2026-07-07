@@ -19,10 +19,11 @@ import { INTERVIEW_COACHES } from "@/lib/tutors";
 import { INTERVIEW_AREAS, areaForBeat, functionalKnowledgeFor } from "@/lib/interview-format";
 import { useToast } from "@/hooks/use-toast";
 import { PageMeta } from "@/components/page-meta";
+import { interviewVerdict as verdictFor } from "@/lib/interview-verdict";
 import {
   Loader2, Mic, MicOff, PlayCircle, ChevronRight, Download, Volume2,
   LogOut, CheckCircle2, ChevronDown, MessageCircle, Pencil, Flame, Brain,
-  Star, Trophy, Clock, Timer, AlertCircle, Save, PhoneOff, VideoOff, Video, Target,
+  Star, Trophy, Clock, Timer, AlertCircle, Save, PhoneOff, VideoOff, Video, Target, XCircle,
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -76,6 +77,9 @@ type InterviewReport = {
   confidenceScore: number;
   technicalScore: number;
   roleFit: string;
+  /** Human hiring-recommendation rationale shown next to the Selected / Not
+   *  Selected result (the label itself is derived from overallScore). */
+  verdictReason?: string;
   /** Full HR competency-framework assessment (one score + comment per area). */
   competencies?: {
     functionalKnowledge: Competency;
@@ -179,6 +183,7 @@ function parseReportJson(text: string): InterviewReport | null {
       confidenceScore: Math.min(100, Math.max(0, Number(parsed["confidenceScore"]) || 0)),
       technicalScore: Math.min(100, Math.max(0, Number(parsed["technicalScore"]) || 0)),
       roleFit: String(parsed["roleFit"] || ""),
+      verdictReason: String(parsed["verdictReason"] || parsed["recommendation"] || ""),
       competencies: comp
         ? {
             functionalKnowledge: parseCompetency(comp["functionalKnowledge"]),
@@ -498,6 +503,14 @@ function InterviewAceContent() {
   const startWebcam = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      // The interview may have ended (time-up / hang-up / final question) while the
+      // permission prompt was still open. The phase-transition cleanup already ran
+      // and won't fire again for this stream, so release it now instead of leaving
+      // the camera live on the report screen.
+      if (phaseRef.current !== "interview") {
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
       webcamStreamRef.current = stream;
       // Attach to video element once it mounts (slight delay to allow React render)
       setTimeout(() => {
@@ -520,6 +533,15 @@ function InterviewAceContent() {
 
   // Cleanup webcam on unmount
   useEffect(() => () => stopWebcam(), [stopWebcam]);
+
+  // Auto-release the candidate's camera the moment the interview is over
+  // (time-up, all questions answered, or hang-up). The webcam PiP lives only in
+  // the "interview" phase, but this component stays mounted through the report,
+  // so stop the stream on any transition out of "interview" instead of relying
+  // on unmount.
+  useEffect(() => {
+    if (phase !== "interview") stopWebcam();
+  }, [phase, stopWebcam]);
 
   useEffect(() => {
     if (phase !== "interview" || isStreaming || synth.isSpeaking) {
@@ -1016,6 +1038,7 @@ Score the candidate across the FULL HR competency framework. Return ONLY a valid
   "confidenceScore": 0-100,
   "technicalScore": 0-100,
   "roleFit": "one honest sentence about this candidate for this role",
+  "verdictReason": "one or two honest sentences giving your overall hiring recommendation for THIS role and why — this accompanies a Selected/Not Selected result where a pass is roughly 60+ overall. Be fair but honest, and never pass a candidate who clearly lacks the core functional knowledge for the role",
   "competencies": {
     "functionalKnowledge": {"score": 0-100, "comment": "1-2 sentences on the role/domain knowledge shown"},
     "communication": {"score": 0-100, "comment": "1-2 sentences on clarity, articulation and language"},
@@ -1043,6 +1066,7 @@ Score every competency from evidence in the transcript. If a competency was not 
         confidenceScore: 60,
         technicalScore: 60,
         roleFit: "Promising candidate with room to grow.",
+        verdictReason: "Automated scoring was interrupted, so this is an indicative result — please review the detailed feedback below.",
         strengths: ["Participated actively in the mock interview", "Provided structured answers", "Showed willingness to learn"],
         improvements: ["Add more specific examples", "Tighten language clarity", "Work on concise delivery"],
         nextSteps: ["Practice STAR method answers", "Record yourself and review", "Schedule another mock interview next week"],
@@ -1168,6 +1192,7 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
       `Role: ${label} | Experience: ${experience} | Duration: ${durationMin} min`,
       `Date: ${new Date().toLocaleDateString("en-IN")}`,
       report ? `Overall Score: ${report.overallScore}% — ${grade(report.overallScore).label}` : `Overall Score: ${avgScore}% — ${grade(avgScore).label}`,
+      report ? `Result: ${verdictFor(report.overallScore).label}${report.verdictReason ? ` — ${report.verdictReason}` : ""}` : `Result: ${verdictFor(avgScore).label}`,
       ``,
       `SKILL BREAKDOWN`,
       report ? `Communication: ${report.communicationScore}%` : "Communication: N/A",
@@ -1338,6 +1363,20 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
               <div className={`text-lg font-bold ${g.color}`}>{g.label}</div>
             </div>
           </div>
+          {report && (() => {
+            const v = verdictFor(displayScore);
+            return (
+              <div className="mt-4">
+                <div className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-sm border-2 ${v.selected ? "bg-green-100 text-green-800 border-green-300" : "bg-red-100 text-red-800 border-red-300"}`}>
+                  {v.selected ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                  Result: {v.label}
+                </div>
+                {report.verdictReason && (
+                  <p className="text-sm text-muted-foreground mt-2 max-w-xl mx-auto">{report.verdictReason}</p>
+                )}
+              </div>
+            );
+          })()}
           <p className="text-muted-foreground mt-3 text-sm">
             {typeMeta.icon} {typeMeta.label} · {experience} · {answered.length} questions · {durationMin} min · with {coach.name}
           </p>

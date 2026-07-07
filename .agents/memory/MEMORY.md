@@ -22,7 +22,8 @@
 - [Rozgar profile gate](rozgar-profile-gate.md) — gate requires both name AND location before showing feed; gate data must be persisted to useStudentProfile (updateProfile) not just local state.
 - [Admin login pattern](admin-login-pattern.md) — /auth/admin-login uses SHA-256 hash vs ADMIN_USERNAME + ADMIN_PASSWORD_HASH env vars; seeds admin@edubharat.in user on first successful login.
 - [Mobile tool AI calls](mobile-tool-ai.md) — Expo tool/[id].tsx calls /api/ai/chat with {prompt, system, maxTokens} body (NOT messages array); response is {text: string}.
-- [Interview Ace video call UI](interview-video-call.md) — interview session phase uses fixed full-screen dark layout (z-30, top:56px offset for nav); webcam PiP via getUserMedia; red PhoneOff hang-up button to end.
+- [Interview Ace video call UI](interview-video-call.md) — fixed full-screen dark layout (z-30, top:56px); webcam PiP via getUserMedia; camera auto-off on ANY exit from interview phase + post-await race guard; PhoneOff hang-up.
+- [Interview verdict](interview-verdict.md) — Selected/Not Selected derived deterministically from overallScore (shared interviewVerdict, pass bar 60); AI supplies only the rationale; keep report + transcript + progress detail in lockstep.
 - [Edge TTS + echo fix](edge-tts-echo-fix.md) — Live chat + Interview Ace use Edge Neural TTS via /api/tts; blockFor(1200ms) prevents mic from picking up AI's own voice from speakers.
 - [Learning Journey SM-2](learning-journey.md) — /api/journey/* routes; due reviews must interleave separately from new lessons or priority breaks; /api/jobs/search and /api/news/feed also added.
 - [AI provider fallback](ai-provider-fallback.md) — Claude is PRIMARY, Gemini fallback (no working GEMINI_API_KEY); route AI via generateTextWithFallback so calls don't waste 3-5s failing through dead Gemini models.

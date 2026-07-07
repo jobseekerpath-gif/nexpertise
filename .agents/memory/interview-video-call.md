@@ -16,8 +16,11 @@ When `phase === "interview"`, the InterviewAce page renders a fixed full-screen 
 **Webcam:**
 - `startWebcam()` calls `navigator.mediaDevices.getUserMedia({ video: true, audio: false })`
 - Stream stored in `webcamStreamRef.current`; attached to `<video ref={webcamRef}>` via 200ms setTimeout after phase transition
-- `stopWebcam()` called in `endEarly()` and component unmount cleanup
-- `cameraError` state shown as "No camera" fallback in the PiP box
+- `stopWebcam()` is idempotent; `cameraError` state shown as "No camera" fallback in the PiP box
+
+**Auto-off invariant (camera must never outlive the interview):**
+- The component stays MOUNTED through the report phase, so unmount cleanup alone does NOT release the camera when the interview ends. A `useEffect` stops the webcam on ANY transition out of `phase === "interview"` (covers time-up, all-questions-done, and hang-up).
+- Race guard: `startWebcam` re-checks `phaseRef.current !== "interview"` AFTER the `getUserMedia` await and stops the freshly granted stream if the interview already ended while the permission prompt was still open — otherwise a late-resolving stream attaches on the report screen and never stops.
 
 **End call:**
 - Red circular button (`bg-red-600 rounded-full w-10 h-10`) with `PhoneOff` icon

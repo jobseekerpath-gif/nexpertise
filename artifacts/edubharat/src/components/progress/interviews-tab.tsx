@@ -6,8 +6,9 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "./empty-state";
 import { useInterviewAnalytics } from "@/lib/use-interview-analytics";
+import { interviewVerdict } from "@/lib/interview-verdict";
 import { useAuth } from "@/lib/use-auth";
-import { Mic, ChevronDown, ChevronUp, Clock, LogIn, TrendingUp, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
+import { Mic, ChevronDown, ChevronUp, Clock, LogIn, TrendingUp, CheckCircle2, XCircle, AlertCircle, ArrowRight } from "lucide-react";
 
 const SCORE_COLOR = (s: number) => s >= 80 ? "#22c55e" : s >= 60 ? "#f97316" : "#ef4444";
 
@@ -28,6 +29,7 @@ type ParsedReport = {
   improvements: string[];
   nextSteps: string[];
   roleFit: string;
+  verdictReason: string;
 };
 
 function parseSessionReport(feedbackJson: string | null): ParsedReport | null {
@@ -39,6 +41,7 @@ function parseSessionReport(feedbackJson: string | null): ParsedReport | null {
       improvements: Array.isArray(p["improvements"]) ? p["improvements"].map(String) : [],
       nextSteps: Array.isArray(p["nextSteps"]) ? p["nextSteps"].map(String) : [],
       roleFit: String(p["roleFit"] ?? ""),
+      verdictReason: String(p["verdictReason"] ?? p["recommendation"] ?? ""),
     };
   } catch { return null; }
 }
@@ -232,6 +235,7 @@ export function InterviewsTab() {
           <div className="space-y-2">
             {interviews.pastInterviews.map(s => {
               const parsedReport = expanded === s.id ? parseSessionReport(s.feedbackJson) : null;
+              const verdict = s.overallScore !== null ? interviewVerdict(s.overallScore) : null;
               return (
                 <div key={s.id} className="border rounded-xl overflow-hidden">
                   <button
@@ -258,6 +262,13 @@ export function InterviewsTab() {
 
                   {expanded === s.id && (
                     <div className="border-t px-4 py-4 bg-muted/20 space-y-4">
+                      {/* Selected / Not Selected result (pass bar shared with the report screen) */}
+                      {verdict && (
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${verdict.selected ? "bg-green-100 text-green-800 border-green-300" : "bg-red-100 text-red-800 border-red-300"}`}>
+                          {verdict.selected ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                          Result: {verdict.label}
+                        </div>
+                      )}
                       {/* Sub-scores */}
                       {s.communicationScore !== null && (
                         <div className="grid grid-cols-2 gap-2">
@@ -280,6 +291,9 @@ export function InterviewsTab() {
                         <>
                           {parsedReport.roleFit && (
                             <p className="text-sm text-muted-foreground italic">{parsedReport.roleFit}</p>
+                          )}
+                          {parsedReport.verdictReason && (
+                            <p className="text-sm text-secondary">{parsedReport.verdictReason}</p>
                           )}
                           {parsedReport.strengths.length > 0 && (
                             <div className="space-y-1.5">
