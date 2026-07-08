@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Bookmark, LogIn, LogOut, User, BarChart2, Menu, X, BookOpen, Mic, Newspaper, Settings, FileText, Route, Coins, Sparkles, Shield, CreditCard, Users as UsersIcon } from "lucide-react";
+import { Bookmark, LogIn, LogOut, User, BarChart2, Menu, X, BookOpen, Mic, Newspaper, Settings, FileText, Route, Coins, Sparkles, Shield, CreditCard, Users as UsersIcon, Briefcase } from "lucide-react";
 import { useHistory } from "@/lib/use-history";
 import { useAuth } from "@/lib/use-auth";
 import { useCredits } from "@/lib/use-credits";
@@ -51,18 +51,20 @@ export function Navbar() {
           </Link>
 
           {/* Desktop links */}
-          <div className="hidden md:flex items-center gap-1">
-            {/* ── Fluency Suite ── */}
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-widest uppercase text-orange-500 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5 mr-1 select-none">
-              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />
-              Fluency
+          <div className="hidden md:flex items-center gap-0.5">
+            {/* ── Fluency Suite badge ── */}
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold tracking-wide text-white bg-gradient-to-r from-orange-500 to-amber-400 rounded-full px-3 py-1.5 shadow-md shadow-orange-300/50 select-none shrink-0 mr-0.5">
+              <Sparkles className="w-3 h-3" />
+              Fluency Suite
             </span>
             {FLUENCY_LINKS.map(({ href, label }) => (
               <Link
                 key={href}
                 href={href}
-                className={`px-3 py-1.5 text-sm font-semibold transition-colors rounded-lg hover:text-primary hover:bg-orange-50/60 ${
-                  isActive(href) ? "text-primary bg-orange-50" : "text-muted-foreground"
+                className={`whitespace-nowrap px-2.5 py-1.5 text-sm font-semibold transition-all rounded-lg ${
+                  isActive(href)
+                    ? "text-orange-600 bg-orange-50 ring-1 ring-orange-200"
+                    : "text-muted-foreground hover:text-orange-600 hover:bg-orange-50/70"
                 }`}
               >
                 {label}
@@ -72,17 +74,19 @@ export function Navbar() {
             {/* divider */}
             <span className="w-px h-5 bg-border mx-2 shrink-0" />
 
-            {/* ── Career Suite ── */}
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-widest uppercase text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 mr-1 select-none">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
-              Career
+            {/* ── Career Suite badge ── */}
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold tracking-wide text-white bg-gradient-to-r from-blue-600 to-indigo-500 rounded-full px-3 py-1.5 shadow-md shadow-blue-300/50 select-none shrink-0 mr-0.5">
+              <Briefcase className="w-3 h-3" />
+              Career Suite
             </span>
             {CAREER_LINKS.map(({ href, label }) => (
               <Link
                 key={href}
                 href={href}
-                className={`px-3 py-1.5 text-sm font-semibold transition-colors rounded-lg hover:text-blue-600 hover:bg-blue-50/60 ${
-                  isActive(href) ? "text-blue-600 bg-blue-50" : "text-muted-foreground"
+                className={`whitespace-nowrap px-2.5 py-1.5 text-sm font-semibold transition-all rounded-lg ${
+                  isActive(href)
+                    ? "text-blue-600 bg-blue-50 ring-1 ring-blue-200"
+                    : "text-muted-foreground hover:text-blue-600 hover:bg-blue-50/70"
                 }`}
               >
                 {label}
