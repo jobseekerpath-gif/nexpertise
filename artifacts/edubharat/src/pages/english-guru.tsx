@@ -176,7 +176,7 @@ function EnglishGuruContent() {
     if (preferred && preferred.id !== tutorId) setTutorId(preferred.id);
   }, [profile.preferredTutor, profile.voiceStyle, tutorId]);
 
-  const speak = useCallback((text: string, language = uiLang, onEnd?: () => void, opts: { rate?: number } = {}) => {
+  const speak = useCallback((text: string, language = uiLang, onEnd?: () => void, opts: { rate?: number; nativeLanguage?: string } = {}) => {
     let t = stripMarkdownForSpeech(text)
       .replace(/^(?:Teacher|AI|Assistant|System):\s*/i, "")
       .replace(/\b(?:Student|User):\s*/gi, "")
@@ -416,7 +416,14 @@ Rules for spoken replies:
           // likely native reply — then the next English reply flips it back.
           setRecognitionLang(speechLang);
           lastAiSpeechRef.current = cleanResponse;
-          speakRef.current(cleanResponse, speechLang, releaseTurn);
+          // Voice the reply with per-script accents: English words in the tutor's
+          // English voice, native words in a true native accent. The server splits
+          // the reply when we pass the helper language; `language: "English"` keeps
+          // the English runs on the tutor voice. (speechLang above still drives
+          // only which language we LISTEN in next, not the voice.)
+          speakRef.current(cleanResponse, "English", releaseTurn, {
+            nativeLanguage: uiLang !== "English" ? uiLang : undefined,
+          });
         } else {
           releaseTurn();
         }

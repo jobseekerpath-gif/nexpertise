@@ -42,13 +42,16 @@ is only an occasional "helping hand"). So voicing every reply with the *native*
 neural voice (e.g. Malayalam) made it read English text with a heavy, wrong
 accent — the "teacher isn't speaking English" bug.
 
-**Fix pattern (in `english-guru.tsx`):** greetings are always voiced `"English"`.
-For a normal reply, pick the voice by **counting scripts**: use the native voice
-only when Indic/Arabic characters (`\u0900-\u0D7F`, `\u0600-\u06FF` for Urdu)
-outnumber Latin letters (a heavier native "help" moment); otherwise voice it in
-English. This keeps English pronunciation correct while still pronouncing a
-predominantly-native gloss properly. Edge case: *romanised* native text stays on
-the English voice — acceptable.
+**Fix pattern (now SERVER-SIDE in the TTS route):** greetings are always voiced
+`"English"`. For a normal reply the client sends `language:"English"` +
+`nativeLanguage:uiLang` and the **server** picks the voice per script-run (see the
+per-segment section below): English/Latin runs → the tutor's English voice,
+native-script runs → the native voice. A single-script reply collapses to one
+voice by the same **script-count** rule (native voice only when Indic/Arabic
+chars `\u0900-\u0D7F`, `\u0600-\u06FF` outnumber Latin). This keeps English
+pronunciation correct while pronouncing a predominantly-native gloss properly.
+Edge case: *romanised* native text stays on the English voice — acceptable.
+(The client's own script-count now drives ONLY recognition — Rule 3 — not TTS.)
 
 ## Rule 3 — recognition follows the language the AI just SPOKE (adaptive), not the helper setting
 
@@ -83,13 +86,32 @@ main-reply release paths on the SAME duration or teacher-switch greetings
 self-capture) is still the first line of defence, but the content guard now backs
 it up in native modes too.
 
-## Native-accent explanations are TURN-LEVEL, not per-segment
+## Native-accent explanations use PER-SEGMENT server-side TTS (supersedes the earlier turn-level rule)
 
-When the student explicitly asks for the *meaning* of an English word/sentence in
-their native language, the AI is prompted to answer MOSTLY in native script
-(short, meaning-focused) then return to English next turn. The script-majority
-TTS heuristic (Rule 2) then voices that reply in the native accent. This is
-deliberately **turn-level** — do NOT split one reply into native+English segments
-played with different voices: sequential TTS fetches add 1-2 s gaps per segment
-(choppy, violates the "instantly" ask) and Edge SSML multi-voice is fragile. One
-voice per reply, chosen by script majority, is the contract.
+When a reply mixes native script + English (e.g. glossing an English word:
+"confident എന്നാൽ ആത്മവിശ്വാസം"), one voice for the whole reply mispronounces the
+other script — the native voice reads the English word like a robot, and vice
+versa. The user explicitly rejected this "for all native languages".
+
+**Contract:** the TTS route (`/api/tts`) takes an OPTIONAL `nativeLanguage`. When
+present, it splits the cleaned reply into consecutive native-script vs Latin runs,
+synthesizes each run with its OWN Edge neural voice (native vs English/tutor) in
+parallel, and **concatenates the MP3 buffers into ONE response body**. All
+segments share the exact same output format (24 kHz / 48 kbit / mono CBR MP3), so
+byte-concatenation plays back gaplessly. Only genuinely mixed replies
+(`segments > 1`, capped `<= 8`) take this buffered path; single-script replies and
+callers that omit `nativeLanguage` (greetings, Interview Ace) stay on the ORIGINAL
+single-voice STREAMING path (no added latency).
+
+**Why this reverses the earlier "turn-level, never per-segment" note:** that note
+rejected per-segment because *client-side sequential* fetches add 1-2 s gaps and
+Edge SSML multi-voice is fragile (0-byte audio). Doing the split + concat
+**server-side into one blob** avoids BOTH: the client still does one fetch → one
+blob → one `onEnd`, so the delicate audio-singleton / mic-release / echo guards
+are untouched, and there are no inter-segment gaps.
+
+**How to apply:** keep the mixed-voice logic SERVER-SIDE; never move it back to the
+client (it would reintroduce gaps and risk the echo/mic pipeline). Never inject
+SSML `<break>` tags or percentage rate strings (0-byte audio — see
+`edge-tts-ssml.md`). If a segment synth fails before headers, the route 500s and
+the client's non-OK branch fires `onEnd` (mic recovers) — a silent turn, but safe.

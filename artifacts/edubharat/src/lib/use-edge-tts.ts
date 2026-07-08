@@ -26,6 +26,14 @@ export type EdgeSpeakOptions = {
    * distinct accent. Falls back to gender-based selection when absent.
    */
   voiceStyle?: string;
+  /**
+   * Native/helper language name (e.g. "Malayalam"). When supplied, the API
+   * server splits a mixed reply into native-script and English runs and voices
+   * each run with its own neural voice — so an English word inside a native
+   * explanation is spoken naturally instead of by the native voice (and vice
+   * versa). Omit for single-voice output (greetings, English-only replies).
+   */
+  nativeLanguage?: string;
 };
 
 const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
@@ -200,7 +208,7 @@ export function useEdgeTTS() {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body:    JSON.stringify({ text: text.trim(), language, gender, voiceStyle: options.voiceStyle }),
+          body:    JSON.stringify({ text: text.trim(), language, gender, voiceStyle: options.voiceStyle, nativeLanguage: options.nativeLanguage }),
           signal:  ctrl.signal,
         });
         clearTimeout(hangTimer);
