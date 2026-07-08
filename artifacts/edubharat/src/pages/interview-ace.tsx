@@ -741,13 +741,62 @@ Rules:
     }
 
     let response = "";
-    // Start the deliberate "thinking" pause the moment we begin processing the
-    // answer, so the interviewer never replies the instant the candidate stops.
+    // ── Thinking-pause guarantee ───────────────────────────────────────────────
+    // Target: interviewer ALWAYS starts speaking 3–5 s after the candidate stops.
+    // Hard cap: NEVER exceed 5 s (within-5-seconds rule).
+    //
+    // Strategy: start a 3 s minimum-wait timer IN PARALLEL with the AI stream
+    // call so streaming latency counts toward the pause window.  After the stream
+    // resolves we wait only the *remaining* time up to naturalPauseMs (≤ 5 s).
+    // This guarantees:
+    //   • fast stream (< 3 s)  → always waits at least 3 s total
+    //   • medium stream (3–5 s) → fires within the natural window
+    //   • slow stream (> 5 s)  → fires immediately (network-constrained, best effort)
     const thinkStart = Date.now();
+
+    // Compute target pause length based on answer length (determined before this call).
+    // Range 3 000–5 000 ms; short answers get quicker replies, long ones more thinking time.
+    const naturalPauseMs = (() => {
+      let base: number;
+      if (wordCount < 15) {
+        base = 3000 + Math.random() * 800;   // 3.0–3.8 s
+      } else if (wordCount < 50) {
+        base = 3500 + Math.random() * 1000;  // 3.5–4.5 s
+      } else {
+        base = 4000 + Math.random() * 1000;  // 4.0–5.0 s
+      }
+      // Hesitation markers → slight extra hesitation (stays within cap)
+      if (/\b(um+|uh+|hmm+|err+|like,? you know|i mean|so,? basically|basically)\b/i.test(recordedAnswer)) {
+        base += Math.random() * 400;
+      }
+      return Math.min(5000, Math.max(3000, Math.round(base)));
+    })();
+
+    // Neutral fallback questions used when the AI stream times out or errors.
+    // Defined here so they're available both in the timeout path and the parsing fallback below.
+    const FALLBACK_QUESTIONS = [
+      "Could you elaborate on that a little more?",
+      "Can you give me a specific example from your experience?",
+      "Please walk me through that in more detail.",
+      "What was the biggest challenge you faced in that situation?",
+    ];
+
+    // Kick off the minimum 3 s floor immediately — runs while streaming proceeds.
+    const minWaitPromise = new Promise<void>(resolve => setTimeout(resolve, 3000));
+
+    // Hard deadline: if the AI hasn't replied in 4 500 ms, inject a fallback so
+    // the interviewer ALWAYS starts speaking within 5 s of the candidate stopping.
+    const STREAM_DEADLINE_MS = 4500;
+    let streamTimedOut = false;
+    const streamDeadlinePromise = new Promise<string>(resolve =>
+      setTimeout(() => { streamTimedOut = true; resolve(""); }, STREAM_DEADLINE_MS)
+    );
+
     setCoachThinking(true);
     try {
-    response = await stream(
-      `You are ${coach.name} conducting a friendly but professional ${typeMeta.label} interview. ${remainingMin} minutes left.
+      response = await Promise.race([
+        stream(
+          `You are ${coach.name} conducting a friendly but professional ${typeMeta.label} interview. ${remainingMin} minutes left.
 
 Candidate: ${firstName} | ${buildProfileSummary()}
 
@@ -771,32 +820,28 @@ STYLE — important:
 Output format — exactly two lines, nothing else:
 Ack: <short, warm acknowledgement, max ~6 words>
 Next: <the interview question only>`,
-      `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct a professional but warm, encouraging interview that covers a BROAD range of areas and never fixates on one topic. Light, tasteful humour to relax the candidate is welcome. Speak in clear, natural spoken English. Never use markdown, action words, or effusive flattery.`,
-      undefined,
-      { maxTokens: 220 }
-    );
+          `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct a professional but warm, encouraging interview that covers a BROAD range of areas and never fixates on one topic. Light, tasteful humour to relax the candidate is welcome. Speak in clear, natural spoken English. Never use markdown, action words, or effusive flattery.`,
+          undefined,
+          { maxTokens: 220 }
+        ),
+        streamDeadlinePromise,
+      ]);
     } catch {
-      // Stream threw — unlock mic and let the interview continue
-      setCoachSpeaking(false);
-      setCoachThinking(false);
-      speech.blockFor(300);
-      setIsRecording(false);
-      return;
+      // Stream threw — inject a fallback so the interview keeps moving (no silent drop).
+      const fallback = FALLBACK_QUESTIONS[Math.floor(Math.random() * FALLBACK_QUESTIONS.length)]!;
+      response = `Ack: I see.\nNext: ${fallback}`;
     }
 
-    // If the interview ended (time ran out, or the user ended it) while this
-    // stream was in flight, abandon the result — never ask another question or
-    // speak over the closing sign-off. coachSpeaking is owned by the end effect.
+    // If the 4.5 s deadline fired OR stream returned empty, cancel the in-flight
+    // stream and inject a fallback so the 5 s window is respected.
+    if (streamTimedOut || !response.trim()) {
+      resetStream();
+      const fallback = FALLBACK_QUESTIONS[Math.floor(Math.random() * FALLBACK_QUESTIONS.length)]!;
+      response = `Ack: I see.\nNext: ${fallback}`;
+    }
+
+    // If the interview ended while the stream was in flight, stop here.
     if (endingRef.current || phaseRef.current !== "interview") { setCoachThinking(false); return; }
-
-    // stream() swallows network errors and returns "" — treat that the same as a thrown error
-    if (!response.trim()) {
-      setCoachSpeaking(false);
-      setCoachThinking(false);
-      speech.blockFor(300);
-      setIsRecording(false);
-      return;
-    }
 
     // Robust parsing — tolerates multiline Ack, minor model format drift, or
     // missing labels. Prevents premature session-end if the model skips "Next:".
@@ -837,45 +882,25 @@ Next: <the interview question only>`,
     if (nextQuestion) nextQuestion = nextQuestion.charAt(0).toUpperCase() + nextQuestion.slice(1);
 
     // Safety: never let a parsing failure silently end the interview.
-    // If the AI didn't return a parseable question, use a neutral probe.
-    const FALLBACK_QUESTIONS = [
-      "Could you elaborate on that a little more?",
-      "Can you give me a specific example?",
-      "Please walk me through that in more detail.",
-      "What was the biggest challenge you faced there?",
-    ];
     if (!nextQuestion) {
-      nextQuestion = FALLBACK_QUESTIONS[Math.floor(Math.random() * FALLBACK_QUESTIONS.length)];
+      nextQuestion = FALLBACK_QUESTIONS[Math.floor(Math.random() * FALLBACK_QUESTIONS.length)]!;
       acknowledgment = "Understood.";
     }
 
-    // Natural "thinking" pause: 3–5 s, adapts to answer length and hesitation.
-    // Short replies get a quicker response; long or hesitant ones get more time.
-    // Streaming latency already counts toward this window — we only wait the
-    // remainder so the total gap always lands in the natural 3–5 s range.
-    const naturalPauseMs = (() => {
-      let base: number;
-      if (wordCount < 15) {
-        // Short, snappy answer → quicker reply: 3.0–3.5 s
-        base = 3000 + Math.random() * 500;
-      } else if (wordCount < 50) {
-        // Medium answer → 3.5–4.2 s
-        base = 3500 + Math.random() * 700;
-      } else {
-        // Detailed answer → interviewer takes a beat: 4.0–5.0 s
-        base = 4000 + Math.random() * 1000;
-      }
-      // Hesitation markers (um, uh, "I mean", etc.) → slight extra pause
-      if (/\b(um+|uh+|hmm+|err+|like,? you know|i mean|so,? basically|basically)\b/i.test(recordedAnswer)) {
-        base += Math.random() * 400;
-      }
-      return Math.min(5000, Math.max(3000, Math.round(base)));
-    })();
-    const thinkElapsed = Date.now() - thinkStart;
-    if (thinkElapsed < naturalPauseMs) {
-      await new Promise(resolve => setTimeout(resolve, naturalPauseMs - thinkElapsed));
+    // ── Enforce 3–5 s thinking window ─────────────────────────────────────────
+    // Step 1: ensure the 3 s floor has elapsed (timer started BEFORE stream call).
+    await minWaitPromise;
+    // Guard: interview may have ended during stream/minWait — don't continue.
+    if (endingRef.current || phaseRef.current !== "interview") { setCoachThinking(false); return; }
+    // Step 2: wait any remaining time up to naturalPauseMs, but hard-clamp against
+    // the absolute wall-clock budget (5 000 ms from thinkStart) to prevent drift.
+    const wallRemaining = 5000 - (Date.now() - thinkStart);
+    const targetRemaining = naturalPauseMs - (Date.now() - thinkStart);
+    const remainingWait = Math.min(wallRemaining, targetRemaining);
+    if (remainingWait > 0) {
+      await new Promise(resolve => setTimeout(resolve, remainingWait));
     }
-    // Re-check after the await — the interview may have ended during the pause.
+    // Re-check after the final wait — the interview may have ended during the pause.
     if (endingRef.current || phaseRef.current !== "interview") { setCoachThinking(false); return; }
     setCoachThinking(false);
 
