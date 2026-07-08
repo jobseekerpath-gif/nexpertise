@@ -1,6 +1,6 @@
 ---
 name: English Guru native-language speech I/O
-description: How English Guru handles speech recognition + TTS voice when a native (helper) language is selected — two non-obvious rules that fix "AI never responds" and "AI doesn't speak English".
+description: How English Guru handles speech recognition + TTS voice when a native (helper) language is selected — rules that fix "AI never responds", "AI doesn't speak English", and the native-mode self-echo ("teacher replies to itself").
 ---
 
 # English Guru — native-language speech I/O
@@ -31,9 +31,9 @@ fallback (`en-US`) or you reintroduce the infinite loop.
 
 **Why en-IN is an acceptable fallback here:** English Guru is English-first; a
 student whose spoken native language can't be recognised can still TYPE it, and
-the AI still *replies* with native-language help. Do **not** blanket-force
-English recognition for *supported* native languages — that breaks legitimate
-native speech input (documented separately).
+the AI still *replies* with native-language help. (See Rule 3: recognition is now
+*adaptive* — English by default, native only right after a native reply — so this
+fallback only matters inside the rare native-recognition window.)
 
 ## Rule 2 — voice replies in English by default, because the AI speaks mostly English
 
@@ -50,13 +50,46 @@ English. This keeps English pronunciation correct while still pronouncing a
 predominantly-native gloss properly. Edge case: *romanised* native text stays on
 the English voice — acceptable.
 
-## Echo interaction
+## Rule 3 — recognition follows the language the AI just SPOKE (adaptive), not the helper setting
 
-Cross-script echo (native recogniser transcribing the AI's English speech
-phonetically into native script) defeats the Latin-token echo guard. Rule 1's
-fallback makes the worst-affected languages recognise in English, so the content
-echo guard works for them again. For *supported* native languages the recogniser
-stays native, so the **time gate is the real defence**: mic is paused during AI
-speech, then `blockFor(1500)` after it ends, plus a widened (~4500 ms) echo
-window. Keep the greeting release path and the main-reply release path on the
-**same** block duration or teacher-switch greetings can self-capture.
+**This supersedes the earlier "keep the recogniser on the native language for
+supported languages" stance.** The recogniser language is driven by a
+`recognitionLang` state (default `"English"`), NOT by `uiLang`:
+- set to the reply's spoken language after every AI turn (English by default;
+  native only when that reply is native-script-majority),
+- reset to `"English"` on the teacher-switch greeting and whenever the
+  helper-language dropdown changes.
+
+**Why:** the AI speaks *mostly English*, so the mic should listen in English most
+of the time (better English recognition) and flip to the native language only
+right after a native explanation — exactly when the student is most likely to
+answer in it. Crucially this makes any **speaker echo come back in the SAME
+script the AI just spoke**, so the *content* echo-guard can finally match and drop
+it in every mode. Cross-script echo (native recogniser transcribing the AI's
+English into native script → zero Latin overlap → guard misses) was the confirmed
+"teacher replies to its own voice" bug, worst in Malayalam.
+
+**Why this is NOT the "blanket-force English" anti-pattern Rule 1 warns about:**
+native input is preserved right after a native reply (the moment it matters), and
+the unsupported-language fallback (Rule 1) is unaffected. Changing
+`recognitionLang` is continuity-safe: it only updates `langCodeRef`; it does NOT
+stop/restart the live mic — the next spawn picks up the new code (mic is paused
+for the whole AI turn + `blockFor(1500)`, so the state applies well before it
+reopens).
+
+**How to apply:** never regress this to `useSpeechRecognition(uiLang)`. The time
+gate (mic pause during speech + `blockFor(1500)` + ~4500 ms window; greeting and
+main-reply release paths on the SAME duration or teacher-switch greetings
+self-capture) is still the first line of defence, but the content guard now backs
+it up in native modes too.
+
+## Native-accent explanations are TURN-LEVEL, not per-segment
+
+When the student explicitly asks for the *meaning* of an English word/sentence in
+their native language, the AI is prompted to answer MOSTLY in native script
+(short, meaning-focused) then return to English next turn. The script-majority
+TTS heuristic (Rule 2) then voices that reply in the native accent. This is
+deliberately **turn-level** — do NOT split one reply into native+English segments
+played with different voices: sequential TTS fetches add 1-2 s gaps per segment
+(choppy, violates the "instantly" ask) and Edge SSML multi-voice is fragile. One
+voice per reply, chosen by script majority, is the contract.

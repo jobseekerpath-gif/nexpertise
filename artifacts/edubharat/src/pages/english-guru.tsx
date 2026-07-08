@@ -70,7 +70,17 @@ function EnglishGuruContent() {
   const convInputRef = useRef<HTMLTextAreaElement>(null);
   const convScrollRef = useRef<HTMLDivElement>(null);
 
-  const speech = useSpeechRecognition(uiLang);
+  // Recognition follows the language the AI last SPOKE — not the helper-language
+  // setting. The AI speaks mostly English, so the mic listens in English by
+  // default and switches to the native language only right after the AI gives a
+  // native-language explanation (when the student is most likely to answer in
+  // it). This keeps the student's English recognised well AND makes any speaker
+  // echo come back in the SAME script the AI just spoke, so the content
+  // echo-guard can match and drop it — a native recognizer transcribing the AI's
+  // English into native script defeated that guard and caused the "teacher
+  // replies to its own voice" bug (worst in Malayalam and other native modes).
+  const [recognitionLang, setRecognitionLang] = useState("English");
+  const speech = useSpeechRecognition(recognitionLang);
   /**
    * speechRef — always-current speech handle so handleConvPhrase doesn't need
    * `speech` in its deps (speech changes every render because it's an object
@@ -226,6 +236,8 @@ function EnglishGuruContent() {
       aiBusyRef.current = true;
       speechRef.current.pause();
       lastAiSpeechRef.current = greeting;
+      // Greeting is always English → recognise the student's reply in English.
+      setRecognitionLang("English");
       // Release the mic when the greeting finishes. Guarded by a safety timer so
       // that if TTS onEnd never fires (autoplay block, audio glitch, eviction)
       // the mic and busy flag can't stay stuck — otherwise the conversation would
@@ -331,7 +343,7 @@ function EnglishGuruContent() {
         const isEnglishNative = uiLang === "English";
         const languageGuidance = isEnglishNative
           ? `Speak in clear, simple, natural English throughout.`
-          : `The student's ONLY helper language is ${uiLang} — do NOT use any other Indian language (not Hindi, not Kannada, not Tamil, not any other — ONLY ${uiLang} when needed). English is the goal, so speak MOSTLY in simple, clear English and keep them practicing. But use ${uiLang} as a warm helping hand whenever they need it: if the student replies in ${uiLang}, tells you (in any language) that they didn't understand, or clearly seems confused, briefly explain the tricky word or idea in ${uiLang}, then continue in English. You may drop a short ${uiLang} gloss in brackets right after a hard English word. Never leave them stuck or embarrassed — slow down, simplify, and lean on ${uiLang} to unblock them, then gently guide them back to English. When they're managing fine in English, keep your whole reply in English.`;
+          : `The student's ONLY helper language is ${uiLang} — do NOT use any other Indian language (not Hindi, not Kannada, not Tamil, not any other — ONLY ${uiLang} when needed). English is the goal, so speak MOSTLY in simple, clear English and keep them practicing. But use ${uiLang} as a warm helping hand whenever they need it: if the student replies in ${uiLang}, tells you (in any language) that they didn't understand, or clearly seems confused, briefly explain the tricky word or idea in ${uiLang}, then continue in English. You may drop a short ${uiLang} gloss in brackets right after a hard English word. When the student explicitly asks what an English word or sentence MEANS in ${uiLang} (or asks you to translate or explain it in ${uiLang}), immediately give that meaning written MOSTLY in ${uiLang} — keep English down to just the word being explained — so it is spoken aloud in a natural ${uiLang} accent; keep that reply short and focused on the meaning, then switch straight back to English in your very next reply. Never leave them stuck or embarrassed — slow down, simplify, and lean on ${uiLang} to unblock them, then gently guide them back to English. When they're managing fine in English, keep your whole reply in English.`;
 
         const webContextNote = webContext
           ? `\n\nLive web context (use naturally if relevant): "${webContext}"`
@@ -397,6 +409,12 @@ Rules for spoken replies:
             ? "English"
             : ((cleanResponse.match(/[\u0900-\u0D7F\u0600-\u06FF]/g)?.length ?? 0)
                 > (cleanResponse.match(/[A-Za-z]/g)?.length ?? 0) ? uiLang : "English");
+          // Listen for the student's NEXT turn in whatever language the AI just
+          // spoke: English stays English (so the echo of the AI's own English
+          // voice is same-script and the echo-guard can drop it), and a native
+          // explanation flips the mic to the native language for the student's
+          // likely native reply — then the next English reply flips it back.
+          setRecognitionLang(speechLang);
           lastAiSpeechRef.current = cleanResponse;
           speakRef.current(cleanResponse, speechLang, releaseTurn);
         } else {
@@ -648,14 +666,16 @@ Rules for spoken replies:
               if (v === uiLang) return;
               setUiLang(v);
               updateProfile({ preferredLanguage: v });
-              // Live chat: DON'T interrupt the conversation. The new language reaches
-              // the AI on its next turn (uiLang is a handleConvPhrase dep) and the
-              // recognizer reads it on its next spawn (langCodeRef) — so continuity is
-              // never broken and the change applies right away. If it's the student's
-              // turn, softly restart the mic so their next words are recognised in the
-              // new language immediately; the loop stays alive (pause()+blockFor keep
-              // shouldContinue true). Never touch the mic while the AI is mid-turn
-              // (aiBusyRef) or it would capture the coach's own voice as input.
+              // AI resumes English-first after a language change, so reset the mic
+              // to English; from there it re-follows whatever the AI actually
+              // speaks (English by default, the new native language right after an
+              // explanation). uiLang still reaches the AI on its next turn.
+              setRecognitionLang("English");
+              // Live chat: DON'T interrupt the conversation. If it's the student's
+              // turn, softly restart the mic so the reset language applies right
+              // away; the loop stays alive (pause()+blockFor keep shouldContinue
+              // true). Never touch the mic while the AI is mid-turn (aiBusyRef) or
+              // it would capture the coach's own voice as input.
               if (liveChatRef.current && !aiBusyRef.current) {
                 speech.pause();
                 speech.blockFor(150);
