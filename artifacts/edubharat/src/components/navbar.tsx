@@ -6,14 +6,19 @@ import { useAuth } from "@/lib/use-auth";
 import { useCredits } from "@/lib/use-credits";
 import { Button } from "@/components/ui/button";
 
-const NAV_LINKS = [
+const FLUENCY_LINKS = [
   { href: "/english-guru",      label: "English Guru",      icon: BookOpen },
   { href: "/tools-pro",         label: "Tools Pro",         icon: Sparkles },
   { href: "/learning-journey",  label: "My Journey",        icon: Route },
+];
+
+const CAREER_LINKS = [
   { href: "/interview-ace",     label: "Interview Ace",     icon: Mic },
   { href: "/rozgar-samachar",   label: "Rozgar Samachar",   icon: Newspaper },
   { href: "/resume-intelligence", label: "Resume",          icon: FileText },
 ];
+
+const NAV_LINKS = [...FLUENCY_LINKS, ...CAREER_LINKS];
 
 export function Navbar() {
   const [location] = useLocation();
@@ -46,18 +51,46 @@ export function Navbar() {
           </Link>
 
           {/* Desktop links */}
-          <div className="hidden md:flex items-center gap-6">
-            {NAV_LINKS.map(({ href, label }) => (
+          <div className="hidden md:flex items-center gap-1">
+            {/* ── Fluency Suite ── */}
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-widest uppercase text-orange-500 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5 mr-1 select-none">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />
+              Fluency
+            </span>
+            {FLUENCY_LINKS.map(({ href, label }) => (
               <Link
                 key={href}
                 href={href}
-                className={`text-sm font-semibold transition-colors hover:text-primary ${
-                  isActive(href) ? "text-primary" : "text-muted-foreground"
+                className={`px-3 py-1.5 text-sm font-semibold transition-colors rounded-lg hover:text-primary hover:bg-orange-50/60 ${
+                  isActive(href) ? "text-primary bg-orange-50" : "text-muted-foreground"
                 }`}
               >
                 {label}
               </Link>
             ))}
+
+            {/* divider */}
+            <span className="w-px h-5 bg-border mx-2 shrink-0" />
+
+            {/* ── Career Suite ── */}
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-widest uppercase text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 mr-1 select-none">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
+              Career
+            </span>
+            {CAREER_LINKS.map(({ href, label }) => (
+              <Link
+                key={href}
+                href={href}
+                className={`px-3 py-1.5 text-sm font-semibold transition-colors rounded-lg hover:text-blue-600 hover:bg-blue-50/60 ${
+                  isActive(href) ? "text-blue-600 bg-blue-50" : "text-muted-foreground"
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
+
+            {/* divider */}
+            <span className="w-px h-5 bg-border mx-2 shrink-0" />
 
             <Link
               href="/progress"
@@ -193,20 +226,47 @@ export function Navbar() {
 
         {/* Drawer nav links */}
         <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground px-3 mb-2">Tools</p>
-          {NAV_LINKS.map(({ href, label, icon: Icon }) => (
+          {/* Fluency Suite */}
+          <div className="flex items-center gap-2 px-3 mb-2">
+            <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" />
+            <p className="text-[11px] font-bold uppercase tracking-widest text-orange-500">Fluency Suite</p>
+          </div>
+          {FLUENCY_LINKS.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
               className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-colors ${
                 isActive(href)
-                  ? "bg-primary/10 text-primary"
+                  ? "bg-orange-50 text-primary"
                   : "text-secondary hover:bg-muted"
               }`}
             >
               <Icon className="w-4 h-4 shrink-0" />
               {label}
               {isActive(href) && <span className="ml-auto w-1.5 h-1.5 bg-primary rounded-full" />}
+            </Link>
+          ))}
+
+          <div className="h-px bg-border my-3 mx-3" />
+
+          {/* Career Suite */}
+          <div className="flex items-center gap-2 px-3 mb-2">
+            <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+            <p className="text-[11px] font-bold uppercase tracking-widest text-blue-600">Career Suite</p>
+          </div>
+          {CAREER_LINKS.map(({ href, label, icon: Icon }) => (
+            <Link
+              key={href}
+              href={href}
+              className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-colors ${
+                isActive(href)
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-secondary hover:bg-muted"
+              }`}
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              {label}
+              {isActive(href) && <span className="ml-auto w-1.5 h-1.5 bg-blue-500 rounded-full" />}
             </Link>
           ))}
 
