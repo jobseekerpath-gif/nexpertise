@@ -593,7 +593,7 @@ function InterviewAceContent() {
     const full = await stream(
       `You are ${coach.name}, a professional interviewer conducting a formal ${typeMeta.label} interview with ${firstName} (${experience} level).
 
-This interview will cover a broad range of areas. Start by warmly introducing yourself in 1-2 short sentences — say your name and that you will be taking ${firstName}'s interview today, and put them at ease — then ask ONE clear opening question about ${INTERVIEW_AREAS.background!.focus}.
+This interview will cover a broad range of areas. Start by warmly introducing yourself in 1-2 short sentences — say your name and that you will be taking ${firstName}'s interview today, and put them at ease — then ask ONE clear opening question about their educational background: degree, key subjects, and any notable curricular or extra-curricular achievements relevant to the ${typeMeta.label} role.
 
 Rules:
 - Keep it to at most 3 sentences. Warm and professional — you want ${firstName} to feel relaxed. A little warmth is good; NO cheesy greetings like "Hey, good to see you", no small talk, no "let's dive in".
@@ -727,9 +727,13 @@ Rules:
     const nextRetry = willRetry ? retryRef.current + 1 : 0;
     const targetBeatIdx = willRetry ? beatIdxRef.current : beatIdxRef.current + 1;
     const area = areaForBeat(targetBeatIdx);
+    // For the background area, replace the generic "this role" with the actual
+    // role the candidate selected so the interviewer never guesses the wrong title.
     const areaFocus = area.key === "functional"
       ? `${area.focus} — ${functionalKnowledgeFor(typeMeta.value, typeMeta.label)}`
-      : area.focus;
+      : area.key === "background"
+        ? `a brief self-introduction and their educational background — degree, key subjects, and notable curricular or extra-curricular achievements relevant to the ${typeMeta.label} role`
+        : area.focus;
 
     let directive: string;
     if (willRetry) {
