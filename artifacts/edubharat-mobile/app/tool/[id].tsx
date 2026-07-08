@@ -15,17 +15,19 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
 const PROMPTS: Record<string, string> = {
-  'english-guru': 'Type a sentence or question in English. Your AI tutor will correct, explain, and help you improve...',
-  'interview-ace': 'Enter the job role you are preparing for (e.g. "Software Engineer at TCS")...',
+  'english-guru':        'Type a sentence or question in English. Your AI tutor will correct, explain, and help you improve...',
+  'interview-ace':       'Enter the job role you are preparing for (e.g. "Software Engineer at TCS")...',
   'resume-intelligence': 'Paste a summary of your experience or a resume paragraph for AI analysis...',
-  'rozgar-samachar': 'Type a city, skill, or job keyword to find opportunities (e.g. "Data analyst jobs in Pune")...',
+  'rozgar-samachar':     'Type a city, skill, or job keyword to find opportunities (e.g. "Data analyst jobs in Pune")...',
+  'tools-pro':           'Which English skill do you want to work on? (Grammar Fix · Write Better · Vocabulary · Pronunciation · Daily Lesson · Interview English)',
 };
 
 const SYSTEM_PROMPTS: Record<string, string> = {
-  'english-guru': 'You are Priya Ma\'am, a warm and encouraging English tutor for Indian learners. When the user writes something, correct any grammar or vocabulary mistakes, explain the correction clearly with examples from Indian daily life, and give a better version of their sentence. Keep responses under 150 words. Be encouraging and practical.',
-  'interview-ace': 'You are Raj Sir, an experienced Indian HR interview coach. When given a job role, provide 3 likely interview questions with ideal concise answers using the STAR method. Focus on Indian corporate context. Keep each answer under 80 words.',
+  'english-guru':        'You are Priya Ma\'am, a warm and encouraging English tutor for Indian learners. When the user writes something, correct any grammar or vocabulary mistakes, explain the correction clearly with examples from Indian daily life, and give a better version of their sentence. Keep responses under 150 words. Be encouraging and practical.',
+  'interview-ace':       'You are Raj Sir, an experienced Indian HR interview coach. When given a job role, provide 3 likely interview questions with ideal concise answers using the STAR method. Focus on Indian corporate context. Keep each answer under 80 words.',
   'resume-intelligence': 'You are an expert Indian resume reviewer with 15 years of experience in Indian hiring. Analyse the given resume text or experience summary. Give: (1) ATS score out of 100, (2) top 3 missing keywords for Indian job market, (3) 3 specific actionable improvements. Keep the total response under 200 words.',
-  'rozgar-samachar': 'You are a career advisor specialising in the Indian job market. Given a job search query, provide: (1) 3 specific job titles matching the query with likely salary ranges in LPA, (2) top 2 skills to add, (3) the best Indian job portal to use for this search. Keep response under 150 words.',
+  'rozgar-samachar':     'You are a career advisor specialising in the Indian job market. Given a job search query, provide: (1) 3 specific job titles matching the query with likely salary ranges in LPA, (2) top 2 skills to add, (3) the best Indian job portal to use for this search. Keep response under 150 words.',
+  'tools-pro':           'You are Priya Ma\'am, a versatile English skills coach with 6 specialised tools. When the user tells you which tool they want, respond helpfully: Grammar Fix — correct their text and explain the error; Write Better — rewrite their text professionally; Vocabulary — give 5 words on their topic with Hindi meanings and example sentences; Pronunciation — give a phonetic guide and tips for their word or phrase; Daily Lesson — create a 5-sentence lesson tailored to their level (Beginner/Intermediate/Advanced); Interview English — give 3 essential phrases for their job interview situation. Keep every response under 200 words and end with a gentle suggestion for what to try next.',
 };
 
 const API_BASE = process.env['EXPO_PUBLIC_DOMAIN']
@@ -202,9 +204,10 @@ export default function ToolDetailScreen() {
             ]}
           >
             <Text style={[styles.resultTitle, { color: colors.foreground }]}>
-              {tool.id === 'english-guru' ? '📝 Tutor Feedback' :
-               tool.id === 'interview-ace' ? '🎯 Interview Prep' :
-               tool.id === 'resume-intelligence' ? '📊 Resume Analysis' :
+              {tool.id === 'english-guru'       ? '📝 Tutor Feedback'   :
+               tool.id === 'tools-pro'          ? '✏️ English Skills'   :
+               tool.id === 'interview-ace'      ? '🎯 Interview Prep'   :
+               tool.id === 'resume-intelligence'? '📊 Resume Analysis'  :
                '💼 Job Opportunities'}
             </Text>
             <Text style={[styles.resultText, { color: colors.accentForeground }]}>{result}</Text>
