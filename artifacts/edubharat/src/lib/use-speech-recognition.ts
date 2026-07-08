@@ -24,8 +24,39 @@ type AnyWindow = Window & {
 const LANG_MAP: Record<string, string> = {
   Hindi: "hi-IN", Bengali: "bn-IN", Tamil: "ta-IN", Telugu: "te-IN",
   Marathi: "mr-IN", Gujarati: "gu-IN", Kannada: "kn-IN", Malayalam: "ml-IN",
-  Punjabi: "pa-IN", Odia: "or-IN", Assamese: "as-IN", Urdu: "ur-IN", English: "en-IN",
+  // Chrome/Edge (Google engine) expect Gurmukhi-tagged Punjabi, not plain pa-IN.
+  Punjabi: "pa-Guru-IN", Odia: "or-IN", Assamese: "as-IN", Urdu: "ur-IN", English: "en-IN",
 };
+
+/**
+ * Fallback chain used when the chosen language isn't supported. Tried in order;
+ * en-US is the terminal fallback (never itself blacklisted) so we can never end
+ * up in an infinite respawn loop even on a browser that rejects en-IN.
+ */
+const RECOGNITION_FALLBACKS = ["en-IN", "en-US"] as const;
+const LAST_RESORT_LANG = RECOGNITION_FALLBACKS[RECOGNITION_FALLBACKS.length - 1];
+
+/**
+ * BCP-47 codes the browser's speech engine has rejected as unsupported during
+ * this session (e.g. Assamese as-IN, Odia or-IN — Web Speech has no model for
+ * them). Once a code lands here we recognise in en-IN instead, so the mic keeps
+ * working (English Guru is English-first; the student can still TYPE their
+ * native language) rather than looping forever on a code that never returns a
+ * result — the "teacher never responds in <language>" bug. Module-scoped so the
+ * knowledge survives recognizer re-spawns and hook re-mounts within a session.
+ */
+const unsupportedRecognitionLangs = new Set<string>();
+
+/** Resolve the code to actually hand the recognizer, honouring known fallbacks. */
+function resolveRecognitionLang(code: string): string {
+  if (!unsupportedRecognitionLangs.has(code)) return code;
+  // Chosen language is unsupported — use the first English variant the engine
+  // hasn't also rejected this session; en-US is the guaranteed terminal option.
+  for (const fb of RECOGNITION_FALLBACKS) {
+    if (!unsupportedRecognitionLangs.has(fb)) return fb;
+  }
+  return LAST_RESORT_LANG;
+}
 
 /**
  * If a recognizer has claimed the active slot but shown no lifecycle event
@@ -187,9 +218,10 @@ export function useSpeechRecognition(language = "English") {
       const recognition = createRecognitionInstance();
       if (!recognition) return;
 
+      const spawnLang = resolveRecognitionLang(langCodeRef.current);
       recognition.continuous = false;
       recognition.interimResults = true;
-      recognition.lang = langCodeRef.current;
+      recognition.lang = spawnLang;
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => { setStatus("listening"); setTranscript(""); setInterimTranscript(""); setError(null); };
@@ -206,6 +238,9 @@ export function useSpeechRecognition(language = "English") {
       };
 
       recognition.onerror = (event: { error: string }) => {
+        if (event.error === "language-not-supported" && spawnLang !== LAST_RESORT_LANG) {
+          unsupportedRecognitionLangs.add(spawnLang);
+        }
         if (event.error !== "aborted") { setError(`Error: ${event.error}`); setStatus("error"); }
       };
 
@@ -279,8 +314,10 @@ export function useSpeechRecognition(language = "English") {
 
         recognition.continuous = false;
         recognition.interimResults = true;
-        // Use ref so mid-session language changes are picked up on next spawn
-        recognition.lang = langCodeRef.current;
+        // Use ref so mid-session language changes are picked up on next spawn;
+        // resolve() applies the en-IN fallback for browser-unsupported languages.
+        const spawnLang = resolveRecognitionLang(langCodeRef.current);
+        recognition.lang = spawnLang;
 
         recognition.onstart = () => {
           if (!isCurrent()) return;
@@ -320,6 +357,12 @@ export function useSpeechRecognition(language = "English") {
             shouldContinueRef.current = false;
             setError("Microphone permission denied.");
             setStatus("error");
+          } else if (event.error === "language-not-supported" && spawnLang !== LAST_RESORT_LANG) {
+            // The engine has no model for this language (e.g. Assamese, Odia).
+            // Remember it and fall back to English on the next spawn — onend
+            // fires right after and reschedules — so the mic keeps working
+            // instead of looping on a code that never returns a result.
+            unsupportedRecognitionLangs.add(spawnLang);
           }
         };
 

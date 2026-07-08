@@ -4,6 +4,7 @@
 - [Tutor portrait system](tutor-portraits.md) — real AI-generated photos replace cartoon SVG; SVG is fallback only; imgFailed resets on imageSrc change; TUTORS array in lib/tutors.ts.
 - [Avatar lip movement](avatar-lip-movement.md) — talking portraits use a CSS puppet-jaw on the real photo (keep amplitude TINY — big scaleY reads as a stretched face); never drive it from the TTS audio graph (breaks autoplay); generateImage can't inpaint frames.
 - [Speech voice fallback](speech-voice-fallback.md) — browser voice lists vary; match by locale/name, then shape pitch/rate when a perfect Indian voice is missing.
+- [English Guru native-lang speech I/O](english-guru-native-lang.md) — browser recognition has NO model for as-IN/or-IN (Punjabi needs pa-Guru-IN); fall back en-IN→en-US, never loop. Voice replies in English by default (script-count heuristic), since the AI speaks mostly English.
 - [Claude live-chat budgeting](claude-live-chat-budgeting.md) — live tutoring should use compact history and low token caps; minimize cost, never promise a fixed per-response price.
 - [English Guru compact layout](english-guru-compact-layout.md) — live conversation uses a footer-free full-viewport shell; only the chat panel scrolls.
 - [Interview Ace auto-listen](interview-auto-listen.md) — mock interviews should start listening automatically after each question and feel conversational, not scripted.

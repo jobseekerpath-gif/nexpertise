@@ -235,13 +235,15 @@ function EnglishGuruContent() {
         aiBusyRef.current = false;
         if (!liveChatRef.current) return;
         setConvFlowState("user-speaking");
-        // Echo-guard: 1200 ms matches handleConvPhrase so teacher-switch greetings
+        // Echo-guard: 1500 ms matches handleConvPhrase so teacher-switch greetings
         // never get self-captured by the mic on the next turn.
         lastAiSpeechEndRef.current = Date.now();
-        speechRef.current.blockFor(1200);
+        speechRef.current.blockFor(1500);
       };
       speakSafetyTimerRef.current = setTimeout(releaseGreeting, Math.max(greeting.length * 60 + 4000, 8000));
-      synth.speak(stripMarkdownForSpeech(greeting), uiLang, releaseGreeting, { voiceGender: t.voiceGender, voiceStyle: t.voiceStyle });
+      // Greetings are always English — voice them with the English tutor voice so
+      // a native neural voice never reads English text with the wrong accent.
+      synth.speak(stripMarkdownForSpeech(greeting), "English", releaseGreeting, { voiceGender: t.voiceGender, voiceStyle: t.voiceStyle });
     }
   }, [synth, updateProfile, speech, uiLang]);
 
@@ -259,7 +261,7 @@ function EnglishGuruContent() {
     // Echo guard: a phrase arriving within ~3.5s of the AI finishing, that closely
     // matches what the AI just said, is the mic hearing the speaker — not the user.
     // Drop it so the teacher never "replies to its own voice".
-    if (!isSilenceProbe && Date.now() - lastAiSpeechEndRef.current < 3500) {
+    if (!isSilenceProbe && Date.now() - lastAiSpeechEndRef.current < 4500) {
       const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
       const p = norm(phrase);
       const ai = norm(lastAiSpeechRef.current);
@@ -361,11 +363,11 @@ Rules for spoken replies:
           if (speakSafetyTimerRef.current) { clearTimeout(speakSafetyTimerRef.current); speakSafetyTimerRef.current = null; }
           aiBusyRef.current = false;
           if (liveChatRef.current) {
-            // 1200 ms block — generous enough to outlast speaker echo (incl.
+            // 1500 ms block — generous enough to outlast speaker echo (incl.
             // cross-script transliteration of the AI's own English speech) so the
             // mic can't capture the AI's voice and feed it back as a "user" turn.
             lastAiSpeechEndRef.current = Date.now();
-            speechRef.current.blockFor(1200);
+            speechRef.current.blockFor(1500);
             setConvFlowState("user-speaking");
           } else {
             setConvFlowState("idle");
@@ -384,11 +386,19 @@ Rules for spoken replies:
           // force-release the busy lock after a generous timeout so the mic comes back.
           const safetyMs = Math.max(cleanResponse.length * 60 + 4_000, 10_000);
           speakSafetyTimerRef.current = setTimeout(releaseTurn, safetyMs);
-          // Always use uiLang for TTS — AI was instructed to respond in uiLang.
+          // Voice the reply in English by default — the AI is instructed to speak
+          // MOSTLY English here, so a native neural voice (e.g. Malayalam) reading
+          // English text was the "teacher isn't speaking English" bug. Only switch
+          // to the native voice when the reply is predominantly native script (a
+          // heavier "help" moment), so that gloss is still pronounced correctly.
           // Use speakRef so we always call the latest speak closure even though
           // handleConvPhrase no longer has `speak` in its deps.
+          const speechLang = uiLang === "English"
+            ? "English"
+            : ((cleanResponse.match(/[\u0900-\u0D7F\u0600-\u06FF]/g)?.length ?? 0)
+                > (cleanResponse.match(/[A-Za-z]/g)?.length ?? 0) ? uiLang : "English");
           lastAiSpeechRef.current = cleanResponse;
-          speakRef.current(cleanResponse, uiLang, releaseTurn);
+          speakRef.current(cleanResponse, speechLang, releaseTurn);
         } else {
           releaseTurn();
         }
