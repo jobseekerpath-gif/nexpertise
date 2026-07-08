@@ -19,8 +19,13 @@ The interviewer is warm, encouraging and human, and MAY use brief, tasteful humo
 **How to apply:** keep bans on markdown, *action* words, cheesy greetings and flattery; allow warmth + a light aside. Applies to the opening prompt, the per-turn prompt, and the coach system prompts.
 
 # Candidate think time
-Auto-submit fires after ~5s of silence (was ~2.5s), giving 4–5s to think and answer in continuous speech with natural mid-sentence pauses without being cut off. The Submit button stays enabled during recording as a manual override.
+Auto-submit fires after ~5s of silence, giving room to think in continuous speech without being cut off. The Submit button stays enabled as a manual override.
 **Why:** the user wanted room to construct answers while speaking continuously.
+
+# Interviewer (coach) response delay — adaptive, NOT fixed
+The coach's "thinking pause" after receiving an answer is adaptive: 3.0–3.5s for short answers (<15 words), 3.5–4.2s for medium (15–50 words), 4.0–5.0s for long (>50 words), +0–400ms if hesitation markers (um, uh, "I mean", "you know") are detected. Streaming latency counts toward this window; only the remainder waits. Range clamped to [3000ms, 5000ms].
+**Why:** fixed 4.5s felt mechanical and constant; user asked for natural variation (3–5s range) that reacts to how the candidate answered.
+**How to apply:** the IIFE producing `naturalPauseMs` is computed from `wordCount` and `recordedAnswer` (both already in scope) immediately before the `await new Promise(...)` pause in `submitCurrentAnswer`. Do NOT revert to a fixed constant.
 
 # Scope
 The live AI interview lives ONLY in the web app (`artifacts/edubharat/src/pages/interview-ace.tsx`). Expo `interviews/*` screens only LIST past sessions — they do not generate questions, so interview-prompt changes there are N/A.

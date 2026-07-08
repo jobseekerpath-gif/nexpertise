@@ -28,6 +28,11 @@ const AdminPayments = lazy(() => import("@/pages/admin-payments"));
 const AdminUsers = lazy(() => import("@/pages/admin-users"));
 const AdminContent = lazy(() => import("@/pages/admin-content"));
 const AdminLogin = lazy(() => import("@/pages/admin-login"));
+const Terms = lazy(() => import("@/pages/terms"));
+const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
+const ShippingRefund = lazy(() => import("@/pages/shipping-refund"));
+const AboutUs = lazy(() => import("@/pages/about-us"));
+const ContactUs = lazy(() => import("@/pages/contact-us"));
 
 function Analytics() {
   const [location] = useLocation();
@@ -75,6 +80,11 @@ function Router() {
             <Route path="/progress" component={Progress} />
             <Route path="/profile" component={ProfilePage} />
             <Route path="/credits" component={BuyCredits} />
+            <Route path="/terms" component={Terms} />
+            <Route path="/privacy-policy" component={PrivacyPolicy} />
+            <Route path="/shipping-refund" component={ShippingRefund} />
+            <Route path="/about-us" component={AboutUs} />
+            <Route path="/contact-us" component={ContactUs} />
             <Route path="/admin-login" component={AdminLogin} />
             <Route path="/admin-payments" component={AdminPayments} />
             <Route path="/admin-users" component={AdminUsers} />

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Bookmark, LogIn, LogOut, User, BarChart2, Menu, X, BookOpen, Mic, Newspaper, Settings, FileText, Route, Coins, Sparkles } from "lucide-react";
+import { Bookmark, LogIn, LogOut, User, BarChart2, Menu, X, BookOpen, Mic, Newspaper, Settings, FileText, Route, Coins, Sparkles, Shield, CreditCard, Users as UsersIcon } from "lucide-react";
 import { useHistory } from "@/lib/use-history";
 import { useAuth } from "@/lib/use-auth";
 import { useCredits } from "@/lib/use-credits";
@@ -83,6 +83,17 @@ export function Navbar() {
                 </span>
               )}
             </Link>
+
+            {user?.isAdmin && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-1.5 rounded-full bg-violet-50 border border-violet-200 text-violet-700 px-3 py-1.5 text-sm font-bold hover:bg-violet-100 transition-colors"
+                title="Admin Panel"
+              >
+                <Shield className="w-4 h-4" />
+                Admin
+              </Link>
+            )}
 
             {authenticated && (
               <Link
@@ -198,6 +209,40 @@ export function Navbar() {
               {isActive(href) && <span className="ml-auto w-1.5 h-1.5 bg-primary rounded-full" />}
             </Link>
           ))}
+
+          {user?.isAdmin && (
+            <>
+              <div className="h-px bg-border my-3 mx-3" />
+              <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground px-3 mb-2">Admin Panel</p>
+              <Link
+                href="/admin-payments"
+                className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-colors ${
+                  isActive("/admin-payments") || isActive("/admin") ? "bg-violet-50 text-violet-700" : "text-secondary hover:bg-muted"
+                }`}
+              >
+                <CreditCard className="w-4 h-4 shrink-0" />
+                Payments
+              </Link>
+              <Link
+                href="/admin-users"
+                className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-colors ${
+                  isActive("/admin-users") ? "bg-violet-50 text-violet-700" : "text-secondary hover:bg-muted"
+                }`}
+              >
+                <UsersIcon className="w-4 h-4 shrink-0" />
+                Users
+              </Link>
+              <Link
+                href="/admin-content"
+                className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-colors ${
+                  isActive("/admin-content") ? "bg-violet-50 text-violet-700" : "text-secondary hover:bg-muted"
+                }`}
+              >
+                <FileText className="w-4 h-4 shrink-0" />
+                Content
+              </Link>
+            </>
+          )}
 
           <div className="h-px bg-border my-3 mx-3" />
           <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground px-3 mb-2">My Account</p>

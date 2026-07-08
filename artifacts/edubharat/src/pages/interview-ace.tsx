@@ -849,13 +849,31 @@ Next: <the interview question only>`,
       acknowledgment = "Understood.";
     }
 
-    // Deliberate "thinking" pause: a real interviewer weighs the answer for a few
-    // seconds before responding instead of firing back instantly. The streaming
-    // latency already counts toward this, so we only wait for the remainder.
-    const THINK_MIN_MS = 4500;
+    // Natural "thinking" pause: 3–5 s, adapts to answer length and hesitation.
+    // Short replies get a quicker response; long or hesitant ones get more time.
+    // Streaming latency already counts toward this window — we only wait the
+    // remainder so the total gap always lands in the natural 3–5 s range.
+    const naturalPauseMs = (() => {
+      let base: number;
+      if (wordCount < 15) {
+        // Short, snappy answer → quicker reply: 3.0–3.5 s
+        base = 3000 + Math.random() * 500;
+      } else if (wordCount < 50) {
+        // Medium answer → 3.5–4.2 s
+        base = 3500 + Math.random() * 700;
+      } else {
+        // Detailed answer → interviewer takes a beat: 4.0–5.0 s
+        base = 4000 + Math.random() * 1000;
+      }
+      // Hesitation markers (um, uh, "I mean", etc.) → slight extra pause
+      if (/\b(um+|uh+|hmm+|err+|like,? you know|i mean|so,? basically|basically)\b/i.test(recordedAnswer)) {
+        base += Math.random() * 400;
+      }
+      return Math.min(5000, Math.max(3000, Math.round(base)));
+    })();
     const thinkElapsed = Date.now() - thinkStart;
-    if (thinkElapsed < THINK_MIN_MS) {
-      await new Promise(resolve => setTimeout(resolve, THINK_MIN_MS - thinkElapsed));
+    if (thinkElapsed < naturalPauseMs) {
+      await new Promise(resolve => setTimeout(resolve, naturalPauseMs - thinkElapsed));
     }
     // Re-check after the await — the interview may have ended during the pause.
     if (endingRef.current || phaseRef.current !== "interview") { setCoachThinking(false); return; }
