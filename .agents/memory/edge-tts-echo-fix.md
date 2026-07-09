@@ -35,6 +35,18 @@ Root cause: mic picks up AI voice from speakers (bad on laptop + mobile) because
 English Guru keeps a NATIVE-language recognizer (the app advertises native input), so when the AI speaks English the recognizer often transcribes that English audio PHONETICALLY into the native script. A word-overlap echo guard comparing Latin-script tokens then misses it, and the AI "hears itself" and repeats.
 **Fix (do NOT force English recognition — it breaks legit native input):** lean on TIME-based guards (the post-speech `blockFor` window + a wider "ignore input for N ms after AI speech ended" window), feed more recent turn history into the prompt, and add an explicit "never restate your own previous message" instruction. Keep ALL post-AI-speech release paths (including the tutor-switch greeting) on the SAME block duration — a stray shorter one leaves that path under-protected.
 
+## Native-language voice selection (anti-robotic fix)
+
+Per-character segment stitching (old approach) rendered 1-3 word fragments without sentence context, so each clip had its own prosodic ramp → robotic on concatenation.
+
+**Current approach (single-voice selection):**
+- Native-script chars ≥ 25 % of total script chars → native voice (e.g. `hi-IN-SwaraNeural`) for the WHOLE text
+- < 25 % native → tutor English voice (e.g. `en-GB-SoniaNeural`) for the WHOLE text
+- Indian Neural voices handle English code-switches naturally (they're trained on mixed data)
+- 25% threshold: "confidence means आत्मविश्वास" = 41% native → Hindi voice ✓; "Of course let me help" = 0% → English ✓
+
+**Why not split:** stitching two voices at character boundaries sounds robotic because each fragment has no prosodic context from the surrounding sentence.
+
 ## API Limits
 - `/api/tts` rejects text > 3000 characters
 - Streams `audioStream` from `msedge-tts`'s `tts.toStream()` result (returns `{ audioStream, metadataStream }` — use `audioStream` not result directly)

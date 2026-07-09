@@ -71,58 +71,10 @@ function cleanForTTS(text: string): string {
     .trim();
 }
 
-// Indic (Devanagari … Malayalam) + Arabic (Urdu) script ranges — mirrors the
-// native-script detection used on the client in english-guru.tsx.
-const NATIVE_SCRIPT = /[\u0900-\u0D7F\u0600-\u06FF]/;
+// Indic (Devanagari … Malayalam) + Arabic (Urdu) script char counts.
+// Used to decide which voice dominates a mixed-script reply.
 const NATIVE_SCRIPT_G = /[\u0900-\u0D7F\u0600-\u06FF]/g;
-const LATIN = /[A-Za-z]/;
 const LATIN_G = /[A-Za-z]/g;
-
-/**
- * Split text into consecutive runs of native-script vs English/Latin so each run
- * can be spoken by its OWN neural voice. Neutral characters (spaces, digits,
- * punctuation) attach to the run in progress so we never fragment on them; every
- * returned segment therefore contains at least one real letter (a wholly-neutral
- * input yields a single non-native segment).
- */
-function segmentByScript(text: string): Array<{ text: string; native: boolean }> {
-  const segments: Array<{ text: string; native: boolean }> = [];
-  let curNative: boolean | null = null;
-  let buf = "";
-  for (const ch of text) {
-    const isNative = NATIVE_SCRIPT.test(ch);
-    const isLatin = LATIN.test(ch);
-    if (!isNative && !isLatin) {
-      buf += ch; // neutral — keep it with whatever run we're building
-      continue;
-    }
-    if (curNative === null) {
-      curNative = isNative;
-      buf += ch;
-    } else if (isNative === curNative) {
-      buf += ch;
-    } else {
-      segments.push({ text: buf, native: curNative });
-      buf = ch;
-      curNative = isNative;
-    }
-  }
-  if (buf.trim()) segments.push({ text: buf, native: curNative ?? false });
-  return segments;
-}
-
-/** Synthesize one voice+text to a COMPLETE MP3 buffer, for stitching segments. */
-async function synthToBuffer(voiceName: string, text: string): Promise<Buffer> {
-  const tts = new MsEdgeTTS();
-  await tts.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-  const { audioStream } = tts.toStream(text);
-  const chunks: Buffer[] = [];
-  return await new Promise<Buffer>((resolve, reject) => {
-    audioStream.on("data", (c: Buffer) => chunks.push(Buffer.from(c)));
-    audioStream.on("end", () => resolve(Buffer.concat(chunks)));
-    audioStream.on("error", reject);
-  });
-}
 
 /** Stream a single voice straight to the response (default, low-latency path). */
 async function streamVoice(res: Response, voiceName: string, text: string): Promise<void> {
@@ -187,30 +139,25 @@ router.post("/tts", async (req, res) => {
 
   try {
     if (nativeVoice) {
-      // ── Mixed-script path ────────────────────────────────────────────────
-      // Split the reply into native-script and English runs and voice each with
-      // its own neural voice, then stitch the MP3s into one continuous stream.
-      // So "confident എന്നാൽ ആത്മവിശ്വാസം" says the English word in a natural
-      // English voice and the meaning in a true Malayalam accent — instead of one
-      // voice reading the other script like a robot. Every segment is the same
-      // 24kHz / 48kbit / mono CBR MP3, so byte-concatenation plays back gaplessly.
-      const segments = segmentByScript(cleaned);
-      if (segments.length > 1 && segments.length <= 8) {
-        const buffers = await Promise.all(
-          segments.map((seg) =>
-            synthToBuffer(seg.native ? nativeVoice : englishVoice, seg.text),
-          ),
-        );
-        res.setHeader("Content-Type", "audio/mpeg");
-        res.setHeader("Cache-Control", "no-store");
-        res.end(Buffer.concat(buffers));
-        return;
-      }
-      // One script only (or too many fragments to stitch cleanly): a single
-      // voice, chosen by which script dominates the reply.
+      // ── Single-voice selection ────────────────────────────────────────────
+      // Per-character segment stitching (previous approach) rendered each
+      // script-boundary fragment — often just 1–3 words — without surrounding
+      // sentence context.  Each clip therefore had its own prosodic ramp,
+      // causing a mechanical, "robotic" quality on concatenation.
+      //
+      // Microsoft's Indian Neural voices are trained on code-switched data and
+      // pronounce English words naturally in an Indian accent, so one voice
+      // reading the full sentence always sounds more natural than two voices
+      // stitched at character boundaries.
+      //
+      // Choice rule:  native-script chars ≥ 25 % of total script chars
+      //               → native voice  (handles English code-switches naturally)
+      //               < 25 %          → tutor English voice (mostly English reply)
       const nativeCount = cleaned.match(NATIVE_SCRIPT_G)?.length ?? 0;
-      const latinCount = cleaned.match(LATIN_G)?.length ?? 0;
-      await streamVoice(res, nativeCount > latinCount ? nativeVoice : englishVoice, cleaned);
+      const latinCount  = cleaned.match(LATIN_G)?.length ?? 0;
+      const totalScript = nativeCount + latinCount;
+      const useNative   = totalScript > 0 && nativeCount / totalScript >= 0.25;
+      await streamVoice(res, useNative ? nativeVoice : englishVoice, cleaned);
       return;
     }
 
