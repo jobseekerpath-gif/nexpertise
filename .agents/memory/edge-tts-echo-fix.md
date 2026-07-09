@@ -35,6 +35,25 @@ Root cause: mic picks up AI voice from speakers (bad on laptop + mobile) because
 English Guru keeps a NATIVE-language recognizer (the app advertises native input), so when the AI speaks English the recognizer often transcribes that English audio PHONETICALLY into the native script. A word-overlap echo guard comparing Latin-script tokens then misses it, and the AI "hears itself" and repeats.
 **Fix (do NOT force English recognition — it breaks legit native input):** lean on TIME-based guards (the post-speech `blockFor` window + a wider "ignore input for N ms after AI speech ended" window), feed more recent turn history into the prompt, and add an explicit "never restate your own previous message" instruction. Keep ALL post-AI-speech release paths (including the tutor-switch greeting) on the SAME block duration — a stray shorter one leaves that path under-protected.
 
+## Mic pre-warm + echo suppression (decoupled timing)
+
+**Problem:** `blockFor(2500)` caused ~2.8s dead-mic silence after AI stopped. Reducing it risked echo pickup.
+
+**Solution:** Decouple spawn timing from result suppression via `suppressUntil(epochMs)`:
+- `suppressUntil(Date.now() + 2000)` — suppress results for 2s from AI stop
+- `blockFor(500)` — mic spawns 500ms after AI stops (drains audio tail)
+- `onstart` merges: `suppressResultsBeforeRef = max(Date.now() + 300, externalSuppressUntilRef.current)`
+- Warmup timer delay also uses `max(300, suppressUntilMs - Date.now())` so "Speak now 🎤" aligns with when results are accepted (not misleadingly early)
+
+**Timing after fix:**
+- T=500ms: recognizer spawns
+- T=~600ms: status="warming" (amber "Get ready…")
+- T=~2000ms: suppression lifts → status="listening" (green "Speak now 🎤")
+- Echo at T=700ms: result arrives, suppressed ✓
+- User phrase starting T=1000ms, finalized T=2500ms: processed ✓
+
+**Why not just lower blockFor:** the old approach conflated spawn-timing with echo-safety. Decoupling lets the mic warm up early while still protecting against echo.
+
 ## Native-language voice selection (anti-robotic fix)
 
 Per-character segment stitching (old approach) rendered 1-3 word fragments without sentence context, so each clip had its own prosodic ramp → robotic on concatenation.

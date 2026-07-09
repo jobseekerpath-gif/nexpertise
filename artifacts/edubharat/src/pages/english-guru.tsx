@@ -247,10 +247,13 @@ function EnglishGuruContent() {
         aiBusyRef.current = false;
         if (!liveChatRef.current) return;
         setConvFlowState("user-speaking");
-        // Echo-guard: 1500 ms matches handleConvPhrase so teacher-switch greetings
-        // never get self-captured by the mic on the next turn.
+        // Pre-warm approach: spawn the recognizer after a short 500ms tail-drain
+        // delay so the mic is hot and calibrated before the user speaks, but
+        // suppress any recognised result for 2s so room echo of the greeting
+        // (which lingers on laptop/phone speakers) is never processed.
         lastAiSpeechEndRef.current = Date.now();
-        speechRef.current.blockFor(2500);
+        speechRef.current.suppressUntil(Date.now() + 2000);
+        speechRef.current.blockFor(500);
       };
       speakSafetyTimerRef.current = setTimeout(releaseGreeting, Math.max(greeting.length * 60 + 4000, 8000));
       // Greetings are always English — voice them with the English tutor voice so
@@ -376,12 +379,15 @@ Rules for spoken replies:
           if (speakSafetyTimerRef.current) { clearTimeout(speakSafetyTimerRef.current); speakSafetyTimerRef.current = null; }
           aiBusyRef.current = false;
           if (liveChatRef.current) {
-            // 2500 ms block — enough to outlast speaker echo on devices without
-            // hardware AEC (laptop/phone speakers). Combined with the 300ms warmup
-            // suppression in useSpeechRecognition, the effective echo-free window
-            // is ~2.8s after the AI's last syllable — enough for most rooms.
+            // Pre-warm: spawn the mic 500ms after TTS ends so the recognizer is
+            // already hot and calibrated by the time the student speaks — but
+            // suppress results for 2s (from TTS end) so room echo of the AI's
+            // voice on laptop/phone speakers is never passed to handleConvPhrase.
+            // The content-based echo guard (6s, 85% overlap) is an additional
+            // backstop for devices with slow echo decay.
             lastAiSpeechEndRef.current = Date.now();
-            speechRef.current.blockFor(2500);
+            speechRef.current.suppressUntil(Date.now() + 2000);
+            speechRef.current.blockFor(500);
             setConvFlowState("user-speaking");
           } else {
             setConvFlowState("idle");

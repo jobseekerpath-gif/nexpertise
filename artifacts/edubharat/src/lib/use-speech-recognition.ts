@@ -109,14 +109,25 @@ export function useSpeechRecognition(language = "English") {
 
   /**
    * suppressResultsBeforeRef — epoch ms before which onresult callbacks
-   * should be silently dropped. Set to Date.now() + 300 in every onstart
-   * handler so that audio the engine captured from the speaker BEFORE the
-   * AGC/VAD fully calibrated (the same 300ms warmup window) is never
-   * delivered to the phrase handler. Without this, the mic can pick up the
-   * tail end of the AI's own TTS audio in the very first recognition result
-   * even when the post-speech blockFor() window has already elapsed.
+   * should be silently dropped. Set to the MAXIMUM of:
+   *   - Date.now() + 300  (AGC/VAD warmup — always applied on every onstart)
+   *   - externalSuppressUntilRef.current  (caller-supplied echo-safe window)
+   *
+   * The external window lets the caller (e.g. english-guru releaseTurn) say
+   * "suppress results for 2s from now" without preventing the recognizer from
+   * spawning and warming up early — so the mic is hot and calibrated before
+   * the echo-safe window closes, rather than cold when it finally opens.
    */
   const suppressResultsBeforeRef = useRef(0);
+
+  /**
+   * externalSuppressUntilRef — epoch ms supplied by the caller via
+   * suppressUntil().  onstart merges it with the 300ms warmup so results
+   * captured while the AI's voice still lingers in the room are never
+   * delivered even if the recognizer spawned early.  Safe to leave stale —
+   * past epoch values have no effect once Date.now() overtakes them.
+   */
+  const externalSuppressUntilRef = useRef(0);
 
   /**
    * recognitionActiveRef — true from just before spawnRecognition calls
@@ -171,19 +182,36 @@ export function useSpeechRecognition(language = "English") {
   }, [isSupported]);
 
   /**
+   * suppressUntil — set an absolute epoch ms before which any recognised
+   * phrase is silently discarded.  Call this BEFORE blockFor() in the TTS
+   * onEnd callback to define the echo-safe window independently from how
+   * soon the recognizer is allowed to spawn.
+   *
+   * Example (english-guru releaseTurn):
+   *   speech.suppressUntil(Date.now() + 2000); // drop results for 2s
+   *   speech.blockFor(500);                     // but mic warms up after 500ms
+   *
+   * Result: mic shows "Get ready…" at ~600ms and "Speak now 🎤" at ~900ms
+   * (300ms warmup), but actual results aren't processed until 2s after the
+   * AI stopped — giving room echo of the AI's voice time to fully clear.
+   */
+  const suppressUntil = useCallback((epochMs: number) => {
+    externalSuppressUntilRef.current = epochMs;
+  }, []);
+
+  /**
    * blockFor — prevents the continuous recognition loop from spawning
    * for at least `ms` milliseconds.  Call this in the TTS onEnd callback
    * to add a post-speech silence window so the mic doesn't pick up
    * room echo of the AI's voice.
    *
-   * For short blocks (≤ 1500ms) a direct setTimeout wakeup is scheduled
-   * so the mic restarts ~60ms after the block expires — without waiting
-   * up to 250ms for the poll cycle.  Cuts post-TTS dead-mic time from
-   * ~1200ms (800ms block + 250ms poll + API startup) to ~360ms
-   * (300ms block + 60ms padding + API startup).
+   * Pair with suppressUntil() to decouple "when the mic spawns" from
+   * "when results start being processed" — the mic can pre-warm during
+   * the echo window so it's already hot when suppression lifts.
    *
-   * Only one direct-wakeup timer is active at a time; blockFor() cancels
-   * any previous pending timer before scheduling a new one.
+   * A direct setTimeout wakeup is scheduled for blocks ≤ 3000ms so the
+   * mic restarts ~60ms after the block expires without waiting for the
+   * 250ms poll cycle.  Only one direct-wakeup timer is active at a time.
    */
   const blockFor = useCallback((ms: number) => {
     blockedUntilRef.current = Date.now() + ms;
@@ -256,25 +284,28 @@ export function useSpeechRecognition(language = "English") {
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
-        // Suppress any results that arrive during the 300ms AGC/VAD warmup.
-        // The engine may deliver audio it captured from the speaker before it
-        // fully calibrated — silently drop those to prevent echo pickup.
-        suppressResultsBeforeRef.current = Date.now() + 300;
+        // Suppress results for the longer of: 300ms AGC/VAD warmup, or the
+        // caller-supplied echo-safe window (externalSuppressUntilRef). This
+        // lets the caller pre-warm the mic immediately after TTS ends while
+        // still blocking results until room echo of the AI's voice has cleared.
+        const suppressUntilMs = Math.max(Date.now() + 300, externalSuppressUntilRef.current);
+        suppressResultsBeforeRef.current = suppressUntilMs;
         setStatus("warming");
         setTranscript("");
         setInterimTranscript("");
         setError(null);
-        // Web Speech API needs ~300 ms after onstart to calibrate its AGC and
-        // VAD before it reliably captures the first syllable. "listening" only
-        // flips once the engine is hot — this is what drives the "Speak now 🎤"
-        // cue in the UI so users don't start talking into a cold mic.
+        // "listening" flips only when the mic is BOTH calibrated AND accepting
+        // results — the longer of the 300ms AGC warmup or the external echo-
+        // suppression window.  This keeps "Speak now 🎤" honest: it only
+        // appears when a phrase will actually be passed to the handler.
         if (warmupTimerRef.current !== null) clearTimeout(warmupTimerRef.current);
+        const warmupMs = Math.max(300, suppressUntilMs - Date.now());
         warmupTimerRef.current = setTimeout(() => {
           warmupTimerRef.current = null;
           // Guard: stop()/reset() set recognitionRef to null; if this instance
           // is no longer the active one, don't flip to "listening".
           if (recognitionRef.current === recognition) setStatus("listening");
-        }, 300);
+        }, warmupMs);
       };
 
       recognition.onresult = (event: { resultIndex: number; results: { isFinal: boolean; 0: { transcript: string } }[] }) => {
@@ -382,26 +413,30 @@ export function useSpeechRecognition(language = "English") {
           // Two recognizers abort each other and silently kill the mic after a
           // turn or two (the "AI stops responding after 2 questions" bug).
           //
-          // Suppress any results that arrive during the 300ms AGC/VAD warmup.
-          // The engine may deliver audio it captured from the speaker before it
-          // fully calibrated — silently drop those to prevent echo pickup.
-          suppressResultsBeforeRef.current = Date.now() + 300;
+          // Suppress results for the longer of: 300ms AGC/VAD warmup, or the
+          // caller-supplied echo-safe window. The caller can pre-warm the mic
+          // immediately after TTS ends (short blockFor) while still blocking
+          // results long enough for room echo of the AI's voice to clear.
+          const suppressUntilMs = Math.max(Date.now() + 300, externalSuppressUntilRef.current);
+          suppressResultsBeforeRef.current = suppressUntilMs;
           //
-          // "warming" → "listening" transition: the Web Speech engine needs
-          // ~300 ms after onstart to calibrate AGC/VAD before it reliably
-          // captures the first syllable. We show "Get ready to speak…" during
-          // this window, then flip to "Speak now 🎤" once the engine is hot.
-          // Without this, users speak into a cold mic and lose their first word.
-          // warmupTimerRef lets stop()/pause() cancel this before it fires.
+          // "listening" flips only when BOTH conditions are met: engine calibrated
+          // AND results will be accepted (suppression lifted). The warmup delay is
+          // the longer of the 300ms AGC window or the remaining echo-suppression
+          // window. This keeps "Speak now 🎤" honest — it appears only when a phrase
+          // will actually be delivered to the handler. Without this alignment,
+          // fast speakers who talk right after the green cue find their first words
+          // silently dropped (they arrived before suppression lifted).
           setStatus("warming");
           setInterimTranscript("");
           setError(null);
           if (warmupTimerRef.current !== null) clearTimeout(warmupTimerRef.current);
+          const warmupMs = Math.max(300, suppressUntilMs - Date.now());
           warmupTimerRef.current = setTimeout(() => {
             warmupTimerRef.current = null;
             if (!isCurrent()) return; // bail if this recognizer was superseded
             setStatus("listening");
-          }, 300);
+          }, warmupMs);
         };
 
         recognition.onresult = (event: { resultIndex: number; results: { isFinal: boolean; 0: { transcript: string } }[] }) => {
@@ -518,6 +553,12 @@ export function useSpeechRecognition(language = "English") {
     reset,
     /** Block the mic for ms milliseconds — call in TTS onEnd to prevent echo pickup */
     blockFor,
+    /**
+     * Suppress recognised phrases until the given epoch ms — call BEFORE blockFor()
+     * to set an echo-safe window independently from how soon the mic spawns.
+     * Lets the mic pre-warm during the echo window so it's hot when suppression lifts.
+     */
+    suppressUntil,
     /** Stop the mic and block it until released — call when AI STARTS speaking */
     pause,
   };
