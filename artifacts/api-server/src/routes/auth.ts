@@ -28,6 +28,10 @@ declare module "express-session" {
      * `expiresAt` lets an abandoned meter be replaced so the user is never locked out.
      */
     interview?: { id: string; blocksCharged: number; startedAt: number; expiresAt: number };
+    /** B2B company session — set by /api/b2b/auth/login, never by student login paths. */
+    b2bCompanyId?: number;
+    b2bCompanyEmail?: string;
+    b2bCompanyName?: string;
   }
 }
 
@@ -257,8 +261,11 @@ router.get(
       req.session.userId = u.id;
       req.session.userEmail = u.email;
       req.session.userName = u.name ?? undefined;
-      // Explicitly clear admin privilege — Google OAuth is never an admin path
+      // Explicitly clear admin and B2B privilege — Google OAuth is a student path
       delete req.session.isAdmin;
+      delete req.session.b2bCompanyId;
+      delete req.session.b2bCompanyEmail;
+      delete req.session.b2bCompanyName;
 
       // Merge any guest progress that was saved before login
       const pendingGuestId = req.session.pendingGuestId;
@@ -359,8 +366,11 @@ router.post("/auth/otp/verify", async (req, res) => {
     req.session.userId = user[0].id;
     req.session.userEmail = user[0].email;
     req.session.userName = user[0].name ?? undefined;
-    // Explicitly clear admin privilege — OTP login is never an admin path
+    // Explicitly clear admin and B2B privilege — OTP login is a student path
     delete req.session.isAdmin;
+    delete req.session.b2bCompanyId;
+    delete req.session.b2bCompanyEmail;
+    delete req.session.b2bCompanyName;
 
     // Merge any lesson progress the user built up as a guest
     if (guestId) {
@@ -432,6 +442,10 @@ router.post("/auth/admin-login", async (req, res) => {
     req.session.userEmail = user.email;
     req.session.userName = user.name ?? undefined;
     req.session.isAdmin = true; // Only set here — after password-hash verification
+    // Admin login is a student-side path — clear any B2B session
+    delete req.session.b2bCompanyId;
+    delete req.session.b2bCompanyEmail;
+    delete req.session.b2bCompanyName;
 
     void recordLogin(user.id, req);
 

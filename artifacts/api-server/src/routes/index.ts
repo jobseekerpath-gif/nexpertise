@@ -17,6 +17,8 @@ import creditsRouter from "./credits.js";
 import upiPaymentsRouter from "./upi-payments.js";
 import adminRouter from "./admin.js";
 import contentRouter from "./content.js";
+import b2bAuthRouter from "./b2b-auth.js";
+import b2bRouter from "./b2b.js";
 
 const router: IRouter = Router();
 
@@ -38,5 +40,7 @@ router.use(creditsRouter);
 router.use(upiPaymentsRouter);
 router.use(adminRouter);
 router.use(contentRouter);
+router.use(b2bAuthRouter);
+router.use(b2bRouter);
 
 export default router;

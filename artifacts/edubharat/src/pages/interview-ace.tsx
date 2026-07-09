@@ -402,13 +402,25 @@ function InterviewAceContent() {
     return INTERVIEW_TYPES[0]!.value;
   };
 
-  const [type, setType] = useState(() => mapPreferredRoleToType(profile.preferredRole));
+  // B2B interview params — populated when this page is launched from a recruiter invite link.
+  const b2bParams = useMemo(() => {
+    const p = new URLSearchParams(window.location.search);
+    return {
+      token:    p.get("b2bToken"),
+      type:     p.get("b2bType"),
+      duration: p.get("b2bDuration") ? Number(p.get("b2bDuration")) : null,
+      coach:    p.get("b2bCoach"),
+    };
+  }, []);
+  const b2bToken = b2bParams.token;
+
+  const [type, setType] = useState(() => b2bParams.type || mapPreferredRoleToType(profile.preferredRole));
   const [experience, setExperience] = useState(() => mapExperience(profile.experienceLevel));
   const [coach, setCoach] = useState<Coach>(() => {
-    const preferred = profile.preferredInterviewer;
-    return INTERVIEW_COACHES.find(c => c.id === preferred) ?? INTERVIEW_COACHES[0]!;
+    const coachId = b2bParams.coach || profile.preferredInterviewer;
+    return INTERVIEW_COACHES.find(c => c.id === coachId) ?? INTERVIEW_COACHES[0]!;
   });
-  const [duration, setDuration] = useState(10);
+  const [duration, setDuration] = useState(() => b2bParams.duration || 10);
   const [phase, setPhase] = useState<"setup" | "interview" | "report">("setup");
   const [questions, setQuestions] = useState<QA[]>([]);
   const questionsRef = useRef<QA[]>([]);
@@ -606,9 +618,27 @@ Rules:
     );
     const opening = full.replace(/^\s*["']?|["']?\s*$/g, "").trim();
     if (!opening) return;
-    // Now that a real interview is starting: guests consume a free trial slot,
-    // signed-in users are charged credits.
-    if (!user) {
+    // Now that a real interview is starting:
+    // - Valid B2B token: company pays on completion — no charge to the candidate
+    // - Guest (no b2b): consume free trial slot
+    // - Signed-in user (no b2b): charge credits as usual
+    if (b2bToken) {
+      // Validate the invite token server-side BEFORE bypassing credit/trial checks.
+      // This prevents fake tokens from granting unlimited free interviews.
+      const baseCheck = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+      try {
+        const infoRes = await fetch(`${baseCheck}/api/b2b/invite/${b2bToken}/info`, { credentials: "include" });
+        if (!infoRes.ok) {
+          const d = await infoRes.json() as { error?: string };
+          toast({ title: d.error ?? "Invalid invite link", description: "This interview link could not be verified.", variant: "destructive" });
+          return;
+        }
+      } catch {
+        toast({ title: "Could not verify invite link", description: "Check your internet connection and try again.", variant: "destructive" });
+        return;
+      }
+      // Valid B2B invite — company's account is billed when the session is submitted
+    } else if (!user) {
       consumeGuestInterview();
     } else {
       const charge = await chargeInterview(duration);
@@ -1209,9 +1239,23 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
       localStorage.setItem(key, JSON.stringify(existing.slice(0, 50)));
     } catch { /* ignore */ }
 
-    if (user) {
+    const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+    if (b2bToken) {
+      // B2B: submit to the recruiter endpoint (works for both guests and logged-in users)
       try {
-        const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+        const res = await fetch(`${base}/api/b2b/invite/${b2bToken}/complete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ ...payload, candidateName: profile.name || undefined }),
+        });
+        if (!res.ok) throw new Error("B2B submit failed");
+        toast({ title: "Interview submitted", description: "Your results have been shared with the company." });
+      } catch {
+        toast({ title: "Could not submit results", description: "Your report was saved locally.", variant: "destructive" });
+      }
+    } else if (user) {
+      try {
         const res = await fetch(`${base}/api/sessions/interview`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

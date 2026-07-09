@@ -27,8 +27,19 @@ const BuyCredits = lazy(() => import("@/pages/buy-credits"));
 const AdminPayments = lazy(() => import("@/pages/admin-payments"));
 const AdminUsers = lazy(() => import("@/pages/admin-users"));
 const AdminInterviews = lazy(() => import("@/pages/admin-interviews"));
+const AdminB2B = lazy(() => import("@/pages/admin-b2b"));
 const AdminContent = lazy(() => import("@/pages/admin-content"));
 const AdminLogin = lazy(() => import("@/pages/admin-login"));
+// B2B portal
+const B2BLogin = lazy(() => import("@/pages/b2b-login"));
+const B2BRegister = lazy(() => import("@/pages/b2b-register"));
+const B2BDashboard = lazy(() => import("@/pages/b2b-dashboard"));
+const B2BCampaigns = lazy(() => import("@/pages/b2b-campaigns"));
+const B2BCampaignNew = lazy(() => import("@/pages/b2b-campaign-new"));
+const B2BCampaign = lazy(() => import("@/pages/b2b-campaign"));
+const B2BCandidates = lazy(() => import("@/pages/b2b-candidates"));
+const B2BCredits = lazy(() => import("@/pages/b2b-credits"));
+const B2BInterviewLanding = lazy(() => import("@/pages/b2b-interview-landing"));
 const Terms = lazy(() => import("@/pages/terms"));
 const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
 const ShippingRefund = lazy(() => import("@/pages/shipping-refund"));
@@ -90,8 +101,19 @@ function Router() {
             <Route path="/admin-payments" component={AdminPayments} />
             <Route path="/admin-users" component={AdminUsers} />
             <Route path="/admin-interviews" component={AdminInterviews} />
+            <Route path="/admin-b2b" component={AdminB2B} />
             <Route path="/admin-content" component={AdminContent} />
             <Route path="/admin" component={AdminPayments} />
+            {/* B2B portal */}
+            <Route path="/b2b/login" component={B2BLogin} />
+            <Route path="/b2b/register" component={B2BRegister} />
+            <Route path="/b2b/dashboard" component={B2BDashboard} />
+            <Route path="/b2b/campaigns" component={B2BCampaigns} />
+            <Route path="/b2b/campaign/new" component={B2BCampaignNew} />
+            <Route path="/b2b/campaign/:id" component={B2BCampaign} />
+            <Route path="/b2b/candidates" component={B2BCandidates} />
+            <Route path="/b2b/credits" component={B2BCredits} />
+            <Route path="/b2b-interview/:token" component={B2BInterviewLanding} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

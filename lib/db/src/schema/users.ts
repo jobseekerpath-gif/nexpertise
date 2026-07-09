@@ -87,6 +87,8 @@ export const interviewSessionsTable = pgTable("interview_sessions", {
   grammarScore: integer("grammar_score"),
   confidenceScore: integer("confidence_score"),
   technicalScore: integer("technical_score"),
+  /** Set when the interview was triggered by a B2B invite link. */
+  b2bInviteId: integer("b2b_invite_id"),
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

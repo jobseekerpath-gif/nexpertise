@@ -1,10 +1,11 @@
 import { Link, useLocation } from "wouter";
-import { CreditCard, Users, FileText, BriefcaseIcon } from "lucide-react";
+import { CreditCard, Users, FileText, BriefcaseIcon, Building2 } from "lucide-react";
 
 const TABS = [
   { href: "/admin-payments", label: "Payments", icon: CreditCard },
   { href: "/admin-users", label: "Users", icon: Users },
   { href: "/admin-interviews", label: "Interviews", icon: BriefcaseIcon },
+  { href: "/admin-b2b", label: "B2B", icon: Building2 },
   { href: "/admin-content", label: "Content", icon: FileText },
 ];
 

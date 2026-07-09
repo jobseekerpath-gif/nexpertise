@@ -23,6 +23,7 @@
 - [Replit secret naming](replit-secret-naming.md) — Replit secrets can be stored with spaces in their names (e.g. "GOOGLE CLIENT ID"). Always read with both variants: process.env["GOOGLE_CLIENT_ID"] ?? process.env["GOOGLE CLIENT ID"].
 - [Rozgar profile gate](rozgar-profile-gate.md) — gate requires both name AND location before showing feed; gate data must be persisted to useStudentProfile (updateProfile) not just local state.
 - [Admin login pattern](admin-login-pattern.md) — /auth/admin-login uses SHA-256 hash vs ADMIN_USERNAME + ADMIN_PASSWORD_HASH env vars; seeds admin@edubharat.in user on first successful login.
+- [B2B recruiter portal](b2b-portal.md) — separate company auth, own credit ledger, atomic `/complete` tx (FOR UPDATE + spend + session + status), token validation in interview-ace before bypassing charge.
 - [Login-origin capture](login-origin-capture.md) — every login path must record sign-in origin; a blank IP is usually pre-feature rows + a null-hiding admin UI, not broken capture.
 - [Email via Resend connector](email-resend-connector.md) — via Replit connector proxy; 403 to non-owner = Resend unverified-domain sandbox limit, not broken wiring; never leak OTP code on failure.
 - [Mobile tool AI calls](mobile-tool-ai.md) — Expo tool/[id].tsx calls /api/ai/chat with {prompt, system, maxTokens} body (NOT messages array); response is {text: string}.
