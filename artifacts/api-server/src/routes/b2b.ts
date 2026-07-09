@@ -437,7 +437,7 @@ router.get("/b2b/credits/upi/status/:id", requireB2BAuth, async (req: Request, r
 router.get("/b2b/invite/:token/info", async (req: Request, res: Response) => {
   const token = req.params.token as string;
   try {
-    const [invite] = await db
+    const [row] = await db
       .select({
         id: b2bInvitesTable.id,
         status: b2bInvitesTable.status,
@@ -451,6 +451,7 @@ router.get("/b2b/invite/:token/info", async (req: Request, res: Response) => {
         durationMinutes: b2bCampaignsTable.durationMinutes,
         description: b2bCampaignsTable.description,
         companyName: b2bCompaniesTable.name,
+        isAnonymous: b2bCompaniesTable.isAnonymous,
       })
       .from(b2bInvitesTable)
       .innerJoin(b2bCampaignsTable, eq(b2bInvitesTable.campaignId, b2bCampaignsTable.id))
@@ -458,9 +459,16 @@ router.get("/b2b/invite/:token/info", async (req: Request, res: Response) => {
       .where(eq(b2bInvitesTable.token, token))
       .limit(1);
 
-    if (!invite) { res.status(404).json({ error: "Invite not found" }); return; }
-    if (invite.status === "expired") { res.status(410).json({ error: "This interview link has expired" }); return; }
-    if (invite.status === "completed") { res.status(409).json({ error: "This interview has already been completed" }); return; }
+    if (!row) { res.status(404).json({ error: "Invite not found" }); return; }
+    if (row.status === "expired") { res.status(410).json({ error: "This interview link has expired" }); return; }
+    if (row.status === "completed") { res.status(409).json({ error: "This interview has already been completed" }); return; }
+
+    // Mask company name if the company opted for anonymity
+    const invite = {
+      ...row,
+      companyName: row.isAnonymous ? "Confidential Company" : row.companyName,
+      isAnonymous: undefined, // don't expose the raw flag to the public
+    };
 
     res.json({ invite });
   } catch (err) {

@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import {
-  Loader2, Briefcase, Plus, Copy, Send, Globe, MapPin, CheckCircle2,
-  XCircle, Clock, ArrowLeft, RefreshCw, Trash2, Award,
+  Loader2, Briefcase, Copy, Send, Globe, MapPin, CheckCircle2,
+  XCircle, Clock, ArrowLeft, RefreshCw, Trash2, Award, Upload,
+  FileSpreadsheet, X as XIcon,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { PageMeta } from "@/components/page-meta";
 import { useB2BAuth } from "@/lib/use-b2b-auth";
@@ -59,6 +60,51 @@ function ScoreBar({ label, value }: { label: string; value: number | null }) {
   );
 }
 
+/** Parse an Excel/CSV file and return lines in "email" or "email,Name" format */
+function parseSpreadsheet(file: File): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const wb = XLSX.read(data, { type: file.name.endsWith(".csv") ? "string" : "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]!]!;
+        // Convert to array-of-arrays (raw values)
+        const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "" });
+        if (rows.length === 0) { resolve([]); return; }
+
+        // Detect column indices from first row (header detection)
+        const firstRow = rows[0]!.map((c) => String(c).toLowerCase().trim());
+        let emailCol = firstRow.findIndex((h) => h.includes("email") || h === "e-mail");
+        let nameCol  = firstRow.findIndex((h) => h.includes("name"));
+        const hasHeader = emailCol !== -1 || nameCol !== -1;
+
+        // Fall back: first col = email, second col = name (no header row)
+        if (emailCol === -1) emailCol = 0;
+        if (nameCol  === -1) nameCol  = emailCol === 0 ? 1 : 0;
+
+        const dataRows = hasHeader ? rows.slice(1) : rows;
+        const lines: string[] = [];
+        for (const row of dataRows) {
+          const email = String(row[emailCol] ?? "").trim();
+          const name  = String(row[nameCol]  ?? "").trim();
+          if (!email.includes("@")) continue;
+          lines.push(name ? `${email},${name}` : email);
+        }
+        resolve(lines);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error("Could not read file"));
+    if (file.name.endsWith(".csv")) {
+      reader.readAsText(file);
+    } else {
+      reader.readAsArrayBuffer(file);
+    }
+  });
+}
+
 export default function B2BCampaign() {
   const { company, isLoading } = useB2BAuth();
   const params = useParams<{ id: string }>();
@@ -74,6 +120,11 @@ export default function B2BCampaign() {
   const [bulkText, setBulkText] = useState("");
   const [sendEmail, setSendEmail] = useState(true);
   const [sending, setSending] = useState(false);
+
+  // File upload
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [parsing, setParsing] = useState(false);
 
   const campaignId = params.id;
 
@@ -112,6 +163,41 @@ export default function B2BCampaign() {
     toast({ title: "Link copied!" });
   };
 
+  /** Handle Excel / CSV file selection */
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setParsing(true);
+    setFileName(file.name);
+    try {
+      const lines = await parseSpreadsheet(file);
+      if (lines.length === 0) {
+        toast({ title: "No valid emails found in file", description: "Make sure the spreadsheet has an email column.", variant: "destructive" });
+        setFileName(null);
+      } else {
+        // Append to existing text (deduplicate against what's already there)
+        const existing = new Set(
+          bulkText.split("\n").map((l) => l.split(",")[0]?.trim().toLowerCase()).filter(Boolean)
+        );
+        const fresh = lines.filter((l) => !existing.has(l.split(",")[0]?.trim().toLowerCase()));
+        setBulkText((prev) => (prev.trim() ? prev.trimEnd() + "\n" + fresh.join("\n") : fresh.join("\n")));
+        toast({ title: `${lines.length} email${lines.length !== 1 ? "s" : ""} imported`, description: fresh.length < lines.length ? `${lines.length - fresh.length} duplicate${lines.length - fresh.length !== 1 ? "s" : ""} skipped` : undefined });
+      }
+    } catch {
+      toast({ title: "Could not parse file", description: "Please check the file format and try again.", variant: "destructive" });
+      setFileName(null);
+    } finally {
+      setParsing(false);
+      // Reset input so the same file can be re-selected
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const clearFile = () => {
+    setFileName(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
   // Parse bulk input: one entry per line, optionally "email,name" or just "email"
   const parsedCandidates = useMemo(() => {
     return bulkText
@@ -144,6 +230,7 @@ export default function B2BCampaign() {
         title: `${data.invites?.length ?? 0} invite link${(data.invites?.length ?? 0) !== 1 ? "s" : ""} created${data.sent ? `, ${data.sent} emails sent` : ""}`,
       });
       setBulkText("");
+      setFileName(null);
       void fetchCampaign();
     } catch (err) {
       toast({ title: (err as Error).message, variant: "destructive" });
@@ -214,12 +301,51 @@ export default function B2BCampaign() {
       {/* Bulk invite panel */}
       <Card className="mb-6">
         <CardContent className="pt-5 pb-5 px-5">
-          <h3 className="text-sm font-bold text-secondary mb-3 flex items-center gap-2">
-            <Send className="w-4 h-4 text-primary" />Send Interview Links
-          </h3>
+          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+            <h3 className="text-sm font-bold text-secondary flex items-center gap-2">
+              <Send className="w-4 h-4 text-primary" />Send Interview Links
+            </h3>
+
+            {/* Excel / CSV upload */}
+            <div className="flex items-center gap-2">
+              {fileName && (
+                <div className="flex items-center gap-1.5 text-xs bg-green-50 text-green-700 border border-green-200 rounded-lg px-2.5 py-1.5 font-medium max-w-[180px]">
+                  <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{fileName}</span>
+                  <button onClick={clearFile} className="shrink-0 hover:text-green-900 ml-0.5">
+                    <XIcon className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileRef.current?.click()}
+                disabled={parsing}
+                className="text-xs font-semibold h-8 gap-1.5 border-dashed hover:border-primary hover:text-primary"
+              >
+                {parsing ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" />Parsing…</>
+                ) : (
+                  <><Upload className="w-3.5 h-3.5" />Upload Excel / CSV</>
+                )}
+              </Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={(e) => void handleFileChange(e)}
+              />
+            </div>
+          </div>
+
           <p className="text-xs text-muted-foreground mb-3">
-            One entry per line. Format: <code className="bg-muted px-1 py-0.5 rounded">email@example.com</code> or <code className="bg-muted px-1 py-0.5 rounded">email,Name</code>
+            One entry per line — <code className="bg-muted px-1 py-0.5 rounded">email@example.com</code> or <code className="bg-muted px-1 py-0.5 rounded">email,Name</code>
+            &nbsp;·&nbsp;Or upload an Excel/CSV with <strong>Email</strong> and <strong>Name</strong> columns
           </p>
+
           <textarea
             className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-secondary focus:outline-none focus:ring-2 focus:ring-primary resize-none"
             rows={5}
@@ -227,6 +353,7 @@ export default function B2BCampaign() {
             value={bulkText}
             onChange={(e) => setBulkText(e.target.value)}
           />
+
           <div className="flex items-center justify-between mt-3 flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -239,7 +366,7 @@ export default function B2BCampaign() {
                 <span className="text-secondary font-medium">Send email invitations</span>
               </label>
               {parsedCandidates.length > 0 && (
-                <span className="text-xs text-muted-foreground">{parsedCandidates.length} candidate{parsedCandidates.length !== 1 ? "s" : ""} found</span>
+                <span className="text-xs text-muted-foreground">{parsedCandidates.length} candidate{parsedCandidates.length !== 1 ? "s" : ""} ready</span>
               )}
             </div>
             <Button onClick={() => void sendInvites()} disabled={sending || parsedCandidates.length === 0} className="font-semibold">
@@ -298,7 +425,7 @@ export default function B2BCampaign() {
                       {inv.overallScore !== null && (
                         <span className="flex items-center gap-1"><Award className="w-3 h-3 text-amber-500" />{inv.overallScore}/100</span>
                       )}
-                      {(inv.candidateLocation) && (
+                      {inv.candidateLocation && (
                         <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{inv.candidateLocation}</span>
                       )}
                       {inv.completedAt ? (
@@ -309,7 +436,7 @@ export default function B2BCampaign() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    {inv.status === "pending" || inv.status === "sent" ? (
+                    {(inv.status === "pending" || inv.status === "sent") && (
                       <>
                         <button
                           onClick={(e) => { e.stopPropagation(); copyLink(inv.token); }}
@@ -326,14 +453,13 @@ export default function B2BCampaign() {
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </>
-                    ) : null}
+                    )}
                   </div>
                 </button>
 
                 {/* Expanded detail */}
                 {open && (
                   <div className="border-t border-border bg-muted/20 px-4 py-4 space-y-4">
-                    {/* Invite link */}
                     <div>
                       <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-1.5">Interview Link</p>
                       <div className="flex items-center gap-2">
@@ -360,7 +486,6 @@ export default function B2BCampaign() {
                       </div>
                     </div>
 
-                    {/* Candidate tracking */}
                     <div>
                       <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
                         <Globe className="w-3.5 h-3.5" /> Candidate tracking
@@ -382,7 +507,6 @@ export default function B2BCampaign() {
                       </div>
                     </div>
 
-                    {/* Scores */}
                     {inv.status === "completed" && (
                       <div>
                         <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">Score breakdown</p>

@@ -16,6 +16,8 @@ export const b2bCompaniesTable = pgTable("b2b_companies", {
   phone:        text("phone"),
   industry:     text("industry"),
   website:      text("website"),
+  /** When true the company name is hidden from candidates on the interview landing page */
+  isAnonymous:  boolean("is_anonymous").notNull().default(false),
   signupIp:     text("signup_ip"),
   signupLocation: text("signup_location"),
   lastLoginIp:  text("last_login_ip"),

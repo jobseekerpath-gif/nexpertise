@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Loader2, Building2, CheckCircle2 } from "lucide-react";
+import { Loader2, Building2, CheckCircle2, EyeOff, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ export default function B2BRegister() {
     name: "", email: "", password: "", confirm: "",
     phone: "", industry: "", website: "",
   });
+  const [isAnonymous, setIsAnonymous] = useState(false);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -46,6 +47,7 @@ export default function B2BRegister() {
         phone: form.phone.trim() || undefined,
         industry: form.industry || undefined,
         website: form.website.trim() || undefined,
+        isAnonymous,
       });
       toast({ title: "Welcome to EduBharat B2B!" });
       navigate("/b2b/dashboard");
@@ -58,7 +60,7 @@ export default function B2BRegister() {
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center px-4 py-8">
-      <PageMeta title="Register · B2B Portal · EduBharat" description="Create your recruiter account" />
+      <PageMeta title="Register · B2B Portal · EduBharat" description="Create your B2B account" />
       <Card className="w-full max-w-lg shadow-lg">
         <CardContent className="pt-8 pb-8 px-8">
           <div className="text-center mb-8">
@@ -107,10 +109,43 @@ export default function B2BRegister() {
                 </select>
               </div>
             </div>
+
             <div>
               <label className="text-sm font-semibold text-secondary mb-1 block">Website</label>
               <Input value={form.website} onChange={set("website")} placeholder="https://company.com" />
             </div>
+
+            {/* ── Anonymity toggle ── */}
+            <button
+              type="button"
+              onClick={() => setIsAnonymous((v) => !v)}
+              className={`w-full flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                isAnonymous
+                  ? "border-violet-400 bg-violet-50"
+                  : "border-border bg-muted/30 hover:border-muted-foreground/40"
+              }`}
+            >
+              <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                isAnonymous ? "border-violet-500 bg-violet-500" : "border-muted-foreground/40"
+              }`}>
+                {isAnonymous && <div className="w-2 h-2 rounded-full bg-white" />}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  {isAnonymous ? (
+                    <EyeOff className="w-4 h-4 text-violet-600 shrink-0" />
+                  ) : (
+                    <Eye className="w-4 h-4 text-muted-foreground shrink-0" />
+                  )}
+                  <p className={`text-sm font-semibold ${isAnonymous ? "text-violet-700" : "text-secondary"}`}>
+                    Keep company name confidential
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                  Candidates will see <span className="font-semibold">"Confidential Company"</span> instead of your real name on their interview invitation. Your identity is only visible inside your dashboard.
+                </p>
+              </div>
+            </button>
 
             <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground space-y-1">
               <p className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" />2 credits per completed interview</p>

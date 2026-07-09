@@ -173,16 +173,16 @@ export function Navbar() {
               )}
             </Link>
 
-            {/* Recruiters link */}
+            {/* B2B Portal link */}
             <Link
               href="/b2b/login"
-              title="Recruiter Portal"
+              title="B2B Portal"
               className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                 location.startsWith("/b2b") ? "text-violet-700 bg-violet-50" : "text-muted-foreground hover:text-violet-700 hover:bg-violet-50"
               }`}
             >
               <Building2 className="w-3.5 h-3.5" />
-              <span>Recruiters</span>
+              <span>B2B</span>
             </Link>
           </div>
 
@@ -337,10 +337,10 @@ export function Navbar() {
 
           <div className="h-px bg-border my-3 mx-3" />
 
-          {/* Recruiter Portal */}
+          {/* B2B Portal */}
           <div className="flex items-center gap-2 px-3 mb-2">
             <span className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
-            <p className="text-[10px] font-bold uppercase tracking-widest text-violet-600">For Recruiters</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-violet-600">B2B Portal</p>
           </div>
           <Link
             href="/b2b/login"
@@ -349,7 +349,7 @@ export function Navbar() {
             }`}
           >
             <Building2 className="w-4 h-4 shrink-0" />
-            Recruiter Portal
+            B2B Portal
           </Link>
 
           {user?.isAdmin && (

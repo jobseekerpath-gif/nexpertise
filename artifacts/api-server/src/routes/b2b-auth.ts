@@ -105,6 +105,8 @@ router.post("/b2b/auth/register", async (req: Request, res: Response) => {
     const passwordHash = hashPassword(password, salt);
     const ip           = clientIp(req);
 
+    const isAnonymous = Boolean(req.body.isAnonymous);
+
     const [company] = await db
       .insert(b2bCompaniesTable)
       .values({
@@ -115,6 +117,7 @@ router.post("/b2b/auth/register", async (req: Request, res: Response) => {
         phone: phone?.trim() || null,
         industry: industry?.trim() || null,
         website: website?.trim() || null,
+        isAnonymous,
         signupIp: ip,
       })
       .returning();

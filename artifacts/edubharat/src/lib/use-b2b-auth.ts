@@ -47,7 +47,7 @@ export function useB2BAuth() {
   }, []);
 
   const register = useCallback(
-    async (fields: { name: string; email: string; password: string; phone?: string; industry?: string; website?: string }) => {
+    async (fields: { name: string; email: string; password: string; phone?: string; industry?: string; website?: string; isAnonymous?: boolean }) => {
       const res = await fetch(`${BASE}/api/b2b/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

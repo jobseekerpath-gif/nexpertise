@@ -88,9 +88,9 @@ export default function Home() {
                   className="inline-flex items-center gap-2 mt-1 text-sm text-muted-foreground hover:text-violet-700 transition-colors group"
                 >
                   <Building2 className="w-4 h-4 group-hover:text-violet-600 transition-colors" />
-                  Are you a recruiter?
+                  Are you hiring?
                   <span className="font-semibold text-violet-600 group-hover:underline">
-                    Open Recruiter Portal →
+                    Open B2B Portal →
                   </span>
                 </Link>
               </div>
