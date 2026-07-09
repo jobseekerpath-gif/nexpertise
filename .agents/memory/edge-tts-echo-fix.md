@@ -20,14 +20,16 @@ Root cause: mic picks up AI voice from speakers (bad on laptop + mobile) because
 1. Recognition restarts too quickly after TTS ends
 2. Room echo / reverb lingers beyond the audio stream end event
 
-**Fix layers:**
-1. `blockFor(ms)` added to `useSpeechRecognition` — sets `blockedUntilRef = Date.now() + ms`
-2. `spawnRecognition()` in `startContinuous` checks `blockedUntilRef`; if blocked, reschedules itself after remaining time + 80ms
-3. Every `synth.speak(...)` call in Interview Ace passes `() => speech.blockFor(1200)` as onEnd
-4. English Guru's `handleConvPhrase` calls `speech.blockFor(1200)` in speak onEnd before setting convFlowState
-5. English Guru also has a 700ms `setTimeout` before calling `startContinuous` (double protection)
+**Fix layers (current):**
+1. `blockFor(ms)` in `useSpeechRecognition` — sets `blockedUntilRef = Date.now() + ms`; direct wakeup timer fires at `ms + 60ms` for blocks ≤ 3000ms
+2. `spawnRecognition()` checks `blockedUntilRef`; polls every 250ms if blocked
+3. `suppressResultsBeforeRef` — set to `Date.now() + 300` in every `onstart` (both `start()` and `startContinuous()`); `onresult` silently drops results that arrive before the suppress-until timestamp (prevents the engine from delivering audio it captured from the speaker before AGC/VAD calibrated)
+4. English Guru `releaseGreeting` + `releaseTurn`: `blockFor(2500)` — 2.56s post-speech dead-mic for devices without hardware AEC (laptop/phone speakers)
+5. Echo content guard in `handleConvPhrase`: 6000ms window (was 4500ms), no word-count cap (was ≤14 words), 0.85 overlap threshold
 
-**Why:** 1200ms post-speech silence prevents recognition from spawning while room echo of AI voice is still audible (especially laptop/phone speakers).
+**Why 2500ms:** 1500ms was too short for laptop/phone speakers with no hardware AEC; room echo of a multi-sentence AI reply can linger 2-3s. Combined with 300ms warmup suppression, effective echo-free window is ~2.8s.
+
+**Interview Ace:** still uses `blockFor(400)` for auto-listen retry (different purpose, Q&A format); not changed.
 
 ## Cross-script echo (native-language live chat)
 English Guru keeps a NATIVE-language recognizer (the app advertises native input), so when the AI speaks English the recognizer often transcribes that English audio PHONETICALLY into the native script. A word-overlap echo guard comparing Latin-script tokens then misses it, and the AI "hears itself" and repeats.

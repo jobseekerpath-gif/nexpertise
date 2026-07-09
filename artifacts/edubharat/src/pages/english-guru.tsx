@@ -250,7 +250,7 @@ function EnglishGuruContent() {
         // Echo-guard: 1500 ms matches handleConvPhrase so teacher-switch greetings
         // never get self-captured by the mic on the next turn.
         lastAiSpeechEndRef.current = Date.now();
-        speechRef.current.blockFor(1500);
+        speechRef.current.blockFor(2500);
       };
       speakSafetyTimerRef.current = setTimeout(releaseGreeting, Math.max(greeting.length * 60 + 4000, 8000));
       // Greetings are always English — voice them with the English tutor voice so
@@ -273,7 +273,7 @@ function EnglishGuruContent() {
     // Echo guard: a phrase arriving within ~3.5s of the AI finishing, that closely
     // matches what the AI just said, is the mic hearing the speaker — not the user.
     // Drop it so the teacher never "replies to its own voice".
-    if (!isSilenceProbe && Date.now() - lastAiSpeechEndRef.current < 4500) {
+    if (!isSilenceProbe && Date.now() - lastAiSpeechEndRef.current < 6000) {
       const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
       const p = norm(phrase);
       const ai = norm(lastAiSpeechRef.current);
@@ -281,10 +281,11 @@ function EnglishGuruContent() {
         const words = p.split(" ");
         const aiWords = new Set(ai.split(" "));
         const overlap = words.filter(w => aiWords.has(w)).length / words.length;
-        // Substring match only for longer fragments; overlap match needs several
-        // words at a high ratio — so short legit replies ("yes", "okay, tell me
-        // more") are never mistaken for the AI's own echo.
-        if ((p.length >= 10 && ai.includes(p)) || (words.length >= 4 && words.length <= 14 && overlap >= 0.85)) return;
+        // Substring match for longer fragments; overlap match needs several words
+        // at a high ratio so short legit replies ("yes", "okay, tell me more")
+        // are never mistaken for the AI's own echo. No upper word-count cap —
+        // longer echoed phrases (15+ words) must be caught too.
+        if ((p.length >= 10 && ai.includes(p)) || (words.length >= 4 && overlap >= 0.85)) return;
       }
     }
     // Real user phrase resets the silence-nudge counter
@@ -375,11 +376,12 @@ Rules for spoken replies:
           if (speakSafetyTimerRef.current) { clearTimeout(speakSafetyTimerRef.current); speakSafetyTimerRef.current = null; }
           aiBusyRef.current = false;
           if (liveChatRef.current) {
-            // 1500 ms block — generous enough to outlast speaker echo (incl.
-            // cross-script transliteration of the AI's own English speech) so the
-            // mic can't capture the AI's voice and feed it back as a "user" turn.
+            // 2500 ms block — enough to outlast speaker echo on devices without
+            // hardware AEC (laptop/phone speakers). Combined with the 300ms warmup
+            // suppression in useSpeechRecognition, the effective echo-free window
+            // is ~2.8s after the AI's last syllable — enough for most rooms.
             lastAiSpeechEndRef.current = Date.now();
-            speechRef.current.blockFor(1500);
+            speechRef.current.blockFor(2500);
             setConvFlowState("user-speaking");
           } else {
             setConvFlowState("idle");

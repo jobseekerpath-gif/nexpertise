@@ -108,6 +108,17 @@ export function useSpeechRecognition(language = "English") {
   const warmupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
+   * suppressResultsBeforeRef — epoch ms before which onresult callbacks
+   * should be silently dropped. Set to Date.now() + 300 in every onstart
+   * handler so that audio the engine captured from the speaker BEFORE the
+   * AGC/VAD fully calibrated (the same 300ms warmup window) is never
+   * delivered to the phrase handler. Without this, the mic can pick up the
+   * tail end of the AI's own TTS audio in the very first recognition result
+   * even when the post-speech blockFor() window has already elapsed.
+   */
+  const suppressResultsBeforeRef = useRef(0);
+
+  /**
    * recognitionActiveRef — true from just before spawnRecognition calls
    * .start() until that instance fully ends (onend) or errors. It stays true
    * for the ENTIRE listening period, NOT just the brief start→onstart window.
@@ -183,7 +194,7 @@ export function useSpeechRecognition(language = "English") {
       wakeTimerRef.current = null;
     }
 
-    if (ms > 0 && ms <= 1500 && shouldContinueRef.current) {
+    if (ms > 0 && ms <= 3000 && shouldContinueRef.current) {
       wakeTimerRef.current = setTimeout(() => {
         wakeTimerRef.current = null;
         // Only fire if: loop still running AND block has fully expired
@@ -245,6 +256,10 @@ export function useSpeechRecognition(language = "English") {
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
+        // Suppress any results that arrive during the 300ms AGC/VAD warmup.
+        // The engine may deliver audio it captured from the speaker before it
+        // fully calibrated — silently drop those to prevent echo pickup.
+        suppressResultsBeforeRef.current = Date.now() + 300;
         setStatus("warming");
         setTranscript("");
         setInterimTranscript("");
@@ -263,6 +278,9 @@ export function useSpeechRecognition(language = "English") {
       };
 
       recognition.onresult = (event: { resultIndex: number; results: { isFinal: boolean; 0: { transcript: string } }[] }) => {
+        // Drop results that arrived during the AGC/VAD warmup window — the
+        // engine may have captured speaker echo before it fully calibrated.
+        if (Date.now() < suppressResultsBeforeRef.current) return;
         let interim = "", final = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const r = event.results[i]!;
@@ -364,6 +382,11 @@ export function useSpeechRecognition(language = "English") {
           // Two recognizers abort each other and silently kill the mic after a
           // turn or two (the "AI stops responding after 2 questions" bug).
           //
+          // Suppress any results that arrive during the 300ms AGC/VAD warmup.
+          // The engine may deliver audio it captured from the speaker before it
+          // fully calibrated — silently drop those to prevent echo pickup.
+          suppressResultsBeforeRef.current = Date.now() + 300;
+          //
           // "warming" → "listening" transition: the Web Speech engine needs
           // ~300 ms after onstart to calibrate AGC/VAD before it reliably
           // captures the first syllable. We show "Get ready to speak…" during
@@ -383,6 +406,9 @@ export function useSpeechRecognition(language = "English") {
 
         recognition.onresult = (event: { resultIndex: number; results: { isFinal: boolean; 0: { transcript: string } }[] }) => {
           if (!isCurrent()) return;
+          // Drop results during the AGC/VAD warmup — the engine may have
+          // captured speaker echo before it fully calibrated (echo pickup fix).
+          if (Date.now() < suppressResultsBeforeRef.current) return;
           recognitionActivityRef.current = Date.now(); // lease heartbeat
           let interim = "", final = "";
           for (let i = event.resultIndex; i < event.results.length; i++) {
