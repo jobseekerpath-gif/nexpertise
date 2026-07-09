@@ -1741,11 +1741,21 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
 
         <div className="flex items-center gap-2 flex-wrap">
           {/* Mic status pill */}
-          <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shrink-0 ${
-            isRecording ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-white/10 text-white/40"
+          <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shrink-0 transition-colors ${
+            isRecording
+              ? speech.status === "warming"
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                : "bg-green-500/20 text-green-400 border border-green-500/30"
+              : "bg-white/10 text-white/40"
           }`}>
             {isRecording ? <Mic className="w-3 h-3" /> : <MicOff className="w-3 h-3" />}
-            {isRecording ? "Listening…" : speech.isSupported ? "Mic paused" : "No mic"}
+            {isRecording
+              ? speech.status === "warming"
+                ? "Get ready…"
+                : "Speak now 🎤"
+              : speech.isSupported
+                ? "Mic paused"
+                : "No mic"}
           </div>
 
           <Button

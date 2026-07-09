@@ -754,9 +754,39 @@ Rules for spoken replies:
                 </p>
               )}
               {liveChat && (
-                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${convFlowState === "user-speaking" ? "bg-green-50 text-green-700 border border-green-200" : convFlowState === "ai-thinking" || convFlowState === "ai-speaking" ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-muted text-muted-foreground"}`}>
-                  <span className={`w-2.5 h-2.5 rounded-full ${convFlowState === "user-speaking" ? "bg-green-500 animate-pulse" : convFlowState === "ai-thinking" ? "bg-yellow-500 animate-pulse" : convFlowState === "ai-speaking" ? "bg-blue-500 animate-pulse" : "bg-muted-foreground"}`} />
-                  {convFlowState === "user-speaking" && (speech.interimTranscript ? `"${speech.interimTranscript}"` : "Listening for you...")}
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  convFlowState === "user-speaking"
+                    ? speech.status === "warming"
+                      ? "bg-amber-50 text-amber-700 border border-amber-200"
+                      : speech.status === "listening"
+                        ? "bg-green-50 text-green-700 border border-green-200"
+                        : "bg-muted text-muted-foreground border"
+                    : convFlowState === "ai-thinking" || convFlowState === "ai-speaking"
+                      ? "bg-blue-50 text-blue-700 border border-blue-200"
+                      : "bg-muted text-muted-foreground"
+                }`}>
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                    convFlowState === "user-speaking"
+                      ? speech.status === "warming"
+                        ? "bg-amber-400 animate-pulse"
+                        : speech.status === "listening"
+                          ? "bg-green-500 animate-pulse"
+                          : "bg-muted-foreground animate-pulse"
+                      : convFlowState === "ai-thinking"
+                        ? "bg-yellow-500 animate-pulse"
+                        : convFlowState === "ai-speaking"
+                          ? "bg-blue-500 animate-pulse"
+                          : "bg-muted-foreground"
+                  }`} />
+                  {convFlowState === "user-speaking" && (
+                    speech.interimTranscript
+                      ? `"${speech.interimTranscript}"`
+                      : speech.status === "warming"
+                        ? "Get ready to speak…"
+                        : speech.status === "listening"
+                          ? "Speak now 🎤"
+                          : "Mic starting…"
+                  )}
                   {convFlowState === "ai-thinking" && `${tutor.name} is thinking...`}
                   {convFlowState === "ai-speaking" && `${tutor.name} is speaking... (mic restarts when done)`}
                   {convFlowState === "idle" && "Live chat off"}

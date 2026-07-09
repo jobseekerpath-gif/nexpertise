@@ -56,6 +56,22 @@ Any handler that triggers TTS through the **global-singleton** `speak()` (`use-e
 - Use a module-scoped/ref busy flag (`aiBusyRef`): set true right after the input guard, reset false in the TTS `onEnd`, the no-response branch, AND a `try/catch` around the async body (so an unexpected throw never latches it).
 - `synth.stop()` / `globalStop()` do NOT fire the per-call `onEnd`. So any manual stop path (e.g. `toggleLiveChat` OFF) must reset the busy flag itself, or the next session's first turn is silently blocked.
 
+## "warming" status + warmupTimerRef (first-word-clipped fix)
+
+Web Speech API needs ~300ms after `onstart` before AGC/VAD are calibrated. Speech said in that window is silently dropped — the user has to repeat their first word.
+
+**Fix:** `onstart` sets `status = "warming"` immediately, then a 300ms timer flips it to `"listening"`. The UI shows amber "Get ready to speak…" during warming and green "Speak now 🎤" when hot — a clear visual cue to wait the beat.
+
+`warmupTimerRef` tracks the timer so it can be cancelled:
+- `pause()` cancels it (doesn't bump generation, so `isCurrent()` alone won't stop the callback)
+- `stop()` cancels it (also sets `recognitionRef.current = null`, which is the guard for non-continuous `start()`)
+- Continuous mode: `isCurrent()` inside the callback handles generation supersession; `warmupTimerRef` clears the previous timer when a new `onstart` fires
+- `isListening = status === "listening" || status === "warming"` (both mean the mic is active)
+
+Interview Ace watchdog checks `speech.status === "idle"` — not affected by `"warming"`.
+
+**Never remove `warmupTimerRef` cancellation from `pause()` or `stop()`** — without it, a pending transition fires after the mic is silenced and shows a phantom "listening" state.
+
 ## isStreaming must NOT gate live-chat phrases
 `handleConvPhrase` guard: `if (!phrase.trim() || (!liveChatRef.current && isStreaming) || aiBusyRef.current)`.
 

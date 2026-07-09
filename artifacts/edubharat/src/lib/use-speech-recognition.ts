@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
-export type SpeechRecognitionStatus = "idle" | "listening" | "processing" | "error";
+export type SpeechRecognitionStatus = "idle" | "warming" | "listening" | "processing" | "error";
 
 // Browser Speech Recognition type shim
 type SpeechRecognitionCtor = new () => {
@@ -96,6 +96,16 @@ export function useSpeechRecognition(language = "English") {
    * stacking multiple direct wakeups) and on stop()/pause().
    */
   const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * warmupTimerRef — the 300ms timer that transitions status from "warming"
+   * to "listening" after the Web Speech engine has calibrated. Must be
+   * cancelled in stop() and pause() so a pending transition can't set
+   * "listening" after the recognizer has already been stopped — especially
+   * important because pause() does NOT bump the generation token, so
+   * isCurrent() alone wouldn't catch the stale callback.
+   */
+  const warmupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * recognitionActiveRef — true from just before spawnRecognition calls
@@ -197,6 +207,16 @@ export function useSpeechRecognition(language = "English") {
       clearTimeout(wakeTimerRef.current);
       wakeTimerRef.current = null;
     }
+    // Cancel any pending warming→listening transition. pause() does NOT bump
+    // the generation token (intentionally — onend continuity depends on it),
+    // so isCurrent() alone won't stop the warmup timer from setting "listening"
+    // after the mic has been paused (the AI just started speaking). Cancel it
+    // here explicitly so status goes straight to "idle" and never back to
+    // "listening" until the next real recognition session opens.
+    if (warmupTimerRef.current !== null) {
+      clearTimeout(warmupTimerRef.current);
+      warmupTimerRef.current = null;
+    }
     recognitionActiveRef.current = false;
     blockedUntilRef.current = Date.now() + 10 * 60 * 1000; // effectively "until resumed"
     try { recognitionRef.current?.stop(); } catch { /* ignore */ }
@@ -224,7 +244,23 @@ export function useSpeechRecognition(language = "English") {
       recognition.lang = spawnLang;
       recognition.maxAlternatives = 1;
 
-      recognition.onstart = () => { setStatus("listening"); setTranscript(""); setInterimTranscript(""); setError(null); };
+      recognition.onstart = () => {
+        setStatus("warming");
+        setTranscript("");
+        setInterimTranscript("");
+        setError(null);
+        // Web Speech API needs ~300 ms after onstart to calibrate its AGC and
+        // VAD before it reliably captures the first syllable. "listening" only
+        // flips once the engine is hot — this is what drives the "Speak now 🎤"
+        // cue in the UI so users don't start talking into a cold mic.
+        if (warmupTimerRef.current !== null) clearTimeout(warmupTimerRef.current);
+        warmupTimerRef.current = setTimeout(() => {
+          warmupTimerRef.current = null;
+          // Guard: stop()/reset() set recognitionRef to null; if this instance
+          // is no longer the active one, don't flip to "listening".
+          if (recognitionRef.current === recognition) setStatus("listening");
+        }, 300);
+      };
 
       recognition.onresult = (event: { resultIndex: number; results: { isFinal: boolean; 0: { transcript: string } }[] }) => {
         let interim = "", final = "";
@@ -327,9 +363,22 @@ export function useSpeechRecognition(language = "English") {
           // blockFor() direct wakeup would spawn a SECOND overlapping recognizer.
           // Two recognizers abort each other and silently kill the mic after a
           // turn or two (the "AI stops responding after 2 questions" bug).
-          setStatus("listening");
+          //
+          // "warming" → "listening" transition: the Web Speech engine needs
+          // ~300 ms after onstart to calibrate AGC/VAD before it reliably
+          // captures the first syllable. We show "Get ready to speak…" during
+          // this window, then flip to "Speak now 🎤" once the engine is hot.
+          // Without this, users speak into a cold mic and lose their first word.
+          // warmupTimerRef lets stop()/pause() cancel this before it fires.
+          setStatus("warming");
           setInterimTranscript("");
           setError(null);
+          if (warmupTimerRef.current !== null) clearTimeout(warmupTimerRef.current);
+          warmupTimerRef.current = setTimeout(() => {
+            warmupTimerRef.current = null;
+            if (!isCurrent()) return; // bail if this recognizer was superseded
+            setStatus("listening");
+          }, 300);
         };
 
         recognition.onresult = (event: { resultIndex: number; results: { isFinal: boolean; 0: { transcript: string } }[] }) => {
@@ -403,6 +452,12 @@ export function useSpeechRecognition(language = "English") {
       clearTimeout(wakeTimerRef.current);
       wakeTimerRef.current = null;
     }
+    // Cancel any pending warming→listening transition so stop() immediately
+    // idles the mic and the phantom "listening" state never appears.
+    if (warmupTimerRef.current !== null) {
+      clearTimeout(warmupTimerRef.current);
+      warmupTimerRef.current = null;
+    }
     recognitionActiveRef.current = false;
     try { recognitionRef.current?.stop(); } catch { /* ignore */ }
     recognitionRef.current = null;
@@ -429,7 +484,7 @@ export function useSpeechRecognition(language = "English") {
     interimTranscript,
     error,
     isSupported,
-    isListening: status === "listening",
+    isListening: status === "listening" || status === "warming",
     isContinuous: shouldContinueRef.current,
     start,
     startContinuous,
