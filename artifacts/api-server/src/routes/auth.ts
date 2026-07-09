@@ -33,8 +33,18 @@ declare module "express-session" {
 
 const router: IRouter = Router();
 
-/** Extract the real client IP (leftmost X-Forwarded-For hop behind the proxy). */
+/**
+ * Extract the real client IP with a priority chain that works on Replit (Cloudflare-fronted):
+ *  1. CF-Connecting-IP — Cloudflare's authoritative header, always the real user IP.
+ *  2. X-Real-IP       — set by nginx-style proxies as a single trusted value.
+ *  3. X-Forwarded-For — leftmost hop, the original client before any proxies.
+ *  4. req.ip          — Express's built-in (works when trust proxy is set correctly).
+ */
 function clientIp(req: Request): string | null {
+  const cf = (req.headers["cf-connecting-ip"] as string | undefined)?.trim();
+  if (cf) return cf;
+  const realIp = (req.headers["x-real-ip"] as string | undefined)?.trim();
+  if (realIp) return realIp;
   const xff = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim();
   return xff || req.ip || null;
 }

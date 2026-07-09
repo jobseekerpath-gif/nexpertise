@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, usersTable, upiPaymentsTable, creditTransactionsTable } from "@workspace/db";
+import { db, usersTable, upiPaymentsTable, creditTransactionsTable, interviewSessionsTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
 import { requireAdmin } from "../lib/guards.js";
 import { logger } from "../lib/logger.js";
@@ -97,6 +97,54 @@ router.get("/admin/users/:id", requireAdmin, async (req: Request, res: Response)
   } catch (err) {
     logger.error({ err: (err as Error).message }, "admin user detail failed");
     res.status(500).json({ error: "Could not load user" });
+  }
+});
+
+// GET /api/admin/interviews — all interview sessions joined with user data (newest first).
+// verdict: overallScore >= 60 → "Selected", else "Not Selected", null score → "Pending"
+router.get("/admin/interviews", requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const rows = await db
+      .select({
+        // interview fields
+        id: interviewSessionsTable.id,
+        role: interviewSessionsTable.role,
+        experienceLevel: interviewSessionsTable.experienceLevel,
+        interviewType: interviewSessionsTable.interviewType,
+        overallScore: interviewSessionsTable.overallScore,
+        communicationScore: interviewSessionsTable.communicationScore,
+        grammarScore: interviewSessionsTable.grammarScore,
+        confidenceScore: interviewSessionsTable.confidenceScore,
+        technicalScore: interviewSessionsTable.technicalScore,
+        feedbackJson: interviewSessionsTable.feedbackJson,
+        durationSeconds: interviewSessionsTable.durationSeconds,
+        completedAt: interviewSessionsTable.completedAt,
+        createdAt: interviewSessionsTable.createdAt,
+        // user fields
+        userId: usersTable.id,
+        userName: usersTable.name,
+        userEmail: usersTable.email,
+        userLocation: usersTable.location,
+        signupLocation: usersTable.signupLocation,
+        lastLoginLocation: usersTable.lastLoginLocation,
+        signupIp: usersTable.signupIp,
+        lastLoginIp: usersTable.lastLoginIp,
+        preferredCity: usersTable.preferredCity,
+        education: usersTable.education,
+        degree: usersTable.degree,
+        branch: usersTable.branch,
+        university: usersTable.university,
+      })
+      .from(interviewSessionsTable)
+      .leftJoin(usersTable, eq(interviewSessionsTable.userId, usersTable.id))
+      .orderBy(desc(interviewSessionsTable.createdAt))
+      .limit(2000);
+
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ interviews: rows });
+  } catch (err) {
+    logger.error({ err: (err as Error).message }, "admin interviews list failed");
+    res.status(500).json({ error: "Could not load interviews" });
   }
 });
 

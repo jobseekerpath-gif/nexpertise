@@ -26,6 +26,7 @@ const ProfilePage = lazy(() => import("@/pages/profile"));
 const BuyCredits = lazy(() => import("@/pages/buy-credits"));
 const AdminPayments = lazy(() => import("@/pages/admin-payments"));
 const AdminUsers = lazy(() => import("@/pages/admin-users"));
+const AdminInterviews = lazy(() => import("@/pages/admin-interviews"));
 const AdminContent = lazy(() => import("@/pages/admin-content"));
 const AdminLogin = lazy(() => import("@/pages/admin-login"));
 const Terms = lazy(() => import("@/pages/terms"));
@@ -88,6 +89,7 @@ function Router() {
             <Route path="/admin-login" component={AdminLogin} />
             <Route path="/admin-payments" component={AdminPayments} />
             <Route path="/admin-users" component={AdminUsers} />
+            <Route path="/admin-interviews" component={AdminInterviews} />
             <Route path="/admin-content" component={AdminContent} />
             <Route path="/admin" component={AdminPayments} />
             <Route component={NotFound} />
