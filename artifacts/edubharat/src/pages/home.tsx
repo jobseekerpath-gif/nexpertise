@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   BookOpen, Newspaper, ArrowRight, Sparkles, CheckCircle2, Star,
-  MessageCircle, Wrench, Map, Mic, FileText, TrendingUp,
+  MessageCircle, Wrench, Map, Mic, FileText, TrendingUp, Building2,
 } from "lucide-react";
 import { TUTORS } from "@/lib/tutors";
 import { HomeMeta } from "@/components/page-meta";
@@ -82,6 +82,17 @@ export default function Home() {
                     </Button>
                   </Link>
                 </div>
+                {/* Recruiter portal nudge */}
+                <Link
+                  href="/b2b/login"
+                  className="inline-flex items-center gap-2 mt-1 text-sm text-muted-foreground hover:text-violet-700 transition-colors group"
+                >
+                  <Building2 className="w-4 h-4 group-hover:text-violet-600 transition-colors" />
+                  Are you a recruiter?
+                  <span className="font-semibold text-violet-600 group-hover:underline">
+                    Open Recruiter Portal →
+                  </span>
+                </Link>
               </div>
 
               {/* Right — AI teacher showcase */}
