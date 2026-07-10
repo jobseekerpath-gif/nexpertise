@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "./empty-state";
 import { useInterviewAnalytics } from "@/lib/use-interview-analytics";
-import { interviewVerdict } from "@/lib/interview-verdict";
+import { interviewVerdict, recommendationForScore, RECOMMENDATION_STYLES } from "@/lib/interview-verdict";
 import { useAuth } from "@/lib/use-auth";
 import { Mic, ChevronDown, ChevronUp, Clock, LogIn, TrendingUp, CheckCircle2, XCircle, AlertCircle, ArrowRight } from "lucide-react";
 
@@ -26,7 +26,7 @@ function formatInterviewLabel(session: { interviewType: string | null; role: str
 
 type ParsedReport = {
   strengths: string[];
-  improvements: string[];
+  concerns: string[];
   nextSteps: string[];
   roleFit: string;
   verdictReason: string;
@@ -36,9 +36,13 @@ function parseSessionReport(feedbackJson: string | null): ParsedReport | null {
   if (!feedbackJson) return null;
   try {
     const p = JSON.parse(feedbackJson) as Record<string, unknown>;
+    // New reports store "concerns"; older saved reports stored "improvements".
+    const concerns = Array.isArray(p["concerns"])
+      ? p["concerns"].map(String)
+      : Array.isArray(p["improvements"]) ? p["improvements"].map(String) : [];
     return {
       strengths: Array.isArray(p["strengths"]) ? p["strengths"].map(String) : [],
-      improvements: Array.isArray(p["improvements"]) ? p["improvements"].map(String) : [],
+      concerns,
       nextSteps: Array.isArray(p["nextSteps"]) ? p["nextSteps"].map(String) : [],
       roleFit: String(p["roleFit"] ?? ""),
       verdictReason: String(p["verdictReason"] ?? p["recommendation"] ?? ""),
@@ -161,7 +165,14 @@ export function InterviewsTab() {
             <CardTitle className="text-base flex items-center gap-2">
               <Mic className="w-4 h-4 text-primary" />
               Latest Interview Breakdown
-              <Badge variant="secondary" className="ml-auto text-xs font-normal">{interviews.latestReport.overallScore}% overall</Badge>
+              {(() => {
+                const rec = recommendationForScore(interviews.latestReport.overallScore);
+                return (
+                  <Badge className={`ml-auto text-xs font-semibold border ${RECOMMENDATION_STYLES[rec.label].badge}`}>
+                    {rec.label} · {interviews.latestReport.overallScore}%
+                  </Badge>
+                );
+              })()}
             </CardTitle>
           </CardHeader>
           <CardContent className="px-5 pb-5 space-y-4">
@@ -191,20 +202,25 @@ export function InterviewsTab() {
                 </ul>
               </div>
             )}
-            {/* Improvements */}
-            {interviews.latestReport.improvements.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-xs font-bold uppercase tracking-wider text-orange-700">Areas to Improve</p>
-                <ul className="space-y-1">
-                  {interviews.latestReport.improvements.map((s, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-secondary">
-                      <AlertCircle className="w-3.5 h-3.5 text-orange-500 shrink-0 mt-0.5" />
-                      {s}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {/* Concerns / Areas to improve (new reports store "concerns"; older ones "improvements") */}
+            {(() => {
+              const items = interviews.latestReport.concerns.length > 0
+                ? interviews.latestReport.concerns
+                : interviews.latestReport.improvements;
+              return items.length > 0 ? (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-bold uppercase tracking-wider text-orange-700">Concerns / Areas to Improve</p>
+                  <ul className="space-y-1">
+                    {items.map((s, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-secondary">
+                        <AlertCircle className="w-3.5 h-3.5 text-orange-500 shrink-0 mt-0.5" />
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null;
+            })()}
             {/* Next Steps */}
             {interviews.latestReport.nextSteps.length > 0 && (
               <div className="space-y-1.5">
@@ -262,11 +278,21 @@ export function InterviewsTab() {
 
                   {expanded === s.id && (
                     <div className="border-t px-4 py-4 bg-muted/20 space-y-4">
-                      {/* Selected / Not Selected result (pass bar shared with the report screen) */}
-                      {verdict && (
-                        <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${verdict.selected ? "bg-green-100 text-green-800 border-green-300" : "bg-red-100 text-red-800 border-red-300"}`}>
-                          {verdict.selected ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                          Result: {verdict.label}
+                      {/* Recommendation + Selected / Not Selected (pass bar shared with the report screen) */}
+                      {verdict && s.overallScore !== null && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {(() => {
+                            const rec = recommendationForScore(s.overallScore);
+                            return (
+                              <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold border ${RECOMMENDATION_STYLES[rec.label].badge}`}>
+                                {rec.label}
+                              </span>
+                            );
+                          })()}
+                          <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${verdict.selected ? "bg-green-100 text-green-800 border-green-300" : "bg-red-100 text-red-800 border-red-300"}`}>
+                            {verdict.selected ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                            Result: {verdict.label}
+                          </div>
                         </div>
                       )}
                       {/* Sub-scores */}
@@ -308,11 +334,11 @@ export function InterviewsTab() {
                               </ul>
                             </div>
                           )}
-                          {parsedReport.improvements.length > 0 && (
+                          {parsedReport.concerns.length > 0 && (
                             <div className="space-y-1.5">
-                              <p className="text-xs font-bold uppercase tracking-wider text-orange-700">Areas to Improve</p>
+                              <p className="text-xs font-bold uppercase tracking-wider text-orange-700">Concerns / Areas to Improve</p>
                               <ul className="space-y-1">
-                                {parsedReport.improvements.map((imp, i) => (
+                                {parsedReport.concerns.map((imp, i) => (
                                   <li key={i} className="flex items-start gap-2 text-sm text-secondary">
                                     <AlertCircle className="w-3.5 h-3.5 text-orange-500 shrink-0 mt-0.5" />
                                     {imp}

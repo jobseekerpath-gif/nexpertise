@@ -16,14 +16,14 @@ import { useCredits, chargeInterview, tickInterview, endInterview, interviewCred
 import { useGuestTrial, guestInterviewsLeft, consumeGuestInterview } from "@/lib/guest-trial";
 import { AnimatedAvatar } from "@/components/avatar";
 import { INTERVIEW_COACHES } from "@/lib/tutors";
-import { INTERVIEW_AREAS, areaForBeat, functionalKnowledgeFor } from "@/lib/interview-format";
+import { COMPETENCIES, coveredCompetencies, weightedScoreFor, areaForBeat, functionalKnowledgeFor, calibrationFor, depthProbeFocus, type CompetencyKey } from "@/lib/interview-format";
 import { useToast } from "@/hooks/use-toast";
 import { PageMeta } from "@/components/page-meta";
-import { interviewVerdict as verdictFor } from "@/lib/interview-verdict";
+import { interviewVerdict as verdictFor, recommendationForWeighted, ratingLabel, RECOMMENDATION_STYLES, type RecommendationLabel } from "@/lib/interview-verdict";
 import {
   Loader2, Mic, MicOff, PlayCircle, ChevronRight, Download, Volume2,
   LogOut, CheckCircle2, ChevronDown, MessageCircle, Pencil, Flame, Brain,
-  Star, Trophy, Clock, Timer, AlertCircle, Save, PhoneOff, VideoOff, Video, Target, XCircle,
+  Star, Clock, Timer, AlertCircle, Save, PhoneOff, VideoOff, Video, Target, XCircle,
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -68,10 +68,16 @@ type QA = {
 
 type Coach = typeof INTERVIEW_COACHES[number];
 
-type Competency = { score: number; comment: string };
+type CompetencyRating = { rating: number; comment: string };
 
 type InterviewReport = {
+  /** 0–100 overall (= weightedScore × 20). Kept for analytics, trends and
+   *  older saved reports so nothing downstream breaks. */
   overallScore: number;
+  /** 1–5 Total Weighted Score — the scorecard's primary result. */
+  weightedScore: number;
+  /** Strong Hire / Hire / Hold / No Hire, derived from weightedScore. */
+  recommendation: RecommendationLabel;
   communicationScore: number;
   grammarScore: number;
   confidenceScore: number;
@@ -80,36 +86,19 @@ type InterviewReport = {
   /** Human hiring-recommendation rationale shown next to the Selected / Not
    *  Selected result (the label itself is derived from overallScore). */
   verdictReason?: string;
-  /** Full HR competency-framework assessment (one score + comment per area). */
-  competencies?: {
-    functionalKnowledge: Competency;
-    communication: Competency;
-    collaboration: Competency;
-    personality: Competency;
-    education: Competency;
-    itSkills: Competency;
-    adaptability: Competency;
-  };
+  /** Per-competency 1–5 ratings, keyed by CompetencyKey (only the competencies
+   *  this interview length covered are present). */
+  competencies?: Partial<Record<CompetencyKey, CompetencyRating>>;
   strengths: string[];
-  improvements: string[];
+  concerns: string[];
+  /** Legacy field kept only so older saved reports still parse cleanly. */
+  improvements?: string[];
   nextSteps: string[];
   questionScores?: Array<{
     score: number; communication: number; grammar: number;
     confidence: number; technical: number; feedback: string;
   }>;
 };
-
-/** The competency-framework rows, in display order, shared by the report UI and
- *  the downloadable transcript. Keys match InterviewReport.competencies. */
-const COMPETENCY_ROWS = [
-  { key: "functionalKnowledge", label: "Functional / Domain Knowledge" },
-  { key: "communication", label: "Communication Skills" },
-  { key: "collaboration", label: "Collaboration & Teamwork" },
-  { key: "personality", label: "Personality & Disposition" },
-  { key: "education", label: "Educational Background" },
-  { key: "itSkills", label: "IT & Digital Skills" },
-  { key: "adaptability", label: "Adaptability & Flexibility" },
-] as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -155,15 +144,61 @@ function cleanForSpeech(text: string): string {
     .trim();
 }
 
-function parseCompetency(v: unknown): Competency {
+function parseCompetencyRating(v: unknown): CompetencyRating {
   const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  const raw = Number(o["rating"]);
+  const rating = Number.isFinite(raw) ? Math.min(5, Math.max(1, Math.round(raw))) : 3;
+  return { rating, comment: String(o["comment"] || "") };
+}
+
+/** Deterministically derive the weighted score (1–5), the 0–100 overall
+ *  (weighted × 20, kept for analytics/trends), the recommendation band and the
+ *  typed sub-scores from the 1–5 ratings — over the competencies this interview
+ *  length covers. Computing this here (not from the AI) guarantees the score,
+ *  ratings and recommendation can never contradict one another. */
+function deriveScores(
+  competencies: Partial<Record<CompetencyKey, CompetencyRating>>,
+  durationMin: number,
+) {
+  const ratings: Partial<Record<CompetencyKey, number>> = {};
+  for (const key of Object.keys(competencies) as CompetencyKey[]) {
+    ratings[key] = competencies[key]!.rating;
+  }
+  const weightedScore = weightedScoreFor(ratings, durationMin);
+  const overallScore = Math.round(weightedScore * 20);
+  const recommendation = recommendationForWeighted(weightedScore).label;
+  const pct = (key: CompetencyKey) =>
+    typeof ratings[key] === "number" ? ratings[key]! * 20 : overallScore;
   return {
-    score: Math.min(100, Math.max(0, Number(o["score"]) || 0)),
-    comment: String(o["comment"] || ""),
+    weightedScore,
+    overallScore,
+    recommendation,
+    communicationScore: pct("communication"),
+    grammarScore: pct("communication"),
+    confidenceScore: pct("ownership"),
+    technicalScore: pct("domainKnowledge"),
   };
 }
 
-function parseReportJson(text: string): InterviewReport | null {
+/** A neutral fallback report (every covered competency rated 3) used only when
+ *  automated scoring is interrupted, so the user still sees a coherent result. */
+function neutralReport(durationMin: number): InterviewReport {
+  const competencies: Partial<Record<CompetencyKey, CompetencyRating>> = {};
+  for (const c of coveredCompetencies(durationMin)) {
+    competencies[c.key] = { rating: 3, comment: "Automated scoring was interrupted — this is an indicative result." };
+  }
+  return {
+    ...deriveScores(competencies, durationMin),
+    roleFit: "Promising candidate with room to grow.",
+    verdictReason: "Automated scoring was interrupted, so this is an indicative result — please review the detailed feedback below.",
+    competencies,
+    strengths: ["Engaged actively throughout the interview", "Attempted every question", "Showed willingness to learn"],
+    concerns: ["Automated scoring was interrupted — re-run the interview for a precise assessment"],
+    nextSteps: ["Practice structured STAR-method answers", "Record yourself and review your clarity", "Book another mock interview this week"],
+  };
+}
+
+function parseReportJson(text: string, durationMin: number): InterviewReport | null {
   let cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
   // If the model wrapped the JSON in prose, keep only the outermost {...} block
   // so a stray sentence before/after the object doesn't break JSON.parse.
@@ -172,42 +207,32 @@ function parseReportJson(text: string): InterviewReport | null {
   if (first !== -1 && last !== -1 && last > first) cleaned = cleaned.slice(first, last + 1);
   try {
     const parsed = JSON.parse(cleaned) as Record<string, unknown>;
-    const comp =
+    const rawComp =
       parsed["competencies"] && typeof parsed["competencies"] === "object"
         ? (parsed["competencies"] as Record<string, unknown>)
-        : undefined;
+        : {};
+    // Keep only the competencies this interview length covers; default any
+    // missing covered competency to a neutral 3 so every covered row still shows.
+    const competencies: Partial<Record<CompetencyKey, CompetencyRating>> = {};
+    for (const c of coveredCompetencies(durationMin)) {
+      competencies[c.key] =
+        rawComp[c.key] !== undefined
+          ? parseCompetencyRating(rawComp[c.key])
+          : { rating: 3, comment: "Only lightly tested in this interview." };
+    }
+    const concerns = Array.isArray(parsed["concerns"])
+      ? parsed["concerns"].map(String)
+      : Array.isArray(parsed["improvements"])
+        ? parsed["improvements"].map(String)
+        : [];
     return {
-      overallScore: Math.min(100, Math.max(0, Number(parsed["overallScore"]) || 0)),
-      communicationScore: Math.min(100, Math.max(0, Number(parsed["communicationScore"]) || 0)),
-      grammarScore: Math.min(100, Math.max(0, Number(parsed["grammarScore"]) || 0)),
-      confidenceScore: Math.min(100, Math.max(0, Number(parsed["confidenceScore"]) || 0)),
-      technicalScore: Math.min(100, Math.max(0, Number(parsed["technicalScore"]) || 0)),
+      ...deriveScores(competencies, durationMin),
       roleFit: String(parsed["roleFit"] || ""),
       verdictReason: String(parsed["verdictReason"] || parsed["recommendation"] || ""),
-      competencies: comp
-        ? {
-            functionalKnowledge: parseCompetency(comp["functionalKnowledge"]),
-            communication: parseCompetency(comp["communication"]),
-            collaboration: parseCompetency(comp["collaboration"]),
-            personality: parseCompetency(comp["personality"]),
-            education: parseCompetency(comp["education"]),
-            itSkills: parseCompetency(comp["itSkills"]),
-            adaptability: parseCompetency(comp["adaptability"]),
-          }
-        : undefined,
+      competencies,
       strengths: Array.isArray(parsed["strengths"]) ? parsed["strengths"].map(String) : [],
-      improvements: Array.isArray(parsed["improvements"]) ? parsed["improvements"].map(String) : [],
+      concerns,
       nextSteps: Array.isArray(parsed["nextSteps"]) ? parsed["nextSteps"].map(String) : [],
-      questionScores: Array.isArray(parsed["questionScores"])
-        ? (parsed["questionScores"] as Record<string, unknown>[]).map(qs => ({
-            score: Math.min(10, Math.max(1, Number(qs["score"]) || 5)),
-            communication: Math.min(10, Math.max(1, Number(qs["communication"]) || 5)),
-            grammar: Math.min(10, Math.max(1, Number(qs["grammar"]) || 5)),
-            confidence: Math.min(10, Math.max(1, Number(qs["confidence"]) || 5)),
-            technical: Math.min(10, Math.max(1, Number(qs["technical"]) || 5)),
-            feedback: String(qs["feedback"] || ""),
-          }))
-        : undefined,
     };
   } catch { return null; }
 }
@@ -280,33 +305,6 @@ function TimerDisplay({ elapsedSeconds, durationMinutes }: { elapsedSeconds: num
           style={{ width: `${pct}%` }}
         />
       </div>
-    </div>
-  );
-}
-
-function RingChart({ value, label, color }: { value: number; label: string; color: string }) {
-  const radius = 32;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (value / 100) * circumference;
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="relative w-20 h-20">
-        <svg className="w-full h-full -rotate-90">
-          <circle cx="40" cy="40" r={radius} stroke="#e2e8f0" strokeWidth="6" fill="none" />
-          <circle
-            cx="40" cy="40" r={radius}
-            stroke={color}
-            strokeWidth="6"
-            fill="none"
-            strokeLinecap="round"
-            style={{ strokeDasharray: circumference, strokeDashoffset: offset, transition: "stroke-dashoffset 0.5s ease" }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-sm font-bold text-secondary">{value}%</span>
-        </div>
-      </div>
-      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
     </div>
   );
 }
@@ -756,14 +754,15 @@ Rules:
     const willRetry = isWeakAnswer && retryRef.current < 1;
     const nextRetry = willRetry ? retryRef.current + 1 : 0;
     const targetBeatIdx = willRetry ? beatIdxRef.current : beatIdxRef.current + 1;
-    const area = areaForBeat(targetBeatIdx);
-    // For the background area, replace the generic "this role" with the actual
-    // role the candidate selected so the interviewer never guesses the wrong title.
-    const areaFocus = area.key === "functional"
-      ? `${area.focus} — ${functionalKnowledgeFor(typeMeta.value, typeMeta.label)}`
-      : area.key === "background"
-        ? `a brief self-introduction and their educational background — degree, key subjects, and notable curricular or extra-curricular achievements relevant to the ${typeMeta.label} role`
-        : area.focus;
+    const area = areaForBeat(targetBeatIdx, {
+      durationMin: duration,
+      experience,
+      type: typeMeta.value,
+      roleLabel: typeMeta.label,
+    });
+    // areaForBeat already composes the full focus (role-specific for domain
+    // knowledge, experience-specific for the depth probe), so use it directly.
+    const areaFocus = area.focus;
 
     let directive: string;
     if (willRetry) {
@@ -774,7 +773,7 @@ Rules:
       directive = `Now move to a DIFFERENT area to keep the interview varied — do NOT keep drilling the previous topic. New area — ${area.label}. Focus on: ${areaFocus}. You may briefly connect to what they just said, but the question itself must target this new area. Ask a genuinely fresh question you have not asked before.`;
     }
 
-    let response = "";
+    let response: string;
     // ── Thinking-pause guarantee ───────────────────────────────────────────────
     // Target: interviewer ALWAYS starts speaking 3–5 s after the candidate stops.
     // Hard cap: NEVER exceed 5 s (within-5-seconds rule).
@@ -846,7 +845,7 @@ STYLE — important:
 - Warm, encouraging and human — you genuinely want ${firstName} to do well and feel at ease. You MAY add a light, tasteful touch of humour now and then to relax them, but never sarcasm, never at their expense, and keep it to a brief aside.
 - Acknowledge their answer with ONE short, genuine phrase (max about 6 words). Do NOT summarise their whole answer and do NOT pile on flattery.
 - Ask EXACTLY ONE question, and NEVER repeat a question already asked in this interview.
-- The interview must feel DIVERSIFIED across many areas (domain knowledge, teamwork, IT skills, adaptability, integrity, motivation, education) — not a chain of similar questions.
+- The interview must feel DIVERSIFIED across the scorecard competencies (domain/role knowledge, problem-solving, ownership & culture fit, adaptability, and a depth probe) — not a chain of similar questions.
 - Use ${firstName}'s name sparingly.
 - Plain spoken words ONLY: no markdown, no asterisks, no *actions*, no stage directions, no quotes around your reply.
 - The Next line must be the question ONLY — no greeting, no preamble, no name.
@@ -1096,58 +1095,62 @@ Next: <the interview question only>`,
         .map((q, i) => `Q${i + 1}: ${q.question}\nA${i + 1}: ${q.answer ?? ""}`)
         .join("\n\n");
 
+      // Build the covered-competency list + JSON template for THIS interview
+      // length so the model only scores what the format actually covers.
+      const covered = coveredCompetencies(duration);
+      const compLines = covered
+        .map((c) => {
+          const focus =
+            c.key === "domainKnowledge"
+              ? functionalKnowledgeFor(typeMeta.value, typeMeta.label)
+              : c.key === "depthProbe"
+                ? depthProbeFocus(experience)
+                : c.focus;
+          return `- "${c.key}" — ${c.label} (weight ${Math.round(c.weight * 100)}%): ${focus}`;
+        })
+        .join("\n");
+      const compJsonKeys = covered
+        .map((c) => `    "${c.key}": {"rating": 1-5, "comment": "1-2 sentences citing specific evidence from the transcript"}`)
+        .join(",\n");
+
       const reportText = await stream(
-        `You are an expert interview evaluator. Review this full mock interview and produce a detailed structured report.
+        `You are an expert interview panellist scoring a mock interview against a structured, weighted competency scorecard.
 
 Role: ${typeMeta.label}
-Candidate: ${experience} experience
-Duration: ${formatTime(elapsedSeconds)}
+Candidate experience level: ${experience}
+Interview length: ${duration} minutes (${formatTime(elapsedSeconds)} used)
 Profile: ${buildProfileSummary()}
+
+CALIBRATION — read carefully: ${calibrationFor(experience)}
+
+Rate each competency on this 1-5 scale, calibrated to the experience level above:
+1 = Considerable improvement, 2 = Moderate improvement, 3 = Meets expectations, 4 = Exceeds expectations, 5 = Outstanding.
+
+Score ONLY these competencies (a ${duration}-minute interview covers exactly these):
+${compLines}
 
 Full interview transcript:
 ${transcript}
 
-Score the candidate across the FULL HR competency framework. Return ONLY a valid JSON object with exactly these keys (no markdown, no extra text, no commentary before or after):
+Return ONLY a valid JSON object with exactly these keys (no markdown, no commentary before or after):
 {
-  "overallScore": 0-100,
-  "communicationScore": 0-100,
-  "grammarScore": 0-100,
-  "confidenceScore": 0-100,
-  "technicalScore": 0-100,
-  "roleFit": "one honest sentence about this candidate for this role",
-  "verdictReason": "one or two honest sentences giving your overall hiring recommendation for THIS role and why — this accompanies a Selected/Not Selected result where a pass is roughly 60+ overall. Be fair but honest, and never pass a candidate who clearly lacks the core functional knowledge for the role",
   "competencies": {
-    "functionalKnowledge": {"score": 0-100, "comment": "1-2 sentences on the role/domain knowledge shown"},
-    "communication": {"score": 0-100, "comment": "1-2 sentences on clarity, articulation and language"},
-    "collaboration": {"score": 0-100, "comment": "1-2 sentences on teamwork and coordination evidence"},
-    "personality": {"score": 0-100, "comment": "1-2 sentences on disposition, confidence, energy and integrity"},
-    "education": {"score": 0-100, "comment": "1-2 sentences on educational background and its fit"},
-    "itSkills": {"score": 0-100, "comment": "1-2 sentences on digital/IT comfort and data-security awareness"},
-    "adaptability": {"score": 0-100, "comment": "1-2 sentences on flexibility and openness to change"}
+${compJsonKeys}
   },
-  "strengths": ["3 specific observed strengths"],
-  "improvements": ["3 specific improvement areas"],
-  "nextSteps": ["3 concrete actionable steps"]
+  "roleFit": "one honest sentence about this candidate for this role",
+  "strengths": ["2-3 specific strengths observed in the transcript"],
+  "concerns": ["2-3 honest concerns or red flags — use an empty array [] ONLY if there are genuinely none"],
+  "nextSteps": ["3 concrete, actionable steps to improve"],
+  "verdictReason": "1-2 honest sentences summarising your hiring recommendation for THIS role at THIS experience level and why"
 }
 
-Score every competency from evidence in the transcript. If a competency was not directly tested, infer conservatively from overall performance and say so briefly in its comment. Be honest, specific, and encouraging. Use Indian hiring context.`,
-        `You are a senior hiring manager and interview coach evaluating an Indian candidate. Give human, realistic, non-robotic feedback.`,
+Rate every listed competency from evidence in the transcript, calibrated to the experience level. Communication & Clarity is judged from HOW the candidate expressed every answer (there are no dedicated communication questions). If a competency was only lightly tested, infer conservatively and say so in its comment. Be fair, specific and honest — never inflate a candidate who lacks the core domain knowledge for the role. Use Indian hiring context.`,
+        `You are a senior hiring manager and interview panellist evaluating an Indian candidate against a weighted scorecard. Give human, realistic, honest feedback and rate strictly on the 1-5 scale.`,
         undefined,
-        { maxTokens: 2200 }
+        { maxTokens: 2000 }
       );
 
-      const parsed = parseReportJson(reportText) ?? {
-        overallScore: 60,
-        communicationScore: 60,
-        grammarScore: 60,
-        confidenceScore: 60,
-        technicalScore: 60,
-        roleFit: "Promising candidate with room to grow.",
-        verdictReason: "Automated scoring was interrupted, so this is an indicative result — please review the detailed feedback below.",
-        strengths: ["Participated actively in the mock interview", "Provided structured answers", "Showed willingness to learn"],
-        improvements: ["Add more specific examples", "Tighten language clarity", "Work on concise delivery"],
-        nextSteps: ["Practice STAR method answers", "Record yourself and review", "Schedule another mock interview next week"],
-      };
+      const parsed = parseReportJson(reportText, duration) ?? neutralReport(duration);
 
       // Per-question feedback is ALWAYS fetched in a separate, focused call.
       // Keeping it out of the main report keeps that JSON small, so the overall
@@ -1211,7 +1214,7 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
     };
 
     void generate();
-  }, [phase, report, isGeneratingReport, questions, typeMeta, experience, elapsedSeconds, stream, buildProfileSummary]);
+  }, [phase, report, isGeneratingReport, questions, typeMeta, experience, elapsedSeconds, duration, stream, buildProfileSummary]);
 
   const saveSession = useCallback(async (reportData: InterviewReport, answered: QA[]) => {
     if (saved) return;
@@ -1282,29 +1285,23 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
       `Coach: ${coach.name} (${coach.role})`,
       `Role: ${label} | Experience: ${experience} | Duration: ${durationMin} min`,
       `Date: ${new Date().toLocaleDateString("en-IN")}`,
-      report ? `Overall Score: ${report.overallScore}% — ${grade(report.overallScore).label}` : `Overall Score: ${avgScore}% — ${grade(avgScore).label}`,
+      report ? `Total Weighted Score: ${report.weightedScore.toFixed(1)} / 5.0 (${report.overallScore}%) — ${report.recommendation}` : `Overall Score: ${avgScore}% — ${grade(avgScore).label}`,
       report ? `Result: ${verdictFor(report.overallScore).label}${report.verdictReason ? ` — ${report.verdictReason}` : ""}` : `Result: ${verdictFor(avgScore).label}`,
-      ``,
-      `SKILL BREAKDOWN`,
-      report ? `Communication: ${report.communicationScore}%` : "Communication: N/A",
-      report ? `Grammar: ${report.grammarScore}%` : "Grammar: N/A",
-      report ? `Confidence: ${report.confidenceScore}%` : "Confidence: N/A",
-      report ? `Technical: ${report.technicalScore}%` : "Technical: N/A",
-      report ? `Role Fit: ${report.roleFit}` : "Role Fit: N/A",
+      report ? `Role Fit: ${report.roleFit}` : "",
       ``,
       ...(report?.competencies ? [
-        `COMPETENCY ASSESSMENT`,
-        ...COMPETENCY_ROWS.map(({ key, label }) => {
-          const c = report.competencies![key];
-          return `${label}: ${c.score}%${c.comment ? ` — ${c.comment}` : ""}`;
+        `COMPETENCY SCORECARD (rated 1-5)`,
+        ...COMPETENCIES.filter(c => report.competencies![c.key]).map(c => {
+          const cr = report.competencies![c.key]!;
+          return `${c.label} (${Math.round(c.weight * 100)}%): ${cr.rating}/5 — ${ratingLabel(cr.rating)}${cr.comment ? ` — ${cr.comment}` : ""}`;
         }),
         ``,
       ] : []),
       `STRENGTHS`,
       ...(report ? report.strengths : []),
       ``,
-      `AREAS TO IMPROVE`,
-      ...(report ? report.improvements : []),
+      `CONCERNS / RED FLAGS`,
+      ...(report ? (report.concerns.length ? report.concerns : ["None noted."]) : []),
       ``,
       `NEXT STEPS`,
       ...(report ? report.nextSteps : []),
@@ -1435,9 +1432,8 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
   if (phase === "report") {
     const answered = questions.filter(q => q.answer);
     const avgScore = avgOf(answered.map(q => q.score)) * 10;
-    const g = report ? grade(report.overallScore) : grade(avgScore);
-    const displayScore = report ? report.overallScore : avgScore;
     const durationMin = Math.round(elapsedSeconds / 60);
+    const g = grade(avgScore); // fallback styling used only when there is no AI report
 
     return (
       <div className="min-h-full container mx-auto px-4 py-8 max-w-4xl space-y-6">
@@ -1447,27 +1443,53 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
             <AnimatedAvatar name={coach.name} subtitle={coach.role} isSpeaking={false} gender={coach.gender} size="lg" imageSrc={coach.imageSrc} />
           </div>
           <h1 className="text-3xl font-display font-bold text-secondary mt-2 mb-3">Interview Complete!</h1>
-          <div className={`inline-flex items-center gap-3 px-6 py-3 rounded-2xl border-2 ${g.bg}`}>
-            <span className={`text-5xl font-extrabold ${g.color}`}>{displayScore}</span>
-            <div className="text-left">
-              <div className={`text-xs font-bold uppercase tracking-wider ${g.color}`}>Overall Score</div>
-              <div className={`text-lg font-bold ${g.color}`}>{g.label}</div>
-            </div>
-          </div>
-          {report && (() => {
-            const v = verdictFor(displayScore);
-            return (
-              <div className="mt-4">
-                <div className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-sm border-2 ${v.selected ? "bg-green-100 text-green-800 border-green-300" : "bg-red-100 text-red-800 border-red-300"}`}>
-                  {v.selected ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-                  Result: {v.label}
-                </div>
-                {report.verdictReason && (
-                  <p className="text-sm text-muted-foreground mt-2 max-w-xl mx-auto">{report.verdictReason}</p>
-                )}
+
+          {report ? (
+            <>
+              {(() => {
+                const style = RECOMMENDATION_STYLES[report.recommendation];
+                return (
+                  <div className={`inline-flex items-center gap-4 px-6 py-4 rounded-2xl border-2 ${style.badge}`}>
+                    <div className="text-left leading-none">
+                      <span className={`text-5xl font-extrabold ${style.text}`}>{report.weightedScore.toFixed(1)}</span>
+                      <span className={`text-xl font-bold ${style.text}`}> / 5.0</span>
+                    </div>
+                    <div className="text-left border-l-2 pl-4">
+                      <div className={`text-[10px] font-bold uppercase tracking-wider ${style.text}`}>Recommendation</div>
+                      <div className={`text-lg font-extrabold ${style.text}`}>{report.recommendation}</div>
+                      <div className={`text-xs font-semibold ${style.text} opacity-80`}>{report.overallScore}% overall</div>
+                    </div>
+                  </div>
+                );
+              })()}
+              {(() => {
+                const v = verdictFor(report.overallScore);
+                return (
+                  <div className="mt-4">
+                    <div className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-sm border-2 ${v.selected ? "bg-green-100 text-green-800 border-green-300" : "bg-red-100 text-red-800 border-red-300"}`}>
+                      {v.selected ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                      Result: {v.label}
+                    </div>
+                    {report.verdictReason && (
+                      <p className="text-sm text-muted-foreground mt-2 max-w-xl mx-auto">{report.verdictReason}</p>
+                    )}
+                    {report.roleFit && (
+                      <p className="text-sm text-secondary mt-2 max-w-xl mx-auto italic">{report.roleFit}</p>
+                    )}
+                  </div>
+                );
+              })()}
+            </>
+          ) : (
+            <div className={`inline-flex items-center gap-3 px-6 py-3 rounded-2xl border-2 ${g.bg}`}>
+              <span className={`text-5xl font-extrabold ${g.color}`}>{avgScore}</span>
+              <div className="text-left">
+                <div className={`text-xs font-bold uppercase tracking-wider ${g.color}`}>Overall Score</div>
+                <div className={`text-lg font-bold ${g.color}`}>{g.label}</div>
               </div>
-            );
-          })()}
+            </div>
+          )}
+
           <p className="text-muted-foreground mt-3 text-sm">
             {typeMeta.icon} {typeMeta.label} · {experience} · {answered.length} questions · {durationMin} min · with {coach.name}
           </p>
@@ -1482,45 +1504,35 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
 
         {report && (
           <>
-            {/* Skill rings */}
-            <Card className="border shadow-sm">
-              <CardHeader className="pb-2 pt-5 px-5">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-primary" />
-                  Skill Breakdown
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-5 pb-5">
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 justify-items-center">
-                  <RingChart value={report.overallScore} label="Overall" color="#f97316" />
-                  <RingChart value={report.communicationScore} label="Communication" color="#3b82f6" />
-                  <RingChart value={report.grammarScore} label="Grammar" color="#22c55e" />
-                  <RingChart value={report.confidenceScore} label="Confidence" color="#f97316" />
-                  <RingChart value={report.technicalScore} label="Functional" color="#a855f7" />
-                </div>
-                <p className="text-sm text-secondary mt-5 text-center">{report.roleFit}</p>
-              </CardContent>
-            </Card>
-
             {report.competencies && (
               <Card className="border shadow-sm">
                 <CardHeader className="pb-2 pt-5 px-5">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Target className="w-4 h-4 text-primary" />
-                    Competency Assessment
+                    Competency Scorecard
                   </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Rated 1–5 · weighted to a {report.weightedScore.toFixed(1)} / 5.0 total for this {durationMin}-min interview
+                  </p>
                 </CardHeader>
                 <CardContent className="px-5 pb-5 space-y-4">
-                  {COMPETENCY_ROWS.map(({ key, label }) => {
-                    const c = report.competencies![key];
+                  {COMPETENCIES.filter(c => report.competencies![c.key]).map(c => {
+                    const cr = report.competencies![c.key]!;
                     return (
-                      <div key={key}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-bold text-secondary">{label}</span>
-                          <span className={`text-xs font-bold ${grade(c.score).color}`}>{c.score}%</span>
+                      <div key={c.key}>
+                        <div className="flex items-center justify-between mb-1.5 gap-3">
+                          <span className="text-sm font-bold text-secondary">
+                            {c.label}
+                            <span className="text-xs font-medium text-muted-foreground ml-1.5">{Math.round(c.weight * 100)}%</span>
+                          </span>
+                          <span className="text-xs font-bold text-secondary whitespace-nowrap">{cr.rating}/5 · {ratingLabel(cr.rating)}</span>
                         </div>
-                        <Progress value={c.score} className="h-2" />
-                        {c.comment && <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{c.comment}</p>}
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4, 5].map(n => (
+                            <div key={n} className={`h-2 flex-1 rounded-full ${n <= cr.rating ? "bg-primary" : "bg-muted"}`} />
+                          ))}
+                        </div>
+                        {cr.comment && <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{cr.comment}</p>}
                       </div>
                     );
                   })}
@@ -1548,17 +1560,21 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
               <Card className="border shadow-sm">
                 <CardHeader className="pb-2 pt-5 px-5">
                   <CardTitle className="text-base flex items-center gap-2 text-orange-700">
-                    <AlertCircle className="w-4 h-4" />Improvement Areas
+                    <AlertCircle className="w-4 h-4" />Concerns / Red Flags
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="px-5 pb-5">
-                  <ul className="space-y-2">
-                    {report.improvements.map((s, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-secondary">
-                        <Pencil className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />{s}
-                      </li>
-                    ))}
-                  </ul>
+                  {report.concerns.length > 0 ? (
+                    <ul className="space-y-2">
+                      {report.concerns.map((s, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-secondary">
+                          <AlertCircle className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />{s}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No significant concerns noted — a clean interview.</p>
+                  )}
                 </CardContent>
               </Card>
             </div>

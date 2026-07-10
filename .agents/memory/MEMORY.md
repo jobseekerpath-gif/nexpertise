@@ -9,8 +9,8 @@
 - [English Guru compact layout](english-guru-compact-layout.md) — live conversation uses a footer-free full-viewport shell; only the chat panel scrolls.
 - [Interview Ace auto-listen](interview-auto-listen.md) — mock interviews should start listening automatically after each question and feel conversational, not scripted.
 - [Interview Ace analytics](interview-analytics.md) — persist one canonical interview session per completed report, not per-question, so progress trends reflect full interviews.
-- [Interview structured format](interview-structured-format.md) — diversify competencies via a beat rotation (breadth, NOT single-topic chains, NOT random pivoting); 2-attempt rule; warm tone + light humour; ~5s think window; live AI web-only.
-- [Interview report generation](interview-report-generation.md) — split into 2 AI calls so a big per-question array can't truncate scores to uniform-60; competencies live in feedbackJson (no schema change).
+- [Interview structured format](interview-structured-format.md) — weighted 6-competency scorecard (1–5), length-gated coverage (10/15/25min → first 2/4/6); Domain is the recurring core; areaForBeat NEEDS ctx {durationMin,experience,type,roleLabel}; 2-attempt rule; warm tone; ~5s think; web-only.
+- [Interview report generation](interview-report-generation.md) — split into 2 AI calls (ratings survive truncation); AI gives per-competency 1–5 ratings ONLY — weighted/overall(×20)/recommendation computed client-side, never by AI; competencies in feedbackJson; back-compat improvements↔concerns.
 - [Rozgar profile feed](rozgar-profile-feed.md) — Rozgar should stay candidate-driven, with profile basics shaping every section and a live hiring pulse before AI summaries.
 - [Voice switching should stop playback](voice-switch-stop-playback.md) — changing tutor voice must cancel active speech immediately so male/female voices never mix.
 - [Compact page scroll shells](compact-page-scroll-shells.md) — full-viewport routes still need a real scroll path; inner panes alone can make the page feel frozen.
@@ -28,7 +28,7 @@
 - [Email via Resend connector](email-resend-connector.md) — via Replit connector proxy; 403 to non-owner = Resend unverified-domain sandbox limit, not broken wiring; never leak OTP code on failure.
 - [Mobile tool AI calls](mobile-tool-ai.md) — Expo tool/[id].tsx calls /api/ai/chat with {prompt, system, maxTokens} body (NOT messages array); response is {text: string}.
 - [Interview Ace video call UI](interview-video-call.md) — fixed full-screen dark layout (z-30, top:56px); webcam PiP via getUserMedia; camera auto-off on ANY exit from interview phase + post-await race guard; PhoneOff hang-up.
-- [Interview verdict](interview-verdict.md) — Selected/Not Selected derived deterministically from overallScore (shared interviewVerdict, pass bar 60); AI supplies only the rationale; keep report + transcript + progress detail in lockstep.
+- [Interview verdict](interview-verdict.md) — weighted 1–5 primary + recommendation band (Strong Hire/Hire/Hold/No Hire); Selected/Not Selected derived from overallScore (pass bar 70 = Hire line); recommendationForWeighted & recommendationForScore agree; static RECOMMENDATION_STYLES; AI gives only rationale.
 - [Edge TTS + echo fix](edge-tts-echo-fix.md) — Live chat + Interview Ace use Edge Neural TTS via /api/tts; blockFor(1200ms) prevents mic from picking up AI's own voice from speakers.
 - [Learning Journey SM-2](learning-journey.md) — /api/journey/* routes; due reviews must interleave separately from new lessons or priority breaks; /api/jobs/search and /api/news/feed also added.
 - [AI provider fallback](ai-provider-fallback.md) — Claude is PRIMARY, Gemini fallback (no working GEMINI_API_KEY); route AI via generateTextWithFallback so calls don't waste 3-5s failing through dead Gemini models.

@@ -11,6 +11,7 @@ export type InterviewReport = {
   technicalScore: number;
   roleFit: string;
   strengths: string[];
+  concerns: string[];
   improvements: string[];
   nextSteps: string[];
 };
@@ -54,6 +55,7 @@ function parseReport(text: string | null): InterviewReport | null {
       technicalScore: Number(parsed["technicalScore"] ?? 0),
       roleFit: String(parsed["roleFit"] ?? ""),
       strengths: Array.isArray(parsed["strengths"]) ? parsed["strengths"].map(String) : [],
+      concerns: Array.isArray(parsed["concerns"]) ? parsed["concerns"].map(String) : [],
       improvements: Array.isArray(parsed["improvements"]) ? parsed["improvements"].map(String) : [],
       nextSteps: Array.isArray(parsed["nextSteps"]) ? parsed["nextSteps"].map(String) : [],
     };
