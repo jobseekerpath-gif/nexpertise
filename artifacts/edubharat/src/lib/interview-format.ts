@@ -1,92 +1,158 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Structured interview format
+// Structured interview format — Assessment Scorecard
 //
-// Mock interviews follow a FIXED, ordered set of assessment areas modelled on a
-// standard HR competency-assessment sheet (Functional Knowledge, Communication,
-// Collaboration, Personality/disposition, Educational Background, IT skills,
-// Adaptability). The AI must move through these stages in order and stay on the
-// current one — it must NOT wander between topics.
+// Mock interviews are conducted and scored against a weighted six-competency
+// scorecard modelled on a real HR interview assessment form:
 //
-// Communication skills, overall personality/disposition and integrity are judged
-// from HOW the candidate answers throughout, so they are not separate question
-// stages; they are scored in the final report instead.
+//   1. Communication & Clarity        15%   (min 10 min) — judged from delivery
+//   2. Domain / Role Knowledge        30%   (min 10 min) — the core, role-specific
+//   3. Problem-Solving & Approach     20%   (min 15 min)
+//   4. Ownership & Culture Fit        15%   (min 15 min)
+//   5. Adaptability & Learning Agility 10%  (min 25 min)
+//   6. Depth Probe                    10%   (min 25 min) — leadership / initiative
+//
+// Interview length gates which competencies are covered: a 10-min interview
+// covers 1–2, a 15-min covers 1–4, a 25-min covers all six. Each rating is on a
+// 1–5 scale calibrated to the candidate's experience level.
+//
+// Communication & Clarity is scored from HOW the candidate expresses every
+// answer, so it has no dedicated question stage — the live question rotation
+// targets the other covered competencies, with Domain as the recurring core.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type InterviewStage = {
-  key: string;
+export type CompetencyKey =
+  | "communication"
+  | "domainKnowledge"
+  | "problemSolving"
+  | "ownership"
+  | "adaptability"
+  | "depthProbe";
+
+export type CompetencyDef = {
+  key: CompetencyKey;
   label: string;
-  /** What the interviewer should probe while in this stage. */
+  /** Scorecard weight (0–1). */
+  weight: number;
+  /** Minimum interview length (minutes) that unlocks this competency. */
+  minMinutes: number;
+  /** What the interviewer probes / the evaluator scores for this competency. */
   focus: string;
-  /** Progress fraction (0-1) of the questioning window at which this stage ENDS. */
-  until: number;
 };
 
-/**
- * The fixed interview agenda, in order. `until` values are cumulative fractions
- * of the questioning window (not wall-clock), so the same structure scales to a
- * 10-, 15- or 25-minute interview. Functional/domain knowledge deliberately gets
- * the largest slice — it is the core of the interview.
- */
-export const INTERVIEW_STAGES: InterviewStage[] = [
+/** The weighted scorecard, in display order. Weights sum to 1.0 across all six. */
+export const COMPETENCIES: CompetencyDef[] = [
   {
-    key: "background",
-    label: "Introduction & Educational Background",
+    key: "communication",
+    label: "Communication & Clarity",
+    weight: 0.15,
+    minMinutes: 10,
     focus:
-      "a brief self-introduction and the candidate's educational background — degree, key subjects, and any notable curricular or extra-curricular achievements relevant to this role",
-    until: 0.15,
+      "how clearly and confidently the candidate articulates ideas, structures answers, and listens to the question",
   },
   {
-    key: "functional",
-    label: "Functional / Domain Knowledge",
-    focus:
-      "role-specific functional and domain knowledge (this is the core of the interview)",
-    until: 0.55,
+    key: "domainKnowledge",
+    label: "Domain / Role Knowledge",
+    weight: 0.3,
+    minMinutes: 10,
+    focus: "role-specific functional and domain knowledge (the core of the interview)",
   },
   {
-    key: "collaboration",
-    label: "Collaboration & Teamwork",
+    key: "problemSolving",
+    label: "Problem-Solving & Approach",
+    weight: 0.2,
+    minMinutes: 15,
     focus:
-      "how the candidate works within a team — coordination, cooperation, handling disagreement, and a concrete example of collaborating to reach a shared goal",
-    until: 0.7,
+      "structured thinking and sound judgement — how they break a problem down, weigh trade-offs, and reach a practical solution",
   },
   {
-    key: "it_skills",
-    label: "IT & Digital Skills",
+    key: "ownership",
+    label: "Ownership & Culture Fit",
+    weight: 0.15,
+    minMinutes: 15,
     focus:
-      "comfort with office and email applications and smartphones/handheld devices, and awareness of basic data-security and confidentiality practices",
-    until: 0.82,
+      "accountability, attitude and energy — owning outcomes, learning from mistakes, and fit with a collaborative team",
   },
   {
     key: "adaptability",
-    label: "Adaptability & Flexibility",
+    label: "Adaptability & Learning Agility",
+    weight: 0.1,
+    minMinutes: 25,
     focus:
-      "openness to working at different locations, across different industries or roles, and how the candidate copes with change",
-    until: 0.92,
+      "comfort with change, ambiguity and feedback, and how quickly they pick up new things",
   },
   {
-    key: "motivation",
-    label: "Motivation, Commitment & Closing",
+    key: "depthProbe",
+    label: "Depth Probe",
+    weight: 0.1,
+    minMinutes: 25,
     focus:
-      "the candidate's motivation for this role, their commitment and reliability, career goals, and finally whether they have any questions",
-    until: 1.01,
+      "a deeper probe calibrated to experience — leadership and influence for experienced candidates, initiative and drive for freshers",
   },
 ];
 
-/** Index of the current stage for a questioning-window progress fraction (0-1). */
-export function stageIndexForProgress(progress: number): number {
-  const p = Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 1) : 0;
-  const idx = INTERVIEW_STAGES.findIndex((s) => p < s.until);
-  return idx === -1 ? INTERVIEW_STAGES.length - 1 : idx;
-}
-
-/** Pick the current stage from questioning-window progress (0-1). */
-export function stageForProgress(progress: number): InterviewStage {
-  return INTERVIEW_STAGES[stageIndexForProgress(progress)]!;
+/** The competencies a given interview length covers (form: 10-min → 1–2,
+ *  15-min → 1–4, 25-min → all six). */
+export function coveredCompetencies(durationMin: number): CompetencyDef[] {
+  return COMPETENCIES.filter((c) => durationMin >= c.minMinutes);
 }
 
 /**
- * Role-specific functional-knowledge focus. Banking and Insurance mirror the
- * sample assessment format exactly; every other role applies the same idea with
+ * Total Weighted Score (1–5) over ONLY the competencies covered by this
+ * interview length. Weights are renormalised across the covered competencies so
+ * the result always stays on the 1–5 scale. Returns 0 if nothing was scored.
+ */
+export function weightedScoreFor(
+  ratings: Partial<Record<CompetencyKey, number>>,
+  durationMin: number,
+): number {
+  let weightSum = 0;
+  let ratingSum = 0;
+  for (const c of coveredCompetencies(durationMin)) {
+    const r = ratings[c.key];
+    if (typeof r === "number" && r > 0) {
+      weightSum += c.weight;
+      ratingSum += c.weight * r;
+    }
+  }
+  if (weightSum === 0) return 0;
+  return Math.round((ratingSum / weightSum) * 10) / 10; // one decimal
+}
+
+/**
+ * Experience-level calibration. The 1–5 scale ("meets expectations" = 3) means
+ * something different at each level, so the bar moves with experience.
+ */
+const CALIBRATION: Record<string, string> = {
+  Fresher:
+    "This is a FRESHER. Calibrate the bar to fundamentals and potential — sound basics, clear thinking and willingness to learn matter more than deep experience. 'Meets expectations' (3) = solid fundamentals for an entry-level hire.",
+  "1-2 years":
+    "This candidate has 1-2 years' experience. Calibrate to INDEPENDENT EXECUTION — they should handle routine work on their own with light guidance. 'Meets expectations' (3) = reliably delivers standard tasks independently.",
+  "3-5 years":
+    "This candidate has 3-5 years' experience. Calibrate to OWNERSHIP & JUDGEMENT — they should own outcomes, make sound calls, and handle ambiguity. 'Meets expectations' (3) = owns their area with good judgement.",
+  "5+ years":
+    "This candidate has 5+ years' experience. Calibrate to STRATEGIC & LEADERSHIP depth — they should show influence, mentoring and strategic thinking. 'Meets expectations' (3) = a strong senior contributor who elevates the team.",
+};
+
+/** Calibration guidance for the given experience level (falls back to Fresher). */
+export function calibrationFor(experience: string): string {
+  return CALIBRATION[experience] ?? CALIBRATION["Fresher"]!;
+}
+
+/** What the Depth Probe should target for a given experience level
+ *  (leadership for senior candidates, initiative for freshers). */
+export function depthProbeFocus(experience: string): string {
+  if (experience === "5+ years")
+    return "leadership, influence and strategic thinking — leading teams or initiatives, mentoring others, and driving outcomes beyond their own tasks";
+  if (experience === "3-5 years")
+    return "ownership and leadership potential — taking initiative beyond the brief, mentoring juniors, and making judgement calls under pressure";
+  if (experience === "1-2 years")
+    return "initiative and growing ownership — going beyond assigned work, self-direction, and taking responsibility for results";
+  return "initiative, self-drive and learning potential — self-started projects, extra-curricular initiative, and how they push themselves to grow";
+}
+
+/**
+ * Role-specific domain-knowledge focus. Banking and Insurance mirror the sample
+ * assessment format exactly; every other role applies the same idea with
  * domain-appropriate, practical topics a real panel would probe.
  */
 const FUNCTIONAL_KNOWLEDGE: Record<string, string> = {
@@ -125,97 +191,69 @@ export function functionalKnowledgeFor(type: string, roleLabel: string): string 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Diversified beat rotation
+// Live question rotation
 //
-// The interview must feel DIVERSIFIED across every assessment parameter, not a
-// chain of near-identical questions on one topic. Instead of spending many
-// consecutive questions inside a single "stage", we rotate through the competency
-// areas so CONSECUTIVE questions target DIFFERENT areas. Functional/domain
-// knowledge is the core, so it recurs in the rotation — but never back-to-back.
-// Breadth is front-loaded so even a short interview covers a wide spread.
+// Dedicated questions target the covered competencies EXCEPT Communication
+// (which is judged from delivery). Domain/Role Knowledge is the recurring core,
+// interleaved with the other covered competencies so consecutive questions
+// always differ and Domain never repeats back-to-back. The rotation scales with
+// interview length: a 10-min interview asks Domain only; longer interviews add
+// Problem-Solving, Ownership, Adaptability and the Depth Probe.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type InterviewArea = {
   key: string;
   label: string;
-  /** What to probe for this area — roughly one question's worth. */
+  /** Fully-composed guidance for what to probe — roughly one question's worth. */
   focus: string;
 };
 
-export const INTERVIEW_AREAS: Record<string, InterviewArea> = {
-  background: {
-    key: "background",
-    label: "Introduction & Educational Background",
-    focus:
-      "a brief self-introduction and their educational background — degree, key subjects, and notable curricular or extra-curricular achievements relevant to this role",
-  },
-  functional: {
-    key: "functional",
-    label: "Functional / Domain Knowledge",
-    focus: "role-specific functional and domain knowledge (the core of the interview)",
-  },
-  collaboration: {
-    key: "collaboration",
-    label: "Collaboration & Teamwork",
-    focus:
-      "how they work within a team — coordination, cooperation, handling disagreement, and a concrete example of collaborating toward a shared goal",
-  },
-  it_skills: {
-    key: "it_skills",
-    label: "IT & Digital Skills",
-    focus:
-      "comfort with office and email applications and smartphones/handheld devices, and awareness of basic data-security and confidentiality practices",
-  },
-  integrity: {
-    key: "integrity",
-    label: "Integrity & Commitment",
-    focus:
-      "honesty, integrity and respect for rules, plus commitment — ideally a behavioural example of upholding a rule or honouring a difficult commitment under pressure",
-  },
-  adaptability: {
-    key: "adaptability",
-    label: "Adaptability & Flexibility",
-    focus:
-      "openness to working at different locations, across different industries or roles, and how they cope with change and unfamiliar situations",
-  },
-  education: {
-    key: "education",
-    label: "Academic & Extra-curricular Depth",
-    focus:
-      "a deeper look at their academics and extra-curricular life — projects, leadership, competitions or activities, and what they learned from them",
-  },
-  motivation: {
-    key: "motivation",
-    label: "Motivation & Commitment",
-    focus:
-      "their motivation for this specific role, career goals, and reliability/commitment to the job",
-  },
+export type BeatContext = {
+  durationMin: number;
+  experience: string;
+  /** Interview type value (e.g. "banking") for role-specific domain topics. */
+  type: string;
+  roleLabel: string;
 };
 
-/**
- * Diversified rotation for questions AFTER the opening. Consecutive entries target
- * DIFFERENT areas so the interview never becomes a chain of the same topic.
- * Functional recurs (it is the core) but never back-to-back. The list cycles for
- * longer interviews.
- */
-const BEAT_ROTATION: string[] = [
-  "functional",
-  "collaboration",
-  "it_skills",
-  "functional",
-  "adaptability",
-  "integrity",
-  "functional",
-  "education",
-  "motivation",
-];
+/** The ordered competency keys to ask dedicated questions on, for a given
+ *  interview length. Domain recurs (core) but never back-to-back. */
+function questionRotation(durationMin: number): CompetencyKey[] {
+  const covered = coveredCompetencies(durationMin)
+    .map((c) => c.key)
+    .filter((k) => k !== "communication");
+  const others = covered.filter((k) => k !== "domainKnowledge");
+  if (others.length === 0) return ["domainKnowledge"];
+  const rotation: CompetencyKey[] = [];
+  for (const key of others) {
+    rotation.push("domainKnowledge");
+    rotation.push(key);
+  }
+  return rotation;
+}
 
 /**
- * The competency area for a given beat index. Beat 0 is always the opening
- * introduction/education; later beats cycle through the diversified rotation.
+ * The competency area a given beat targets. Beat 0 is always the opening
+ * introduction/background; later beats cycle through the length-aware rotation.
+ * The returned `focus` is fully composed (role-specific for domain,
+ * experience-specific for the depth probe) so callers can use it directly.
  */
-export function areaForBeat(index: number): InterviewArea {
-  if (index <= 0) return INTERVIEW_AREAS.background!;
-  const key = BEAT_ROTATION[(index - 1) % BEAT_ROTATION.length]!;
-  return INTERVIEW_AREAS[key]!;
+export function areaForBeat(index: number, ctx: BeatContext): InterviewArea {
+  if (index <= 0) {
+    return {
+      key: "background",
+      label: "Introduction & Background",
+      focus: `a brief self-introduction and their background relevant to the ${ctx.roleLabel} role — key qualifications or experience, main subjects or skills, and any notable achievements`,
+    };
+  }
+  const rotation = questionRotation(ctx.durationMin);
+  const key = rotation[(index - 1) % rotation.length]!;
+  const def = COMPETENCIES.find((c) => c.key === key)!;
+  let focus = def.focus;
+  if (key === "domainKnowledge") {
+    focus = `${def.focus} — ${functionalKnowledgeFor(ctx.type, ctx.roleLabel)}`;
+  } else if (key === "depthProbe") {
+    focus = `${def.focus}. Specifically probe ${depthProbeFocus(ctx.experience)}`;
+  }
+  return { key, label: def.label, focus };
 }
