@@ -16,7 +16,7 @@ import { useCredits, chargeInterview, tickInterview, endInterview, interviewCred
 import { useGuestTrial, guestInterviewsLeft, consumeGuestInterview } from "@/lib/guest-trial";
 import { AnimatedAvatar } from "@/components/avatar";
 import { INTERVIEW_COACHES, recommendedCoachFor } from "@/lib/tutors";
-import { COMPETENCIES, coveredCompetencies, weightedScoreFor, areaForBeat, functionalKnowledgeFor, calibrationFor, depthProbeFocus, type CompetencyKey } from "@/lib/interview-format";
+import { COMPETENCIES, coveredCompetencies, weightedScoreFor, areaForBeat, functionalKnowledgeFor, calibrationFor, type CompetencyKey } from "@/lib/interview-format";
 import { useToast } from "@/hooks/use-toast";
 import { PageMeta } from "@/components/page-meta";
 import { interviewVerdict as verdictFor, recommendationForWeighted, ratingLabel, RECOMMENDATION_STYLES, type RecommendationLabel } from "@/lib/interview-verdict";
@@ -853,7 +853,7 @@ STYLE — important:
 - Warm, encouraging and human — you genuinely want ${firstName} to do well and feel at ease. You MAY add a light, tasteful touch of humour now and then to relax them, but never sarcasm, never at their expense, and keep it to a brief aside.
 - Acknowledge their answer with ONE short, genuine phrase (max about 6 words). Do NOT summarise their whole answer and do NOT pile on flattery.
 - Ask EXACTLY ONE question, and NEVER repeat a question already asked in this interview.
-- The interview must feel DIVERSIFIED across the scorecard competencies (domain/role knowledge, problem-solving, ownership & culture fit, adaptability, and a depth probe) — not a chain of similar questions.
+- The interview must feel DIVERSIFIED across the whole scorecard — functional/role knowledge, problem-solving, adaptability, ownership & work ethic, collaboration and IT skills, plus their background — not a chain of similar questions. Do NOT keep asking only about functional/domain knowledge; keep moving across the different areas.
 - Use ${firstName}'s name sparingly.
 - Plain spoken words ONLY: no markdown, no asterisks, no *actions*, no stage directions, no quotes around your reply.
 - The Next line must be the question ONLY — no greeting, no preamble, no name.
@@ -1110,15 +1110,13 @@ Next: <the interview question only>`,
         .map((c) => {
           const focus =
             c.key === "domainKnowledge"
-              ? functionalKnowledgeFor(typeMeta.value, typeMeta.label)
-              : c.key === "depthProbe"
-                ? depthProbeFocus(experience)
-                : c.focus;
+              ? `${c.focus} — ${functionalKnowledgeFor(typeMeta.value, typeMeta.label)}`
+              : c.focus;
           return `- "${c.key}" — ${c.label} (weight ${Math.round(c.weight * 100)}%): ${focus}`;
         })
         .join("\n");
       const compJsonKeys = covered
-        .map((c) => `    "${c.key}": {"rating": 1-5, "comment": "1-2 sentences citing specific evidence from the transcript"}`)
+        .map((c) => `    "${c.key}": {"rating": 1-5, "comment": "one concise sentence citing specific evidence from the transcript"}`)
         .join(",\n");
 
       const reportText = await stream(
@@ -1134,7 +1132,7 @@ CALIBRATION — read carefully: ${calibrationFor(experience)}
 Rate each competency on this 1-5 scale, calibrated to the experience level above:
 1 = Considerable improvement, 2 = Moderate improvement, 3 = Meets expectations, 4 = Exceeds expectations, 5 = Outstanding.
 
-Score ONLY these competencies (a ${duration}-minute interview covers exactly these):
+Score ALL of these competencies for this candidate — every parameter must be rated:
 ${compLines}
 
 Full interview transcript:
@@ -1152,7 +1150,7 @@ ${compJsonKeys}
   "verdictReason": "1-2 honest sentences summarising your hiring recommendation for THIS role at THIS experience level and why"
 }
 
-Rate every listed competency from evidence in the transcript, calibrated to the experience level. Communication & Clarity is judged from HOW the candidate expressed every answer (there are no dedicated communication questions). If a competency was only lightly tested, infer conservatively and say so in its comment. Be fair, specific and honest — never inflate a candidate who lacks the core domain knowledge for the role. Use Indian hiring context.`,
+Rate EVERY competency above from evidence in the transcript, calibrated to the experience level — do not leave any unrated. Communication Skills and Personality & Disposition are judged from HOW the candidate expressed every answer (tone, energy, clarity), not from dedicated questions; you cannot see the candidate, so judge personality from vocal energy and content only and never invent visual details like body language, dress or eye contact. Educational Background comes from their introduction. If a competency was only lightly tested in this interview, infer conservatively from the overall conversation and say so in its comment rather than guessing high. Be fair, specific and honest — never inflate a candidate who lacks the core functional knowledge for the role. Use Indian hiring context.`,
         `You are a senior hiring manager and interview panellist evaluating an Indian candidate against a weighted scorecard. Give human, realistic, honest feedback and rate strictly on the 1-5 scale.`,
         undefined,
         { maxTokens: 2000 }

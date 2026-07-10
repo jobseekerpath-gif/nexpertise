@@ -1,105 +1,146 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Structured interview format — Assessment Scorecard
 //
-// Mock interviews are conducted and scored against a weighted six-competency
-// scorecard modelled on a real HR interview assessment form:
+// Mock interviews are conducted and scored against a weighted, nine-parameter
+// hiring scorecard modelled on a real BFSI (Banking / Financial Services /
+// Insurance) interview assessment form. EVERY parameter is assessed in EVERY
+// interview — the interview covers the whole scorecard, not just one area:
 //
-//   1. Communication & Clarity        15%   (min 10 min) — judged from delivery
-//   2. Domain / Role Knowledge        30%   (min 10 min) — the core, role-specific
-//   3. Problem-Solving & Approach     20%   (min 15 min)
-//   4. Ownership & Culture Fit        15%   (min 15 min)
-//   5. Adaptability & Learning Agility 10%  (min 25 min)
-//   6. Depth Probe                    10%   (min 25 min) — leadership / initiative
+//   1. Functional Knowledge              25%  — the role-specific core
+//   2. Communication Skills              15%  — judged from delivery
+//   3. Problem-Solving & Analytical      12%
+//   4. Adaptability & Learning Agility   10%
+//   5. Ownership & Work Ethic            10%
+//   6. Collaboration & Cultural Fit      10%
+//   7. Personality & Disposition          8%  — judged from delivery/energy
+//   8. Educational Background             5%  — covered by the opening question
+//   9. IT Skills                          5%
 //
-// Interview length gates which competencies are covered: a 10-min interview
-// covers 1–2, a 15-min covers 1–4, a 25-min covers all six. Each rating is on a
-// 1–5 scale calibrated to the candidate's experience level.
+// (weights sum to 1.0). Each parameter is rated 1–5, calibrated to the
+// candidate's experience level. Interview LENGTH no longer removes parameters
+// from the scorecard — a longer interview simply asks MORE questions (more
+// breadth and depth); every parameter is still scored, inferring conservatively
+// for any only lightly probed in a short interview.
 //
-// Communication & Clarity is scored from HOW the candidate expresses every
-// answer, so it has no dedicated question stage — the live question rotation
-// targets the other covered competencies, with Domain as the recurring core.
+// Communication and Personality & Disposition are scored from HOW the candidate
+// expresses every answer (tone, energy, clarity), so they have no dedicated
+// question stage. Educational Background is covered by the opening question. The
+// live question rotation targets the remaining parameters, breadth-first, with
+// Functional Knowledge as the recurring — but never dominating — core.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type CompetencyKey =
-  | "communication"
   | "domainKnowledge"
+  | "communication"
   | "problemSolving"
-  | "ownership"
   | "adaptability"
-  | "depthProbe";
+  | "ownership"
+  | "collaboration"
+  | "personality"
+  | "education"
+  | "itSkills";
 
 export type CompetencyDef = {
   key: CompetencyKey;
   label: string;
   /** Scorecard weight (0–1). */
   weight: number;
-  /** Minimum interview length (minutes) that unlocks this competency. */
+  /** Minimum interview length (minutes) that unlocks this competency. 0 = always
+   *  assessed (every parameter is scored in every interview). */
   minMinutes: number;
   /** What the interviewer probes / the evaluator scores for this competency. */
   focus: string;
 };
 
-/** The weighted scorecard, in display order. Weights sum to 1.0 across all six. */
+/** The weighted scorecard, in display order. Weights sum to 1.0 across all nine.
+ *  Every parameter is assessed in every interview (minMinutes 0). */
 export const COMPETENCIES: CompetencyDef[] = [
   {
-    key: "communication",
-    label: "Communication & Clarity",
-    weight: 0.15,
-    minMinutes: 10,
+    key: "domainKnowledge",
+    label: "Functional Knowledge",
+    weight: 0.25,
+    minMinutes: 0,
     focus:
-      "how clearly and confidently the candidate articulates ideas, structures answers, and listens to the question",
+      "role-specific functional and domain knowledge — the core of the interview (practical, product-level and concept questions a real panel would ask)",
   },
   {
-    key: "domainKnowledge",
-    label: "Domain / Role Knowledge",
-    weight: 0.3,
-    minMinutes: 10,
-    focus: "role-specific functional and domain knowledge (the core of the interview)",
+    key: "communication",
+    label: "Communication Skills",
+    weight: 0.15,
+    minMinutes: 0,
+    focus:
+      "communicates clearly and confidently, expresses ideas logically and in sequence, listens attentively and comprehends the question, and is competent in basic English",
   },
   {
     key: "problemSolving",
-    label: "Problem-Solving & Approach",
-    weight: 0.2,
-    minMinutes: 15,
+    label: "Problem-Solving & Analytical Thinking",
+    weight: 0.12,
+    minMinutes: 0,
     focus:
-      "structured thinking and sound judgement — how they break a problem down, weigh trade-offs, and reach a practical solution",
-  },
-  {
-    key: "ownership",
-    label: "Ownership & Culture Fit",
-    weight: 0.15,
-    minMinutes: 15,
-    focus:
-      "accountability, attitude and energy — owning outcomes, learning from mistakes, and fit with a collaborative team",
+      "breaks a problem down logically, asks clarifying questions, weighs options, and arrives at sound, practical conclusions",
   },
   {
     key: "adaptability",
     label: "Adaptability & Learning Agility",
     weight: 0.1,
-    minMinutes: 25,
+    minMinutes: 0,
     focus:
-      "comfort with change, ambiguity and feedback, and how quickly they pick up new things",
+      "comfort with ambiguity and change, openness to working at different locations, industries and roles, willingness to pick up new tools, and how they take feedback",
   },
   {
-    key: "depthProbe",
-    label: "Depth Probe",
+    key: "ownership",
+    label: "Ownership & Work Ethic",
     weight: 0.1,
-    minMinutes: 25,
+    minMinutes: 0,
     focus:
-      "a deeper probe calibrated to experience — leadership and influence for experienced candidates, initiative and drive for freshers",
+      "takes accountability and follows through, shows integrity between words and actions, and demonstrates conviction and commitment toward accomplishing the task",
+  },
+  {
+    key: "collaboration",
+    label: "Collaboration & Cultural Fit",
+    weight: 0.1,
+    minMinutes: 0,
+    focus:
+      "works as a team player — coordinates, cooperates and collaborates with others — and aligns with organisational values and a collaborative culture",
+  },
+  {
+    key: "personality",
+    label: "Personality & Disposition",
+    weight: 0.08,
+    minMinutes: 0,
+    focus:
+      "overall disposition conveyed through the conversation — energy and enthusiasm, honesty and integrity, professional conduct, and self-awareness (assessed from vocal energy, tone and content; visual cues such as body language, eye contact and appearance are not observable in a voice interview)",
+  },
+  {
+    key: "education",
+    label: "Educational Background",
+    weight: 0.05,
+    minMinutes: 0,
+    focus:
+      "academic background and achievements, including relevant curricular and extra-curricular involvement",
+  },
+  {
+    key: "itSkills",
+    label: "IT Skills",
+    weight: 0.05,
+    minMinutes: 0,
+    focus:
+      "comfort with everyday technology — office and email applications, smartphones and handheld devices, and awareness of basic data-security practices",
   },
 ];
 
-/** The competencies a given interview length covers (form: 10-min → 1–2,
- *  15-min → 1–4, 25-min → all six). */
+/** The competencies a given interview length covers. Every parameter is assessed
+ *  in every interview (minMinutes is 0 across the board), so this returns the
+ *  full scorecard; the param is kept for call-site stability. */
 export function coveredCompetencies(durationMin: number): CompetencyDef[] {
   return COMPETENCIES.filter((c) => durationMin >= c.minMinutes);
 }
 
 /**
  * Total Weighted Score (1–5) over ONLY the competencies covered by this
- * interview length. Weights are renormalised across the covered competencies so
- * the result always stays on the 1–5 scale. Returns 0 if nothing was scored.
+ * interview length. Weights are renormalised across the competencies that
+ * actually received a rating so the result always stays on the 1–5 scale.
+ * Returns 0 if nothing was scored.
  */
 export function weightedScoreFor(
   ratings: Partial<Record<CompetencyKey, number>>,
@@ -136,18 +177,6 @@ const CALIBRATION: Record<string, string> = {
 /** Calibration guidance for the given experience level (falls back to Fresher). */
 export function calibrationFor(experience: string): string {
   return CALIBRATION[experience] ?? CALIBRATION["Fresher"]!;
-}
-
-/** What the Depth Probe should target for a given experience level
- *  (leadership for senior candidates, initiative for freshers). */
-export function depthProbeFocus(experience: string): string {
-  if (experience === "5+ years")
-    return "leadership, influence and strategic thinking — leading teams or initiatives, mentoring others, and driving outcomes beyond their own tasks";
-  if (experience === "3-5 years")
-    return "ownership and leadership potential — taking initiative beyond the brief, mentoring juniors, and making judgement calls under pressure";
-  if (experience === "1-2 years")
-    return "initiative and growing ownership — going beyond assigned work, self-direction, and taking responsibility for results";
-  return "initiative, self-drive and learning potential — self-started projects, extra-curricular initiative, and how they push themselves to grow";
 }
 
 /**
@@ -193,12 +222,15 @@ export function functionalKnowledgeFor(type: string, roleLabel: string): string 
 // ─────────────────────────────────────────────────────────────────────────────
 // Live question rotation
 //
-// Dedicated questions target the covered competencies EXCEPT Communication
-// (which is judged from delivery). Domain/Role Knowledge is the recurring core,
-// interleaved with the other covered competencies so consecutive questions
-// always differ and Domain never repeats back-to-back. The rotation scales with
-// interview length: a 10-min interview asks Domain only; longer interviews add
-// Problem-Solving, Ownership, Adaptability and the Depth Probe.
+// Dedicated questions target the assessable parameters EXCEPT Communication and
+// Personality (both judged from delivery) and Educational Background (covered by
+// the opening question). Functional Knowledge is the recurring core, but it is
+// deliberately interleaved with every other parameter so it never dominates and
+// no two consecutive questions target the same area. The interview keeps cycling
+// through this rotation until time runs out, so a longer interview naturally
+// reaches more areas and probes them more deeply — while even a short interview
+// spans functional knowledge, problem-solving, ownership and adaptability rather
+// than drilling one topic.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type InterviewArea = {
@@ -216,44 +248,52 @@ export type BeatContext = {
   roleLabel: string;
 };
 
-/** The ordered competency keys to ask dedicated questions on, for a given
- *  interview length. Domain recurs (core) but never back-to-back. */
-function questionRotation(durationMin: number): CompetencyKey[] {
-  const covered = coveredCompetencies(durationMin)
-    .map((c) => c.key)
-    .filter((k) => k !== "communication");
-  const others = covered.filter((k) => k !== "domainKnowledge");
-  if (others.length === 0) return ["domainKnowledge"];
-  const rotation: CompetencyKey[] = [];
-  for (const key of others) {
-    rotation.push("domainKnowledge");
+/** Parameters that get a DEDICATED question, in priority order. Communication,
+ *  Personality (delivery-judged) and Educational Background (the opening) are
+ *  intentionally absent — they are assessed without a dedicated slot. */
+const DEDICATED_AREAS: CompetencyKey[] = [
+  "problemSolving",
+  "ownership",
+  "adaptability",
+  "collaboration",
+  "itSkills",
+];
+
+/** Breadth-first question rotation: the functional core recurs (never
+ *  back-to-back) but does NOT dominate — the functional core is revisited only
+ *  after every couple of other areas, so every assessable parameter gets its own
+ *  question and the interview never becomes a single-topic drill. */
+function questionRotation(): CompetencyKey[] {
+  const rotation: CompetencyKey[] = ["domainKnowledge"];
+  DEDICATED_AREAS.forEach((key, i) => {
     rotation.push(key);
-  }
+    // Revisit the functional core after every second other area (but not right
+    // at the very end), keeping functional roughly one question in three.
+    if (i % 2 === 1 && i < DEDICATED_AREAS.length - 1) rotation.push("domainKnowledge");
+  });
   return rotation;
 }
 
 /**
  * The competency area a given beat targets. Beat 0 is always the opening
- * introduction/background; later beats cycle through the length-aware rotation.
- * The returned `focus` is fully composed (role-specific for domain,
- * experience-specific for the depth probe) so callers can use it directly.
+ * introduction + educational background; later beats cycle through the
+ * breadth-first rotation. The returned `focus` is fully composed (role-specific
+ * for functional knowledge) so callers can use it directly.
  */
 export function areaForBeat(index: number, ctx: BeatContext): InterviewArea {
   if (index <= 0) {
     return {
-      key: "background",
-      label: "Introduction & Background",
-      focus: `a brief self-introduction and their background relevant to the ${ctx.roleLabel} role — key qualifications or experience, main subjects or skills, and any notable achievements`,
+      key: "education",
+      label: "Introduction & Educational Background",
+      focus: `a brief self-introduction and their educational background relevant to the ${ctx.roleLabel} role — qualifications, key subjects or skills, and notable curricular or extra-curricular achievements`,
     };
   }
-  const rotation = questionRotation(ctx.durationMin);
+  const rotation = questionRotation();
   const key = rotation[(index - 1) % rotation.length]!;
   const def = COMPETENCIES.find((c) => c.key === key)!;
   let focus = def.focus;
   if (key === "domainKnowledge") {
     focus = `${def.focus} — ${functionalKnowledgeFor(ctx.type, ctx.roleLabel)}`;
-  } else if (key === "depthProbe") {
-    focus = `${def.focus}. Specifically probe ${depthProbeFocus(ctx.experience)}`;
   }
   return { key, label: def.label, focus };
 }
