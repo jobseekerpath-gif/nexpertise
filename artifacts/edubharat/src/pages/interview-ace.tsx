@@ -617,8 +617,9 @@ Rules:
 - Keep it to at most 3 sentences. Warm and professional — you want ${firstName} to feel relaxed. A little warmth is good; NO cheesy greetings like "Hey, good to see you", no small talk, no "let's dive in".
 - Plain spoken words ONLY. No asterisks, no *actions*, no markdown, no quotes around your reply.
 - Do NOT list rules, do NOT explain the interview process.
+- LANGUAGE: Use simple, clear, everyday English — short sentences and common words. Many candidates are from average English-medium colleges, so avoid difficult vocabulary, idioms and long, complex sentences (${firstName}'s stated English level: ${profile.englishLevel || "Beginner"}).
 - Ask exactly ONE question.`,
-      `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct professional but warm, encouraging interviews that cover a broad range of areas. Speak in clear, natural spoken English. Never use markdown, action words, or effusive flattery.`,
+      `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct professional but warm, encouraging interviews that cover a broad range of areas. Speak in clear, simple, everyday spoken English that an average Indian college graduate can easily follow. Never use markdown, action words, or effusive flattery.`,
       undefined,
       { maxTokens: 120 }
     );
@@ -854,6 +855,7 @@ STYLE — important:
 - Acknowledge their answer with ONE short, genuine phrase (max about 6 words). Do NOT summarise their whole answer and do NOT pile on flattery.
 - Ask EXACTLY ONE question, and NEVER repeat a question already asked in this interview.
 - The interview must feel DIVERSIFIED across the whole scorecard — functional/role knowledge, problem-solving, adaptability, ownership & work ethic, collaboration and IT skills, plus their background — not a chain of similar questions. Do NOT keep asking only about functional/domain knowledge; keep moving across the different areas.
+- LANGUAGE LEVEL: By default ask in SIMPLE, clear, everyday English — short sentences, common words — because many candidates are from average English-medium colleges. Judge ${firstName}'s own English from their answers so far: if they are clearly fluent and comfortable, you may use richer vocabulary and slightly more complex questions to match them; if they struggle, make your wording even simpler. Never make a question harder to follow than the candidate can handle.
 - Use ${firstName}'s name sparingly.
 - Plain spoken words ONLY: no markdown, no asterisks, no *actions*, no stage directions, no quotes around your reply.
 - The Next line must be the question ONLY — no greeting, no preamble, no name.
@@ -861,7 +863,7 @@ STYLE — important:
 Output format — exactly two lines, nothing else:
 Ack: <short, warm acknowledgement, max ~6 words>
 Next: <the interview question only>`,
-          `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct a professional but warm, encouraging interview that covers a BROAD range of areas and never fixates on one topic. Light, tasteful humour to relax the candidate is welcome. Speak in clear, natural spoken English. Never use markdown, action words, or effusive flattery.`,
+          `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct a professional but warm, encouraging interview that covers a BROAD range of areas and never fixates on one topic. Light, tasteful humour to relax the candidate is welcome. Speak in clear, simple, everyday English by default, and use more advanced English only for candidates who clearly speak strongly. Never use markdown, action words, or effusive flattery.`,
           undefined,
           { maxTokens: 220 }
         ),
@@ -1044,6 +1046,18 @@ Next: <the interview question only>`,
     // coachSpeaking guard: don't start mic while the AI coach is speaking — prevents
     // the mic from activating between when the stream ends and when TTS actually starts.
     if (phase !== "interview" || !autoListenEnabled || !speech.isSupported || !currentQ || isStreaming || synth.isSpeaking || isRecording || coachSpeaking) return;
+    // Silence window before auto-submit — scales with how much thinking the
+    // question needs. Reflective / open-ended / scenario questions ("explain…",
+    // "tell me about a time…", "how would you…") deserve a longer, thought-out
+    // answer, so give the candidate more room to think mid-answer and build a full
+    // reply without being cut off. Short factual questions use a shorter window so
+    // the interview still flows. (Initial thinking before the first word is already
+    // unlimited — the timer below is only armed once the candidate starts talking.)
+    const qText = currentQ.question.toLowerCase();
+    const needsLongThink =
+      qText.length > 140 ||
+      /\b(explain|describe|walk me through|walk us through|tell me about a time|give (me )?an example|for example|how would you|how do you|what would you do|why do|why is|scenario|situation|compare|difference between|your approach|how do you handle|strategy|analy[sz]e|the process|what steps|which steps)\b/.test(qText);
+    const silenceMs = needsLongThink ? 9000 : 6000;
     setIsRecording(true);
     speech.startContinuous(text => {
       const chunk = text.trim();
@@ -1054,9 +1068,10 @@ Next: <the interview question only>`,
         return next;
       });
       clearAutoSubmitTimer();
-      // 5000ms silence → auto-submit: gives the candidate a full 4-5 seconds to
-      // think and construct longer, continuous answers with natural mid-sentence
-      // pauses, instead of being cut off after a brief silence.
+      // silenceMs of quiet → auto-submit (6s normal, 9s for thinking-heavy
+      // questions). Long enough that a candidate constructing a long answer with
+      // natural mid-sentence pauses is not cut off mid-thought. The Submit button
+      // stays enabled the whole time as a manual override to go faster.
       // Uses submitCurrentAnswerRef (not submitCurrentAnswer directly) so the
       // closure always calls the latest version without adding submitCurrentAnswer
       // to deps. Without this, elapsedSeconds (a dep of submitCurrentAnswer) gives
@@ -1065,7 +1080,7 @@ Next: <the interview question only>`,
       autoSubmitRef.current = setTimeout(() => {
         const latest = answerRef.current.trim();
         if (latest) void submitCurrentAnswerRef.current(latest);
-      }, 5000);
+      }, silenceMs);
     });
     // No clearAutoSubmitTimer in cleanup: timer must survive normal dep changes.
     // Unmount cleanup is handled by the dedicated effect above. Clearing here
