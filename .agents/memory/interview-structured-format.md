@@ -1,6 +1,6 @@
 ---
 name: Interview Ace — weighted scorecard coverage, 2-attempt rule & warm tone
-description: Mock interviews are conducted and scored against a weighted NINE-competency BFSI assessment scorecard (every parameter assessed every interview — no length-gating), with breadth-first question coverage, a warm-professional register, a 2-attempt rule, adaptive candidate think time (longer for tricky questions), and simple-English-by-default question wording that adapts up to the candidate's demonstrated English.
+description: Mock interviews are conducted and scored against a weighted NINE-competency BFSI assessment scorecard (every parameter assessed every interview — no length-gating), with breadth-first question coverage, a warm-professional register, a 2-attempt rule, a flat 5s max mid-answer silence auto-submit, an interviewer reply within 4s, and simple-English-by-default question wording that adapts up to the candidate's demonstrated English.
 ---
 
 # Weighted nine-competency BFSI scorecard (NO length-gating) — the framework
@@ -22,29 +22,29 @@ The interviewer is warm, encouraging and human, and MAY use brief, tasteful humo
 **Why:** the user asked to add light humour so candidates relax. This SOFTENS the earlier strict "formal, businesslike, no small talk, ≤4-word neutral ack" register — but the original bans still hold on exactly what the user hated: cheesy greetings ("Hey, good to see you here"), small-talk openers ("let's dive in"), and gushing praise. Warmth/humour ≠ chatty greeting.
 **How to apply:** keep bans on markdown, *action* words, cheesy greetings and flattery; allow warmth + a light aside. Applies to the opening prompt, the per-turn prompt, and the coach system prompts.
 
-# Candidate think time — ADAPTIVE to question difficulty (not a flat timeout)
-Two distinct windows: (1) INITIAL think-before-first-word is already UNLIMITED — the auto-submit timer is armed only inside the `startContinuous` phrase callback, so a silent candidate is never auto-submitted; (2) MID-ANSWER silence auto-submit scales with the question: 9000 ms for reflective/open-ended/scenario questions ("explain…", "tell me about a time…", "how would you…", "compare…", or question text >140 chars), else 6000 ms. `silenceMs` is computed in the auto-listen effect from `currentQ.question` (currentQ is already an effect dep, so it recomputes per question); the setTimeout captures it. Submit button stays enabled as a manual override.
-**Why:** a flat ~5s cut candidates off mid-thought on tricky questions that need reasoning + a long answer; the user asked for more time to think/construct long answers, more for tricky ones.
-**How to apply:** tune via the two constants and the difficulty regex/length heuristic. Do NOT drop below the browser's own continuous=false silence auto-end (~5–8s) intuition, but the app-level timer can safely span recognizer session boundaries (the hook restarts recognition, so a 6–9s app timeout is fine).
+# Candidate think time — flat 5 s max mid-answer silence (NOT adaptive)
+Two distinct windows: (1) INITIAL think-before-first-word is UNLIMITED — the auto-submit timer is armed only inside the `startContinuous` phrase callback, so a silent candidate is never auto-submitted; (2) MID-ANSWER silence auto-submit is a flat `silenceMs = 5000` in the auto-listen effect: once the candidate starts talking, 5 s of continuous quiet ends the turn and submits. Submit button stays enabled as a manual override to submit sooner.
+**Why:** the user explicitly set the max quiet-before-submit to 5 s. This REVERSED an earlier adaptive attempt (6 s normal / 9 s for reflective questions via a difficulty regex) — the user preferred one simple 5 s cap. Do not reintroduce per-question adaptivity unless they ask.
+**How to apply:** change the single `silenceMs` constant; there is no longer a `needsLongThink`/difficulty heuristic. Keep the timer armed only in the phrase callback so initial thinking stays unlimited.
 
 # Question English level — simplest by default, adapt UP to the candidate
 Interviewer asks in simple, clear, everyday English by default (candidates are mostly from average English-medium colleges); it may use richer vocabulary / more complex questions ONLY when the candidate demonstrably speaks strong, fluent English, and simplifies further if they struggle. Instruction lives in FOUR places: opening prompt rules (+ `profile.englishLevel` as the initial hint), opening system prompt, per-turn STYLE bullet ("judge their English from answers so far"), and per-turn system prompt.
 **Why:** the user said questions were too hard for average English speakers and wanted the level to rise adaptively with the candidate's shown ability.
 **How to apply:** the AI self-assesses English from the transcript (no client-side proficiency metric); keep the instruction in all four prompt sites or the opening/first questions drift back to hard English.
 
-# Interviewer (coach) response delay — strict 3–5 s with deadline + fallback
-Hard rule: interviewer MUST start speaking within 5 s of the candidate finishing. Pause must be at least 3 s. Effective range 3–5 s varies by answer length.
+# Interviewer (coach) response delay — strict within 4 s with deadline + fallback
+Hard rule: interviewer MUST start speaking within 4 s of the candidate finishing. Pause must be at least 3 s. Effective range 3–4 s varies by answer length.
 
 Implementation (all in `submitCurrentAnswer`, all declared BEFORE the stream call):
-1. `naturalPauseMs` IIFE: short <15 words → 3.0–3.8 s; medium 15–50 → 3.5–4.5 s; long >50 → 4.0–5.0 s; hesitation +0–400 ms. Clamped [3000, 5000].
+1. `naturalPauseMs` IIFE: short <15 words → 3.0–3.4 s; medium 15–50 → 3.2–3.7 s; long >50 → 3.4–3.9 s; hesitation +0–300 ms. Clamped [3000, 4000].
 2. `FALLBACK_QUESTIONS` array declared here (used by timeout AND parsing fallback paths).
 3. `minWaitPromise` (3000 ms, `Promise<void>`) kicked off IN PARALLEL with `stream()`.
-4. `streamDeadlinePromise` (4500 ms, `Promise<string>`) — `Promise.race([stream(...), deadline])`.
+4. `streamDeadlinePromise` (3800 ms, `Promise<string>`) — `Promise.race([stream(...), deadline])`; must stay < the 4000 ms cap so an injected fallback still speaks in time.
 5. On timeout (`streamTimedOut=true`) OR empty/error: `resetStream()` + inject `"Ack: I see.\nNext: <fallback>"` so interview always continues.
-6. After stream: `await minWaitPromise` (3 s floor), then guard `endingRef/phaseRef`, then wait `min(wallRemaining, targetRemaining)` using absolute wall-clock budget (5000 - elapsed) to prevent drift.
+6. After stream: `await minWaitPromise` (3 s floor), then guard `endingRef/phaseRef`, then wait `min(wallRemaining, targetRemaining)` using absolute wall-clock budget (4000 - elapsed) to prevent drift.
 7. Guard `endingRef/phaseRef` after EACH await (minWait and remainder).
 
-**Why:** sequential "stream then wait" broke the 3 s minimum on fast streams, exceeded 5 s on slow streams, and dropped turns silently on errors. Parallel timer + hard deadline + fallback injection fixes all three. User demanded "strictly within 5 seconds."
+**Why:** sequential "stream then wait" broke the 3 s minimum on fast streams, exceeded the cap on slow streams, and dropped turns silently on errors. Parallel timer + hard deadline + fallback injection fixes all three. The cap was tightened from 5 s to 4 s at the user's request ("interviewer should reply in 4 seconds"); keep the three deadline/clamp/wall-clock numbers in lockstep (deadline < cap; naturalPauseMs & wallRemaining share the same cap).
 **How to apply:** naturalPauseMs, FALLBACK_QUESTIONS, minWaitPromise, streamDeadlinePromise must ALL be declared BEFORE the try/stream block. Never move them after — the parallel guarantee breaks.
 
 # Scope

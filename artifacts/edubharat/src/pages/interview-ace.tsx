@@ -784,34 +784,34 @@ Rules:
 
     let response: string;
     // ── Thinking-pause guarantee ───────────────────────────────────────────────
-    // Target: interviewer ALWAYS starts speaking 3–5 s after the candidate stops.
-    // Hard cap: NEVER exceed 5 s (within-5-seconds rule).
+    // Target: interviewer ALWAYS starts speaking within 4 s of the candidate stopping.
+    // Hard cap: NEVER exceed 4 s (reply-within-4-seconds rule).
     //
     // Strategy: start a 3 s minimum-wait timer IN PARALLEL with the AI stream
     // call so streaming latency counts toward the pause window.  After the stream
-    // resolves we wait only the *remaining* time up to naturalPauseMs (≤ 5 s).
+    // resolves we wait only the *remaining* time up to naturalPauseMs (≤ 4 s).
     // This guarantees:
-    //   • fast stream (< 3 s)  → always waits at least 3 s total
-    //   • medium stream (3–5 s) → fires within the natural window
-    //   • slow stream (> 5 s)  → fires immediately (network-constrained, best effort)
+    //   • fast stream (< 3 s)  → always waits at least the 3 s floor
+    //   • medium stream (3–4 s) → fires within the natural window
+    //   • slow stream (> 4 s)  → fires immediately (network-constrained, best effort)
     const thinkStart = Date.now();
 
     // Compute target pause length based on answer length (determined before this call).
-    // Range 3 000–5 000 ms; short answers get quicker replies, long ones more thinking time.
+    // Range 3 000–4 000 ms; short answers get quicker replies, long ones a touch more.
     const naturalPauseMs = (() => {
       let base: number;
       if (wordCount < 15) {
-        base = 3000 + Math.random() * 800;   // 3.0–3.8 s
+        base = 3000 + Math.random() * 400;   // 3.0–3.4 s
       } else if (wordCount < 50) {
-        base = 3500 + Math.random() * 1000;  // 3.5–4.5 s
+        base = 3200 + Math.random() * 500;   // 3.2–3.7 s
       } else {
-        base = 4000 + Math.random() * 1000;  // 4.0–5.0 s
+        base = 3400 + Math.random() * 500;   // 3.4–3.9 s
       }
       // Hesitation markers → slight extra hesitation (stays within cap)
       if (/\b(um+|uh+|hmm+|err+|like,? you know|i mean|so,? basically|basically)\b/i.test(recordedAnswer)) {
-        base += Math.random() * 400;
+        base += Math.random() * 300;
       }
-      return Math.min(5000, Math.max(3000, Math.round(base)));
+      return Math.min(4000, Math.max(3000, Math.round(base)));
     })();
 
     // Neutral fallback questions used when the AI stream times out or errors.
@@ -826,9 +826,9 @@ Rules:
     // Kick off the minimum 3 s floor immediately — runs while streaming proceeds.
     const minWaitPromise = new Promise<void>(resolve => setTimeout(resolve, 3000));
 
-    // Hard deadline: if the AI hasn't replied in 4 500 ms, inject a fallback so
-    // the interviewer ALWAYS starts speaking within 5 s of the candidate stopping.
-    const STREAM_DEADLINE_MS = 4500;
+    // Hard deadline: if the AI hasn't replied in 3 800 ms, inject a fallback so
+    // the interviewer ALWAYS starts speaking within 4 s of the candidate stopping.
+    const STREAM_DEADLINE_MS = 3800;
     let streamTimedOut = false;
     const streamDeadlinePromise = new Promise<string>(resolve =>
       setTimeout(() => { streamTimedOut = true; resolve(""); }, STREAM_DEADLINE_MS)
@@ -875,8 +875,8 @@ Next: <the interview question only>`,
       response = `Ack: I see.\nNext: ${fallback}`;
     }
 
-    // If the 4.5 s deadline fired OR stream returned empty, cancel the in-flight
-    // stream and inject a fallback so the 5 s window is respected.
+    // If the 3.8 s deadline fired OR stream returned empty, cancel the in-flight
+    // stream and inject a fallback so the 4 s window is respected.
     if (streamTimedOut || !response.trim()) {
       resetStream();
       const fallback = FALLBACK_QUESTIONS[Math.floor(Math.random() * FALLBACK_QUESTIONS.length)]!;
@@ -930,14 +930,14 @@ Next: <the interview question only>`,
       acknowledgment = "Understood.";
     }
 
-    // ── Enforce 3–5 s thinking window ─────────────────────────────────────────
+    // ── Enforce 3–4 s thinking window ─────────────────────────────────────────
     // Step 1: ensure the 3 s floor has elapsed (timer started BEFORE stream call).
     await minWaitPromise;
     // Guard: interview may have ended during stream/minWait — don't continue.
     if (endingRef.current || phaseRef.current !== "interview") { setCoachThinking(false); return; }
     // Step 2: wait any remaining time up to naturalPauseMs, but hard-clamp against
-    // the absolute wall-clock budget (5 000 ms from thinkStart) to prevent drift.
-    const wallRemaining = 5000 - (Date.now() - thinkStart);
+    // the absolute wall-clock budget (4 000 ms from thinkStart) to prevent drift.
+    const wallRemaining = 4000 - (Date.now() - thinkStart);
     const targetRemaining = naturalPauseMs - (Date.now() - thinkStart);
     const remainingWait = Math.min(wallRemaining, targetRemaining);
     if (remainingWait > 0) {
@@ -1046,18 +1046,12 @@ Next: <the interview question only>`,
     // coachSpeaking guard: don't start mic while the AI coach is speaking — prevents
     // the mic from activating between when the stream ends and when TTS actually starts.
     if (phase !== "interview" || !autoListenEnabled || !speech.isSupported || !currentQ || isStreaming || synth.isSpeaking || isRecording || coachSpeaking) return;
-    // Silence window before auto-submit — scales with how much thinking the
-    // question needs. Reflective / open-ended / scenario questions ("explain…",
-    // "tell me about a time…", "how would you…") deserve a longer, thought-out
-    // answer, so give the candidate more room to think mid-answer and build a full
-    // reply without being cut off. Short factual questions use a shorter window so
-    // the interview still flows. (Initial thinking before the first word is already
-    // unlimited — the timer below is only armed once the candidate starts talking.)
-    const qText = currentQ.question.toLowerCase();
-    const needsLongThink =
-      qText.length > 140 ||
-      /\b(explain|describe|walk me through|walk us through|tell me about a time|give (me )?an example|for example|how would you|how do you|what would you do|why do|why is|scenario|situation|compare|difference between|your approach|how do you handle|strategy|analy[sz]e|the process|what steps|which steps)\b/.test(qText);
-    const silenceMs = needsLongThink ? 9000 : 6000;
+    // Silence window before auto-submit: 5 s max. Once the candidate starts
+    // talking, 5 s of continuous quiet ends their turn and submits the answer.
+    // (Initial thinking before the FIRST word is still unlimited — the timer below
+    // is only armed once the candidate starts talking.) The Submit button stays
+    // enabled the whole time as a manual override to submit sooner.
+    const silenceMs = 5000;
     setIsRecording(true);
     speech.startContinuous(text => {
       const chunk = text.trim();
@@ -1068,10 +1062,9 @@ Next: <the interview question only>`,
         return next;
       });
       clearAutoSubmitTimer();
-      // silenceMs of quiet → auto-submit (6s normal, 9s for thinking-heavy
-      // questions). Long enough that a candidate constructing a long answer with
-      // natural mid-sentence pauses is not cut off mid-thought. The Submit button
-      // stays enabled the whole time as a manual override to go faster.
+      // 5 s of quiet → auto-submit. Long enough that a candidate with natural
+      // mid-sentence pauses isn't cut off mid-thought, short enough to keep the
+      // interview moving. The Submit button stays enabled as a manual override.
       // Uses submitCurrentAnswerRef (not submitCurrentAnswer directly) so the
       // closure always calls the latest version without adding submitCurrentAnswer
       // to deps. Without this, elapsedSeconds (a dep of submitCurrentAnswer) gives
