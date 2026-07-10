@@ -25,10 +25,12 @@
 // Communication is scored from HOW the candidate expresses every answer (tone,
 // energy, clarity), so it has no dedicated question stage. Personality &
 // Disposition is likewise read from delivery, but also gets a warm, one-time
-// hobbies/interests ice-breaker early on (beat 1) to relax the candidate.
-// Educational Background is covered by the opening question. The live question
-// rotation targets the remaining parameters, breadth-first, with Functional
-// Knowledge as the recurring — but never dominating — core.
+// "getting to know you" opening early on (hobbies, a hobbies follow-up,
+// motivation for the role, and strengths / best-fit role) to relax the candidate
+// and surface motivation and role fit. Educational Background is covered by the
+// opening question. The live question rotation then targets the remaining
+// parameters, breadth-first, with Functional Knowledge as the recurring — but
+// never dominating — core.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type CompetencyKey =
@@ -240,6 +242,10 @@ export type InterviewArea = {
   label: string;
   /** Fully-composed guidance for what to probe — roughly one question's worth. */
   focus: string;
+  /** "warmup" marks the early conversational beats (hobbies, motivation, best-fit
+   *  role) that should flow naturally rather than being framed as a switch to a
+   *  "different area". Standard rotation beats leave this undefined. */
+  kind?: "warmup";
 };
 
 export type BeatContext = {
@@ -253,7 +259,8 @@ export type BeatContext = {
 /** Parameters that get a DEDICATED question in the RECURRING rotation, in
  *  priority order. Communication (delivery-judged) and Educational Background
  *  (the opening) are absent. Personality is absent from the recurring rotation
- *  too, but gets a one-time hobbies warm-up at beat 1 (see areaForBeat). */
+ *  too, but gets warm one-time hobbies beats in the opening (see areaForBeat).
+ *  Motivation for the role and best-fit-role are likewise covered once there. */
 const DEDICATED_AREAS: CompetencyKey[] = [
   "problemSolving",
   "ownership",
@@ -278,10 +285,12 @@ function questionRotation(): CompetencyKey[] {
 }
 
 /**
- * The competency area a given beat targets. Beat 0 is always the opening
- * introduction + educational background; later beats cycle through the
- * breadth-first rotation. The returned `focus` is fully composed (role-specific
- * for functional knowledge) so callers can use it directly.
+ * The competency area a given beat targets. Beat 0 is the opening introduction +
+ * educational background; beats 1–4 are a one-time warm "getting to know you"
+ * opening (hobbies, a hobbies follow-up, motivation for the role, and strengths /
+ * best-fit role); beat 5 onward cycles through the breadth-first competency
+ * rotation. The returned `focus` is fully composed (role-specific for functional
+ * knowledge) so callers can use it directly.
  */
 export function areaForBeat(index: number, ctx: BeatContext): InterviewArea {
   if (index <= 0) {
@@ -291,20 +300,53 @@ export function areaForBeat(index: number, ctx: BeatContext): InterviewArea {
       focus: `a brief self-introduction and their educational background relevant to the ${ctx.roleLabel} role — qualifications, key subjects or skills, and notable curricular or extra-curricular achievements`,
     };
   }
-  // Beat 1 is a warm, one-time ice-breaker about hobbies & interests. It relaxes
-  // the candidate early and gives real signal for Personality & Disposition
-  // (otherwise only delivery-judged). It is intentionally a single warm-up, not
-  // part of the recurring rotation, so hobbies are never asked twice.
+  // Beats 1–4 are a short, warm "getting to know you" opening that runs once,
+  // before the competency rotation. They relax the candidate and surface real
+  // signal for Personality & Disposition, motivation and role fit — none of which
+  // a functional drill reveals. They are intentionally NOT part of the recurring
+  // rotation, so none of them is ever asked twice:
+  //   1 — hobbies & interests (ice-breaker)
+  //   2 — hobbies & interests (a little deeper)
+  //   3 — why this domain and this role (motivation)
+  //   4 — strengths & the kind of work they'd thrive in (best-fit role)
   if (index === 1) {
     return {
       key: "personality",
       label: "Hobbies & Interests",
+      kind: "warmup",
       focus:
-        "a warm, light ice-breaker about the candidate's hobbies, interests or how they like to spend their time outside work or study — what they enjoy and what draws them to it. Use it to put them at ease early and to read their personality, energy and self-awareness. Keep it genuine and conversational, not a test, and you may briefly react to what they share before moving on.",
+        "a warm, light ice-breaker about the candidate's hobbies, interests or how they like to spend their time outside work or study — what they enjoy and what draws them to it. Use it to put them at ease early and to read their personality, energy and self-awareness. Keep it genuine and conversational, not a test.",
+    };
+  }
+  if (index === 2) {
+    return {
+      key: "personality",
+      label: "More About Their Interests",
+      kind: "warmup",
+      focus:
+        "a natural follow-up that goes a little deeper into the hobbies or interests they just mentioned (or another one) — for example what they enjoy most about it, how they got into it, or something they have learned or achieved through it. Keep it light and curious.",
+    };
+  }
+  if (index === 3) {
+    return {
+      key: "adaptability",
+      label: "Motivation for the Role",
+      kind: "warmup",
+      focus:
+        `why the candidate is interested in the ${ctx.roleLabel} field and in this particular role — what draws them to this domain, what excites them about the work, and what they hope to do or become in it. Use it to gauge genuine motivation and how well their interests align with the role.`,
+    };
+  }
+  if (index === 4) {
+    return {
+      key: "adaptability",
+      label: "Strengths & Best-Fit Role",
+      kind: "warmup",
+      focus:
+        "the candidate's strongest skills and the kind of work, responsibilities or role they feel they would thrive in and enjoy most — and why. Use it to understand where their strengths and interests point, so you can gauge which job role would fit them best.",
     };
   }
   const rotation = questionRotation();
-  const key = rotation[(index - 2) % rotation.length]!;
+  const key = rotation[(index - 5) % rotation.length]!;
   const def = COMPETENCIES.find((c) => c.key === key)!;
   let focus = def.focus;
   if (key === "domainKnowledge") {

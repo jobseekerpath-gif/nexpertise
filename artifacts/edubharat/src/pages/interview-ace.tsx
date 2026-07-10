@@ -83,6 +83,10 @@ type InterviewReport = {
   confidenceScore: number;
   technicalScore: number;
   roleFit: string;
+  /** The job role that best suits this candidate based on their interests,
+   *  motivation, strengths and answers — may differ from the role interviewed
+   *  for. Empty string when not assessed (e.g. older saved reports). */
+  bestFitRole?: string;
   /** Human hiring-recommendation rationale shown next to the Selected / Not
    *  Selected result (the label itself is derived from overallScore). */
   verdictReason?: string;
@@ -190,6 +194,7 @@ function neutralReport(durationMin: number): InterviewReport {
   return {
     ...deriveScores(competencies, durationMin),
     roleFit: "Promising candidate with room to grow.",
+    bestFitRole: "",
     verdictReason: "Automated scoring was interrupted, so this is an indicative result — please review the detailed feedback below.",
     competencies,
     strengths: ["Engaged actively throughout the interview", "Attempted every question", "Showed willingness to learn"],
@@ -228,6 +233,7 @@ function parseReportJson(text: string, durationMin: number): InterviewReport | n
     return {
       ...deriveScores(competencies, durationMin),
       roleFit: String(parsed["roleFit"] || ""),
+      bestFitRole: String(parsed["bestFitRole"] || ""),
       verdictReason: String(parsed["verdictReason"] || parsed["recommendation"] || ""),
       competencies,
       strengths: Array.isArray(parsed["strengths"]) ? parsed["strengths"].map(String) : [],
@@ -442,6 +448,10 @@ function InterviewAceContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const autoSubmitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // No-reply watchdog: if the candidate says NOTHING for 33 s after a question is
+  // asked (never even starts an answer), we conclude the interview and generate
+  // feedback. Armed when the mic starts listening; cleared the instant they speak.
+  const noReplyRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const endingRef = useRef(false);
   // Guards against a second interview turn starting before the current one finishes
   // (record → stream → thinking pause → speak). Set synchronously at the top of
@@ -501,6 +511,7 @@ function InterviewAceContent() {
     // sign-off and tack on an extra question / make the coach speak again.
     resetStream();
     if (autoSubmitRef.current) { clearTimeout(autoSubmitRef.current); autoSubmitRef.current = null; }
+    if (noReplyRef.current) { clearTimeout(noReplyRef.current); noReplyRef.current = null; }
     speech.stop();
     setIsRecording(false);
     setAutoListenEnabled(false);
@@ -516,7 +527,34 @@ function InterviewAceContent() {
   const clearAutoSubmitTimer = useCallback(() => {
     if (autoSubmitRef.current) clearTimeout(autoSubmitRef.current);
     autoSubmitRef.current = null;
+    // Clear the no-reply watchdog in lockstep: any time the pending auto-submit is
+    // cleared (candidate spoke, submitted, paused or the interview ended) the
+    // "said nothing at all" window no longer applies.
+    if (noReplyRef.current) clearTimeout(noReplyRef.current);
+    noReplyRef.current = null;
   }, []);
+
+  // Conclude the interview when the candidate goes completely silent on a new
+  // question (the 33 s no-reply watchdog fired). Mirrors the clock-runout path:
+  // stop the mic and any in-flight stream, give a short natural sign-off, then
+  // move to the report so feedback is generated from whatever was answered.
+  const concludeNoReply = useCallback(() => {
+    if (endingRef.current || phaseRef.current !== "interview") return;
+    endingRef.current = true;
+    resetStream();
+    clearAutoSubmitTimer();
+    speech.stop();
+    setIsRecording(false);
+    setAutoListenEnabled(false);
+    const firstName = (profile.name || "there").split(" ")[0];
+    speakCoach(`It looks like we've lost you there, ${firstName}. No problem — I'll wrap up here and get your feedback ready.`, { voiceGender: coach.gender });
+    setTimeout(() => setPhase("report"), 2600);
+  }, [resetStream, clearAutoSubmitTimer, speech, profile.name, coach.gender, speakCoach]);
+
+  // Live ref so the 33 s timer (armed inside the auto-listen effect) always calls
+  // the latest concludeNoReply without adding it to that effect's deps.
+  const concludeNoReplyRef = useRef(concludeNoReply);
+  useEffect(() => { concludeNoReplyRef.current = concludeNoReply; }, [concludeNoReply]);
 
   const startWebcam = useCallback(async () => {
     try {
@@ -778,6 +816,8 @@ Rules:
       directive = `${firstName} struggled with that question${saysDontKnow ? " (they said they don't know)" : ` (only ${wordCount} words)`}. Give them ONE more chance: ask the SAME thing again but more simply, or offer a small hint, a concrete example, or an easier way in. Keep it warm and encouraging so they relax — this is still about "${area.label}".`;
     } else if (isWeakAnswer) {
       directive = `${firstName} could not answer that even after a second attempt — do NOT dwell on it or ask it again. Acknowledge briefly and kindly (something like "No problem, let's move on."), then ask a fresh question on a NEW area. New area — ${area.label}. Focus on: ${areaFocus}.`;
+    } else if (area.kind === "warmup") {
+      directive = `Keep the conversation warm, personal and flowing — this is the friendly "getting to know you" part of the interview, not a test. Ask about: ${areaFocus} You may briefly and genuinely react to what ${firstName} just said before your question. Ask EXACTLY ONE question, and never one you have already asked.`;
     } else {
       directive = `Now move to a DIFFERENT area to keep the interview varied — do NOT keep drilling the previous topic. New area — ${area.label}. Focus on: ${areaFocus}. You may briefly connect to what they just said, but the question itself must target this new area. Ask a genuinely fresh question you have not asked before.`;
     }
@@ -1053,6 +1093,12 @@ Next: <the interview question only>`,
     // enabled the whole time as a manual override to submit sooner.
     const silenceMs = 5000;
     setIsRecording(true);
+    // Arm the no-reply watchdog: if the candidate never says a word for 33 s after
+    // this question, conclude the interview and generate feedback. Cleared the
+    // moment any speech arrives (clearAutoSubmitTimer in the chunk handler clears
+    // it too). Clear any stale timer first so a mic restart can't stack two.
+    if (noReplyRef.current) clearTimeout(noReplyRef.current);
+    noReplyRef.current = setTimeout(() => { concludeNoReplyRef.current(); }, 33_000);
     speech.startContinuous(text => {
       const chunk = text.trim();
       if (!chunk) return;
@@ -1151,14 +1197,15 @@ Return ONLY a valid JSON object with exactly these keys (no markdown, no comment
   "competencies": {
 ${compJsonKeys}
   },
-  "roleFit": "one honest sentence about this candidate for this role",
+  "roleFit": "one honest sentence about this candidate for the ${typeMeta.label} role they interviewed for",
+  "bestFitRole": "name the ONE job role or job title that best fits this candidate based on their interests, motivation, strengths and answers — it may be the same as the role they interviewed for or a different one — with a short reason, one sentence",
   "strengths": ["2-3 specific strengths observed in the transcript"],
   "concerns": ["2-3 honest concerns or red flags — use an empty array [] ONLY if there are genuinely none"],
   "nextSteps": ["3 concrete, actionable steps to improve"],
   "verdictReason": "1-2 honest sentences summarising your hiring recommendation for THIS role at THIS experience level and why"
 }
 
-Rate EVERY competency above from evidence in the transcript, calibrated to the experience level — do not leave any unrated. Communication Skills and Personality & Disposition are judged from HOW the candidate expressed every answer (tone, energy, clarity), not from dedicated questions; you cannot see the candidate, so judge personality from vocal energy and content only and never invent visual details like body language, dress or eye contact. Educational Background comes from their introduction. If a competency was only lightly tested in this interview, infer conservatively from the overall conversation and say so in its comment rather than guessing high. Be fair, specific and honest — never inflate a candidate who lacks the core functional knowledge for the role. Use Indian hiring context.`,
+Rate EVERY competency above from evidence in the transcript, calibrated to the experience level — do not leave any unrated. Communication Skills and Personality & Disposition are judged from HOW the candidate expressed every answer (tone, energy, clarity), not from dedicated questions; you cannot see the candidate, so judge personality from vocal energy and content only and never invent visual details like body language, dress or eye contact. Educational Background comes from their introduction. If a competency was only lightly tested in this interview, infer conservatively from the overall conversation and say so in its comment rather than guessing high. Be fair, specific and honest — never inflate a candidate who lacks the core functional knowledge for the role. When naming the best-fit role, weigh the candidate's stated interests, motivation and strengths (including the early getting-to-know-you answers), not only their functional depth. Use Indian hiring context.`,
         `You are a senior hiring manager and interview panellist evaluating an Indian candidate against a weighted scorecard. Give human, realistic, honest feedback and rate strictly on the 1-5 scale.`,
         undefined,
         { maxTokens: 2000 }
@@ -1302,6 +1349,7 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
       report ? `Total Weighted Score: ${report.weightedScore.toFixed(1)} / 5.0 (${report.overallScore}%) — ${report.recommendation}` : `Overall Score: ${avgScore}% — ${grade(avgScore).label}`,
       report ? `Result: ${verdictFor(report.overallScore).label}${report.verdictReason ? ` — ${report.verdictReason}` : ""}` : `Result: ${verdictFor(avgScore).label}`,
       report ? `Role Fit: ${report.roleFit}` : "",
+      report && report.bestFitRole ? `Best-Fit Role: ${report.bestFitRole}` : "",
       ``,
       ...(report?.competencies ? [
         `COMPETENCY SCORECARD (rated 1-5)`,
@@ -1509,6 +1557,11 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
                     )}
                     {report.roleFit && (
                       <p className="text-sm text-secondary mt-2 max-w-xl mx-auto italic">{report.roleFit}</p>
+                    )}
+                    {report.bestFitRole && (
+                      <p className="text-sm text-secondary mt-2 max-w-xl mx-auto">
+                        <span className="font-semibold">Best-fit role:</span> {report.bestFitRole}
+                      </p>
                     )}
                   </div>
                 );
