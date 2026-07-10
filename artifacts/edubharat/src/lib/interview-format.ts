@@ -22,11 +22,13 @@
 // breadth and depth); every parameter is still scored, inferring conservatively
 // for any only lightly probed in a short interview.
 //
-// Communication and Personality & Disposition are scored from HOW the candidate
-// expresses every answer (tone, energy, clarity), so they have no dedicated
-// question stage. Educational Background is covered by the opening question. The
-// live question rotation targets the remaining parameters, breadth-first, with
-// Functional Knowledge as the recurring — but never dominating — core.
+// Communication is scored from HOW the candidate expresses every answer (tone,
+// energy, clarity), so it has no dedicated question stage. Personality &
+// Disposition is likewise read from delivery, but also gets a warm, one-time
+// hobbies/interests ice-breaker early on (beat 1) to relax the candidate.
+// Educational Background is covered by the opening question. The live question
+// rotation targets the remaining parameters, breadth-first, with Functional
+// Knowledge as the recurring — but never dominating — core.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type CompetencyKey =
@@ -248,9 +250,10 @@ export type BeatContext = {
   roleLabel: string;
 };
 
-/** Parameters that get a DEDICATED question, in priority order. Communication,
- *  Personality (delivery-judged) and Educational Background (the opening) are
- *  intentionally absent — they are assessed without a dedicated slot. */
+/** Parameters that get a DEDICATED question in the RECURRING rotation, in
+ *  priority order. Communication (delivery-judged) and Educational Background
+ *  (the opening) are absent. Personality is absent from the recurring rotation
+ *  too, but gets a one-time hobbies warm-up at beat 1 (see areaForBeat). */
 const DEDICATED_AREAS: CompetencyKey[] = [
   "problemSolving",
   "ownership",
@@ -288,8 +291,20 @@ export function areaForBeat(index: number, ctx: BeatContext): InterviewArea {
       focus: `a brief self-introduction and their educational background relevant to the ${ctx.roleLabel} role — qualifications, key subjects or skills, and notable curricular or extra-curricular achievements`,
     };
   }
+  // Beat 1 is a warm, one-time ice-breaker about hobbies & interests. It relaxes
+  // the candidate early and gives real signal for Personality & Disposition
+  // (otherwise only delivery-judged). It is intentionally a single warm-up, not
+  // part of the recurring rotation, so hobbies are never asked twice.
+  if (index === 1) {
+    return {
+      key: "personality",
+      label: "Hobbies & Interests",
+      focus:
+        "a warm, light ice-breaker about the candidate's hobbies, interests or how they like to spend their time outside work or study — what they enjoy and what draws them to it. Use it to put them at ease early and to read their personality, energy and self-awareness. Keep it genuine and conversational, not a test, and you may briefly react to what they share before moving on.",
+    };
+  }
   const rotation = questionRotation();
-  const key = rotation[(index - 1) % rotation.length]!;
+  const key = rotation[(index - 2) % rotation.length]!;
   const def = COMPETENCIES.find((c) => c.key === key)!;
   let focus = def.focus;
   if (key === "domainKnowledge") {
