@@ -15,7 +15,7 @@ import { useAuth } from "@/lib/use-auth";
 import { useCredits, chargeInterview, tickInterview, endInterview, interviewCreditCost, interviewBlockSeconds, INTERVIEW_MAX_BLOCKS } from "@/lib/use-credits";
 import { useGuestTrial, guestInterviewsLeft, consumeGuestInterview } from "@/lib/guest-trial";
 import { AnimatedAvatar } from "@/components/avatar";
-import { INTERVIEW_COACHES } from "@/lib/tutors";
+import { INTERVIEW_COACHES, recommendedCoachFor } from "@/lib/tutors";
 import { COMPETENCIES, coveredCompetencies, weightedScoreFor, areaForBeat, functionalKnowledgeFor, calibrationFor, depthProbeFocus, type CompetencyKey } from "@/lib/interview-format";
 import { useToast } from "@/hooks/use-toast";
 import { PageMeta } from "@/components/page-meta";
@@ -415,8 +415,12 @@ function InterviewAceContent() {
   const [type, setType] = useState(() => b2bParams.type || mapPreferredRoleToType(profile.preferredRole));
   const [experience, setExperience] = useState(() => mapExperience(profile.experienceLevel));
   const [coach, setCoach] = useState<Coach>(() => {
-    const coachId = b2bParams.coach || profile.preferredInterviewer;
-    return INTERVIEW_COACHES.find(c => c.id === coachId) ?? INTERVIEW_COACHES[0]!;
+    // B2B invites lock the interviewer to the recruiter's choice; otherwise the
+    // interviewer is auto-matched to the interview type the candidate picked.
+    if (b2bParams.coach) {
+      return INTERVIEW_COACHES.find(c => c.id === b2bParams.coach) ?? INTERVIEW_COACHES[0]!;
+    }
+    return recommendedCoachFor(type);
   });
   const [duration, setDuration] = useState(() => b2bParams.duration || 10);
   const [phase, setPhase] = useState<"setup" | "interview" | "report">("setup");
@@ -467,6 +471,10 @@ function InterviewAceContent() {
   const [cameraError, setCameraError] = useState(false);
 
   const typeMeta = INTERVIEW_TYPES.find(t => t.value === type)!;
+  const recommendedCoachId = recommendedCoachFor(type).id;
+  // B2B invites lock the interviewer to the recruiter's choice — the candidate
+  // must not be able to swap it (from the type dropdown or the coach grid).
+  const coachLocked = !!b2bParams.coach;
   const currentQ = questions[currentIdx];
   const answeredCount = questions.filter(q => q.answer).length;
   const interviewCost = interviewCreditCost(duration);
@@ -1343,7 +1351,14 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
             {profile.name || user?.name || "Guest"}
           </span>
           <span className="text-muted-foreground/40">•</span>
-          <Select value={type} onValueChange={setType}>
+          <Select
+            value={type}
+            onValueChange={(v) => {
+              setType(v);
+              // Re-match the interviewer to the new type (unless a B2B invite locked it).
+              if (!b2bParams.coach) setCoach(recommendedCoachFor(v));
+            }}
+          >
             <SelectTrigger className="h-7 text-xs w-[150px] rounded-full border-dashed">
               <SelectValue />
             </SelectTrigger>
@@ -1369,17 +1384,25 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
           </Select>
         </div>
 
-        {/* Coach grid — compact */}
-        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Choose Your Interviewer</p>
+        {/* Coach grid — compact. Auto-matched to the interview type; tap to override. */}
+        <div className="flex items-baseline gap-2 mb-2 flex-wrap">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Interviewer</p>
+          <span className="text-[10px] font-medium text-muted-foreground/70 normal-case">
+            {coachLocked ? "Set by the recruiter for this invite" : `Auto-matched to ${typeMeta.label} · tap to change`}
+          </span>
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
           {INTERVIEW_COACHES.map(c => (
             <button
               key={c.id}
-              onClick={() => setCoach(c)}
-              className={`text-left rounded-xl border-2 p-3 transition-all hover:shadow-md ${
+              onClick={() => { if (!coachLocked) setCoach(c); }}
+              disabled={coachLocked && coach.id !== c.id}
+              className={`text-left rounded-xl border-2 p-3 transition-all ${
                 coach.id === c.id
                   ? "border-primary shadow-md bg-primary/5"
-                  : "border-border bg-card hover:border-primary/40"
+                  : coachLocked
+                    ? "border-border bg-card opacity-40 cursor-not-allowed"
+                    : "border-border bg-card hover:border-primary/40 hover:shadow-md"
               }`}
             >
               <div className="flex items-center gap-2 mb-1.5">
@@ -1398,6 +1421,11 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
                 <span className="text-xs">{c.icon}</span>
                 <span className="text-[10px] font-semibold text-muted-foreground truncate">{c.specialty}</span>
               </div>
+              {c.id === recommendedCoachId && (
+                <span className="mt-1 inline-block rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary">
+                  Recommended
+                </span>
+              )}
             </button>
           ))}
         </div>

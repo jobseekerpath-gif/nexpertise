@@ -28,6 +28,7 @@
 - [Email via Resend connector](email-resend-connector.md) — via Replit connector proxy; 403 to non-owner = Resend unverified-domain sandbox limit, not broken wiring; never leak OTP code on failure.
 - [Mobile tool AI calls](mobile-tool-ai.md) — Expo tool/[id].tsx calls /api/ai/chat with {prompt, system, maxTokens} body (NOT messages array); response is {text: string}.
 - [Interview Ace video call UI](interview-video-call.md) — fixed full-screen dark layout (z-30, top:56px); webcam PiP via getUserMedia; camera auto-off on ANY exit from interview phase + post-await race guard; PhoneOff hang-up.
+- [Interview coach auto-selection](interview-coach-selection.md) — interviewer auto-matched to interview TYPE (recommendedCoachFor); B2B b2bCoach LOCKS it — enforce the lock at EVERY mutation point (dropdown AND grid), not just one.
 - [Interview verdict](interview-verdict.md) — weighted 1–5 primary + recommendation band (Strong Hire/Hire/Hold/No Hire); Selected/Not Selected derived from overallScore (pass bar 70 = Hire line); recommendationForWeighted & recommendationForScore agree; static RECOMMENDATION_STYLES; AI gives only rationale.
 - [Edge TTS + echo fix](edge-tts-echo-fix.md) — Live chat + Interview Ace use Edge Neural TTS via /api/tts; blockFor(1200ms) prevents mic from picking up AI's own voice from speakers.
 - [Learning Journey SM-2](learning-journey.md) — /api/journey/* routes; due reviews must interleave separately from new lessons or priority breaks; /api/jobs/search and /api/news/feed also added.

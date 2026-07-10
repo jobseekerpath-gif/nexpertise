@@ -173,6 +173,33 @@ export const INTERVIEW_COACHES = [
   },
 ];
 
+/**
+ * Maps an Interview Ace interview type (see INTERVIEW_TYPES in interview-ace.tsx)
+ * to the interviewer whose specialty best fits it, so the interviewer is
+ * auto-selected from the filters the candidate picks. Falls back to the senior
+ * HR coach (a safe generalist) for any unmapped type.
+ */
+const INTERVIEW_TYPE_TO_COACH_ID: Record<string, string> = {
+  hr: "raj",
+  software: "vikram",
+  data_analytics: "vikram",
+  sales: "ananya",
+  marketing: "ananya",
+  customer_service: "ananya",
+  banking: "aryan",
+  insurance: "aryan",
+  finance: "aryan",
+  operations: "raj",
+  government: "raj",
+  freshers: "priya_coach",
+};
+
+/** Returns the interviewer best matched to the given interview type. */
+export function recommendedCoachFor(type: string) {
+  const id = INTERVIEW_TYPE_TO_COACH_ID[type] ?? "raj";
+  return INTERVIEW_COACHES.find(c => c.id === id) ?? INTERVIEW_COACHES[0]!;
+}
+
 export function getTutorById(id: string): TutorPersona | undefined {
   return TUTORS.find(t => t.id === id);
 }
