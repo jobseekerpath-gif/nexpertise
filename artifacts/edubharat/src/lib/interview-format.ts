@@ -269,12 +269,21 @@ const DEDICATED_AREAS: CompetencyKey[] = [
   "itSkills",
 ];
 
+/** A recurring rotation slot: either one of the scored competencies, or the
+ *  special "aiImpact" beat — a forward-looking Technology & AI awareness question
+ *  (how AI/automation is reshaping this role now and in the near future). It is
+ *  scored under Adaptability & Learning Agility but framed to the candidate as
+ *  its own topic. */
+export type RotationSlot = CompetencyKey | "aiImpact";
+
 /** Breadth-first question rotation: the functional core recurs (never
  *  back-to-back) but does NOT dominate — the functional core is revisited only
  *  after every couple of other areas, so every assessable parameter gets its own
- *  question and the interview never becomes a single-topic drill. */
-function questionRotation(): CompetencyKey[] {
-  const rotation: CompetencyKey[] = ["domainKnowledge"];
+ *  question and the interview never becomes a single-topic drill. A Technology &
+ *  AI awareness question sits near the front so every interview (even a short
+ *  one) reaches it early, and it recurs once per cycle in longer interviews. */
+function questionRotation(): RotationSlot[] {
+  const rotation: RotationSlot[] = ["domainKnowledge", "aiImpact"];
   DEDICATED_AREAS.forEach((key, i) => {
     rotation.push(key);
     // Revisit the functional core after every second other area (but not right
@@ -289,8 +298,9 @@ function questionRotation(): CompetencyKey[] {
  * educational background; beats 1–4 are a one-time warm "getting to know you"
  * opening (hobbies, a hobbies follow-up, motivation for the role, and strengths /
  * best-fit role); beat 5 onward cycles through the breadth-first competency
- * rotation. The returned `focus` is fully composed (role-specific for functional
- * knowledge) so callers can use it directly.
+ * rotation, which also weaves in a forward-looking Technology & AI awareness
+ * question early on and once per cycle thereafter. The returned `focus` is fully
+ * composed (role-specific for functional knowledge) so callers can use it directly.
  */
 export function areaForBeat(index: number, ctx: BeatContext): InterviewArea {
   if (index <= 0) {
@@ -346,11 +356,22 @@ export function areaForBeat(index: number, ctx: BeatContext): InterviewArea {
     };
   }
   const rotation = questionRotation();
-  const key = rotation[(index - 5) % rotation.length]!;
-  const def = COMPETENCIES.find((c) => c.key === key)!;
+  const slot = rotation[(index - 5) % rotation.length]!;
+  // Forward-looking Technology & AI awareness beat — how AI and automation are
+  // changing THIS role now and in the near future. Scored under Adaptability &
+  // Learning Agility, but surfaced to the candidate as its own topic.
+  if (slot === "aiImpact") {
+    return {
+      key: "adaptability",
+      label: "Technology & AI Awareness",
+      focus:
+        `how new technology — especially AI and automation — is changing the ${ctx.roleLabel} field, both today and over the next few years, and how well the candidate keeps up. Ask ONE practical, forward-looking question: for example which parts of a ${ctx.roleLabel} role AI is likely to automate, change or newly create; which AI or digital tools they already use (or would use) to work smarter in this role; or how they plan to stay relevant and reskill as the field evolves. Keep it concrete and grounded in real day-to-day work, not science fiction.`,
+    };
+  }
+  const def = COMPETENCIES.find((c) => c.key === slot)!;
   let focus = def.focus;
-  if (key === "domainKnowledge") {
+  if (slot === "domainKnowledge") {
     focus = `${def.focus} — ${functionalKnowledgeFor(ctx.type, ctx.roleLabel)}`;
   }
-  return { key, label: def.label, focus };
+  return { key: slot, label: def.label, focus };
 }

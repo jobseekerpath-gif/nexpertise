@@ -652,12 +652,12 @@ function InterviewAceContent() {
 This interview will cover a broad range of areas. Start by warmly introducing yourself in 1-2 short sentences — say your name and that you will be taking ${firstName}'s interview today, and put them at ease — then ask ONE clear opening question about their educational background: degree, key subjects, and any notable curricular or extra-curricular achievements relevant to the ${typeMeta.label} role.
 
 Rules:
-- Keep it to at most 3 sentences. Warm and professional — you want ${firstName} to feel relaxed. A little warmth is good; NO cheesy greetings like "Hey, good to see you", no small talk, no "let's dive in".
+- Keep it to at most 3 sentences. Warm, professional and personable — you want ${firstName} to feel relaxed, and a light, witty touch is welcome to break the ice. Still NO cheesy greetings like "Hey, good to see you", no small talk, no "let's dive in".
 - Plain spoken words ONLY. No asterisks, no *actions*, no markdown, no quotes around your reply.
 - Do NOT list rules, do NOT explain the interview process.
 - LANGUAGE: Use simple, clear, everyday English — short sentences and common words. Many candidates are from average English-medium colleges, so avoid difficult vocabulary, idioms and long, complex sentences (${firstName}'s stated English level: ${profile.englishLevel || "Beginner"}).
 - Ask exactly ONE question.`,
-      `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct professional but warm, encouraging interviews that cover a broad range of areas. Speak in clear, simple, everyday spoken English that an average Indian college graduate can easily follow. Never use markdown, action words, or effusive flattery.`,
+      `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct professional but warm, personable interviews that cover a broad range of areas, and you use light, witty humour to put candidates at ease — never sarcastic and never at their expense. Speak in clear, simple, everyday spoken English that an average Indian college graduate can easily follow. Never use markdown, action words, or effusive flattery.`,
       undefined,
       { maxTokens: 120 }
     );
@@ -891,7 +891,7 @@ ${firstName} answered: "${recordedAnswer}"
 ${directive}
 
 STYLE — important:
-- Warm, encouraging and human — you genuinely want ${firstName} to do well and feel at ease. You MAY add a light, tasteful touch of humour now and then to relax them, but never sarcasm, never at their expense, and keep it to a brief aside.
+- Warm, encouraging and genuinely personable — you want ${firstName} to relax and enjoy the conversation. Sprinkle in light, witty humour: a friendly quip, a playful aside or a warm, clever observation now and then to build rapport. Keep it tasteful and never at ${firstName}'s expense, never sarcastic or mocking, and don't force a joke into every turn — a little wit goes a long way.
 - Acknowledge their answer with ONE short, genuine phrase (max about 6 words). Do NOT summarise their whole answer and do NOT pile on flattery.
 - Ask EXACTLY ONE question, and NEVER repeat a question already asked in this interview.
 - The interview must feel DIVERSIFIED across the whole scorecard — functional/role knowledge, problem-solving, adaptability, ownership & work ethic, collaboration and IT skills, plus their background — not a chain of similar questions. Do NOT keep asking only about functional/domain knowledge; keep moving across the different areas.
@@ -903,7 +903,7 @@ STYLE — important:
 Output format — exactly two lines, nothing else:
 Ack: <short, warm acknowledgement, max ~6 words>
 Next: <the interview question only>`,
-          `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct a professional but warm, encouraging interview that covers a BROAD range of areas and never fixates on one topic. Light, tasteful humour to relax the candidate is welcome. Speak in clear, simple, everyday English by default, and use more advanced English only for candidates who clearly speak strongly. Never use markdown, action words, or effusive flattery.`,
+          `You are ${coach.name}, ${coach.role}. ${coach.style} You conduct a professional but warm, personable interview that covers a BROAD range of areas and never fixates on one topic. Use light, witty humour — the occasional friendly quip or playful aside — to keep the candidate relaxed, but never sarcasm, never at their expense, and never so much that it undercuts a real interview. Speak in clear, simple, everyday English by default, and use more advanced English only for candidates who clearly speak strongly. Never use markdown, action words, or effusive flattery.`,
           undefined,
           { maxTokens: 220 }
         ),
@@ -1743,12 +1743,16 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
       </div>
 
       {/* ── Main video area ─────────────────────────────────────────────── */}
-      <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+      <div className="flex-1 relative flex flex-col overflow-hidden">
 
-        {/* AI avatar — large central "video" */}
-        <div className="flex flex-col items-center gap-5">
+        {/* AI avatar — central "video". Kept in its own flex-1 region so the
+            question caption below always has reserved space and can NEVER overlap
+            the interviewer's face, even on short viewports (the old absolutely
+            positioned caption covered the face on laptops with little vertical
+            room). */}
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 px-4 pt-14 pb-2">
           <div
-            className="rounded-full transition-all duration-300"
+            className="rounded-full transition-all duration-300 shrink-0"
             style={synth.isSpeaking ? { boxShadow: "0 0 0 12px rgba(249,115,22,0.15), 0 0 0 24px rgba(249,115,22,0.07)" } : {}}
           >
             <AnimatedAvatar
@@ -1757,7 +1761,7 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
               isSpeaking={synth.isSpeaking}
               isThinking={isStreaming || coachThinking}
               gender={coach.gender}
-              size="xl"
+              size="lg"
               imageSrc={coach.imageSrc}
             />
           </div>
@@ -1779,10 +1783,11 @@ Return ONLY a valid JSON array (no markdown) with one object per question in ord
           )}
         </div>
 
-        {/* Current question subtitle */}
+        {/* Current question — in normal flow directly BELOW the avatar (never over
+            it); scrolls internally if a question is very long. */}
         {currentQ && (
-          <div className="absolute bottom-4 left-4 right-20 sm:right-4">
-            <div className="bg-black/70 backdrop-blur-sm rounded-2xl px-4 py-3 max-w-2xl mx-auto text-center">
+          <div className="shrink-0 px-4 pb-3">
+            <div className="bg-black/70 backdrop-blur-sm rounded-2xl px-4 py-3 max-w-2xl mx-auto text-center max-h-[38vh] overflow-y-auto">
               <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest mb-1">
                 Question {currentIdx + 1} · {answeredCount} answered
               </p>
