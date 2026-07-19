@@ -93,7 +93,7 @@ export default function InterviewDetailScreen() {
     );
   }
 
-  if (error || session === 'not-found') {
+  if (error || session === 'not-found' || session === null) {
     return (
       <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
         <Header title="Interview Detail" showBack />
@@ -106,22 +106,24 @@ export default function InterviewDetailScreen() {
     );
   }
 
+  const currentSession = session;
+
   // Parse feedback JSON for summary text
   let feedbackSummary: string | null = null;
-  if (session.feedbackJson) {
+  if (currentSession.feedbackJson) {
     try {
-      const parsed = JSON.parse(session.feedbackJson);
+      const parsed = JSON.parse(currentSession.feedbackJson);
       feedbackSummary =
         parsed.summary ??
         parsed.overallFeedback ??
         parsed.feedback ??
         (typeof parsed === 'string' ? parsed : null);
     } catch {
-      feedbackSummary = session.feedbackJson;
+      feedbackSummary = currentSession.feedbackJson;
     }
   }
 
-  const date = new Date(session.createdAt).toLocaleDateString('en-IN', {
+  const date = new Date(currentSession.createdAt).toLocaleDateString('en-IN', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -129,9 +131,9 @@ export default function InterviewDetailScreen() {
   });
 
   const durationMin =
-    session.durationSeconds != null ? Math.round(session.durationSeconds / 60) : null;
+    currentSession.durationSeconds != null ? Math.round(currentSession.durationSeconds / 60) : null;
 
-  const score = session.overallScore;
+  const score = currentSession.overallScore;
   const scoreColor =
     score == null
       ? colors.mutedForeground
@@ -144,9 +146,9 @@ export default function InterviewDetailScreen() {
   // Parse Q&A transcript
   type QA = { question: string; answer?: string; feedback?: string };
   let questions: QA[] = [];
-  if (session.questionsData) {
+  if (currentSession.questionsData) {
     try {
-      const parsed = JSON.parse(session.questionsData);
+      const parsed = JSON.parse(currentSession.questionsData);
       if (Array.isArray(parsed)) questions = parsed;
     } catch {
       // ignore
@@ -159,7 +161,7 @@ export default function InterviewDetailScreen() {
       contentContainerStyle={{ paddingBottom: bottomPadding }}
       showsVerticalScrollIndicator={false}
     >
-      <Header title={session.role} subtitle={date} showBack />
+      <Header title={currentSession.role} subtitle={date} showBack />
 
       {/* Overall score hero */}
       <View
@@ -175,11 +177,11 @@ export default function InterviewDetailScreen() {
         <Text style={[styles.heroLabel, { color: scoreColor }]}>Overall Score</Text>
         <View style={styles.heroMeta}>
           <Text style={[styles.heroMetaText, { color: colors.mutedForeground }]}>
-            {session.experienceLevel}
+            {currentSession.experienceLevel}
           </Text>
-          {session.interviewType && (
+          {currentSession.interviewType && (
             <Text style={[styles.heroMetaText, { color: colors.mutedForeground }]}>
-              · {session.interviewType}
+              · {currentSession.interviewType}
             </Text>
           )}
           {durationMin != null && (
@@ -191,10 +193,10 @@ export default function InterviewDetailScreen() {
       </View>
 
       {/* Score breakdown */}
-      {(session.communicationScore != null ||
-        session.grammarScore != null ||
-        session.confidenceScore != null ||
-        session.technicalScore != null) && (
+      {(currentSession.communicationScore != null ||
+        currentSession.grammarScore != null ||
+        currentSession.confidenceScore != null ||
+        currentSession.technicalScore != null) && (
         <Section title="Score Breakdown">
           <View
             style={[
@@ -202,10 +204,10 @@ export default function InterviewDetailScreen() {
               { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius },
             ]}
           >
-            <ScoreBar label="Communication" value={session.communicationScore} color="#3b82f6" />
-            <ScoreBar label="Grammar" value={session.grammarScore} color="#8b5cf6" />
-            <ScoreBar label="Confidence" value={session.confidenceScore} color="#f59e0b" />
-            <ScoreBar label="Technical" value={session.technicalScore} color="#22c55e" />
+            <ScoreBar label="Communication" value={currentSession.communicationScore} color="#3b82f6" />
+            <ScoreBar label="Grammar" value={currentSession.grammarScore} color="#8b5cf6" />
+            <ScoreBar label="Confidence" value={currentSession.confidenceScore} color="#f59e0b" />
+            <ScoreBar label="Technical" value={currentSession.technicalScore} color="#22c55e" />
           </View>
         </Section>
       )}
