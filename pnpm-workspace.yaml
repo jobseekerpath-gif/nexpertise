@@ -70,7 +70,11 @@ autoInstallPeers: false
 
 onlyBuiltDependencies:
   - '@swc/core'
+  - '@google/genai'
+  - core-js
   - esbuild
+  - msedge-tts
+  - protobufjs
   - msw
   - unrs-resolver
 
